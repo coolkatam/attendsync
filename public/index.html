@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+
+    <!-- PWA essential meta tags -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="theme-color" content="#1a56a0" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="AttendSync" />
+    <meta name="application-name" content="AttendSync" />
+    <meta name="msapplication-TileColor" content="#1a56a0" />
+
+    <!-- Description for search/sharing -->
+    <meta name="description" content="AttendSync – Section Attendance Platform for institutions" />
+
+    <!-- Open Graph (for WhatsApp link preview) -->
+    <meta property="og:title" content="AttendSync" />
+    <meta property="og:description" content="Section Attendance Platform" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://attendsync-66e55.web.app" />
+
+    <!-- Apple touch icons -->
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="%PUBLIC_URL%/logo192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="%PUBLIC_URL%/logo192.png" />
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+
+    <title>AttendSync</title>
+
+    <style>
+      /* Splash screen style while app loads */
+      body {
+        margin: 0;
+        background-color: #1a56a0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+      #splash {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: linear-gradient(135deg, #1a56a0, #0e7490);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        transition: opacity 0.5s ease;
+      }
+      #splash .icon {
+        width: 80px; height: 80px;
+        background: rgba(255,255,255,0.15);
+        border-radius: 20px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 40px; margin-bottom: 16px;
+      }
+      #splash .title {
+        color: #fff; font-size: 28px; font-weight: 700; margin-bottom: 6px;
+      }
+      #splash .sub {
+        color: rgba(255,255,255,0.75); font-size: 14px;
+      }
+      #splash .dot-loader {
+        display: flex; gap: 6px; margin-top: 40px;
+      }
+      #splash .dot {
+        width: 8px; height: 8px; border-radius: 50%;
+        background: rgba(255,255,255,0.5);
+        animation: pulse 1.2s ease-in-out infinite;
+      }
+      #splash .dot:nth-child(2) { animation-delay: 0.2s; }
+      #splash .dot:nth-child(3) { animation-delay: 0.4s; }
+      @keyframes pulse {
+        0%, 80%, 100% { transform: scale(0.7); opacity: 0.5; }
+        40% { transform: scale(1); opacity: 1; }
+      }
+    </style>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+
+    <!-- Splash screen shown while React loads -->
+    <div id="splash">
+      <div class="icon">🎓</div>
+      <div class="title">AttendSync</div>
+      <div class="sub">Section Attendance Platform</div>
+      <div class="dot-loader">
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+      </div>
+    </div>
+
+    <div id="root"></div>
+
+    <!-- Hide splash once React app loads -->
+    <script>
+      window.addEventListener('load', function() {
+        setTimeout(function() {
+          var splash = document.getElementById('splash');
+          if (splash) {
+            splash.style.opacity = '0';
+            setTimeout(function() { splash.style.display = 'none'; }, 500);
+          }
+        }, 800);
+      });
+    </script>
+  </body>
+</html>
