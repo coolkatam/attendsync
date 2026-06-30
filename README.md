@@ -1,70 +1,48 @@
-# Getting Started with Create React App
+# AttendSync
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+A period-based attendance tracking and student management system built for an engineering college department, designed as a Progressive Web App (installable on Android/iOS with offline support).
 
-## Available Scripts
+**Live app:** https://attendsync-66e55.web.app
 
-In the project directory, you can run:
+## Overview
 
-### `npm start`
+AttendSync replaces manual attendance registers with a role-based digital system covering attendance marking, reporting, and a department-level student information dashboard ("HoD Dashboard") for academic oversight.
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+## Features
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+- **Period-aware attendance marking** — faculty mark present/absent per subject, per period, with batch support for subjects split across multiple faculty/groups
+- **Role-based access** — Master Admin (department-wide oversight), Section Admin (manages one section's roster, subjects, and faculty), and Faculty (marks attendance for assigned subjects)
+- **PIN-based login** — lightweight phone-number + PIN authentication, no passwords to manage
+- **Excel reporting** — color-coded, date-wise attendance export per subject and a consolidated section-wide report, generated client-side
+- **HoD Dashboard** — search any student by roll number to view a consolidated profile: live attendance percentage, SGPA/CGPA (credit-weighted), backlog history, hostel/transport status, parent and contact details, and fee balance
+- **Bulk data tools** — section-scoped, pre-filled Excel templates for entering student academic/personal records, with safe partial-merge uploads (re-uploading never overwrites fields left blank)
+- **Offline support** — installable as a PWA with offline-aware UI banners
+- **Self-service faculty onboarding** — admins share an invite link; new faculty register and await approval
 
-### `npm test`
+## Tech stack
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+- **Frontend:** React (Create React App)
+- **Backend:** Firebase (Firestore for data, Firebase Hosting for deployment)
+- **Excel handling:** SheetJS (xlsx)
+- **Charts:** Chart.js (attendance and academic performance trends)
 
-### `npm run build`
+## Project structure
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+```
+src/
+├── App.js              # Root component, role-based routing
+├── AdminApp.js          # Master Admin & Section Admin screens
+├── FacultyApp.js         # Faculty attendance-marking screens
+├── utils.js              # Attendance calculation, Excel export, shared helpers
+├── firebase.js            # Firebase initialization
+├── components/UI.js        # Shared UI primitives
+└── hod/                     # HoD Dashboard: student lookup, attendance aggregation, Excel upload parsing
+```
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## Status
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+Actively developed and in production use for departmental attendance and academic record-keeping.
 
-### `npm run eject`
+---
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+*Built and maintained by [Arun Kumar](https://github.com/coolkatam).*
