@@ -44,80 +44,6 @@ function InviteLinkCard({ adminPhone }) {
   );
 }
 
-// ── Student Data tab: download a roster-prefilled template, upload it back ──
-const SEM_COLS = ["I-I","I-II","II-I","II-II","III-I","III-II","IV-I","IV-II"];
-const STUDENT_DATA_HEADERS = [
-  "S.No","RollNumber","Name","ParentName","ParentOccupation","Category",
-  "StudentMobile","ParentMobile","HostelType","AttendanceRef",
-  ...SEM_COLS.flatMap(s => [s + "_SGPA", s + "_Backlogs"]),
-  "FeeBalance",
-];
-
-function TabStudentData({ section }) {
-  const [status, setStatus] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const students = section.students || [];
-
-  function downloadTemplate() {
-    const rows = students.map((st, i) => {
-      const row = {};
-      STUDENT_DATA_HEADERS.forEach(h => { row[h] = ""; });
-      row["S.No"] = i + 1;
-      row["RollNumber"] = st.roll || "";
-      row["Name"] = st.name || "";
-      return row;
-    });
-    const ws = XLSX.utils.json_to_sheet(rows, { header: STUDENT_DATA_HEADERS });
-    ws["!cols"] = STUDENT_DATA_HEADERS.map(h => ({ wch: h.length < 10 ? 12 : h.length + 2 }));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "StudentRecords");
-    const safeName = section.name.replace(/[^a-zA-Z0-9 _-]/g, "");
-    XLSX.writeFile(wb, safeName + "_StudentData_Template.xlsx");
-  }
-
-  async function handleUpload(e) {
-    const file = e.target.files[0];
-    e.target.value = "";
-    if (!file) return;
-    setBusy(true);
-    setStatus(null);
-    try {
-      const result = await uploadStudentRecords(file);
-      setStatus({ type: "ok", msg: "Updated " + result.count + " record(s)." });
-    } catch (err) {
-      setStatus({ type: "err", msg: "Upload failed: " + err.message });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Card>
-      <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 6 }}>Student data for {section.name}</div>
-      <div style={{ fontSize: 13, color: P.gray, marginBottom: 14 }}>
-        The template below comes pre-filled with this section's roster ({students.length} students) — just fill in
-        marks, fee, hostel, and parent details and upload it back. Re-uploading is always safe: only the fields
-        you've filled in get updated, nothing else is touched.
-      </div>
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-        <button onClick={downloadTemplate}
-          style={{ fontSize: 13, color: P.blue, border: "1px solid " + P.blue, borderRadius: 8, padding: "8px 14px", background: "#fff", cursor: "pointer", fontWeight: 600 }}>
-          ⬇ Download template ({students.length} students pre-filled)
-        </button>
-        <label style={{ fontSize: 13, background: P.blue, color: "#fff", borderRadius: 8, padding: "8px 14px", cursor: busy ? "not-allowed" : "pointer", fontWeight: 600, opacity: busy ? 0.6 : 1 }}>
-          {busy ? "Uploading…" : "⬆ Upload filled sheet"}
-          <input type="file" accept=".xlsx,.xls" onChange={handleUpload} disabled={busy} style={{ display: "none" }} />
-        </label>
-      </div>
-      {status && (
-        <div style={{ marginTop: 10, fontSize: 13, color: status.type === "ok" ? "#166534" : "#b91c1c" }}>
-          {status.msg}
-        </div>
-      )}
-    </Card>
-  );
-}
-
 export default function AdminApp({ user, onLogout }) {
   const [screen,   setScreen]   = useState("home");
   const [secId,    setSecId]    = useState(null);
@@ -391,6 +317,7 @@ function AdminMarkAttendance({ user, ctx, presetPeriod, onBack }) {
   const slotKey = batchSlotKey(batch ? batch.id : null);
 
   const [date, setDate]       = useState(today());
+  const [viewFilter, setViewFilter] = useState("all"); // all | P | A — display-only, doesn't affect saved data
   const [selPeriods, setSelPeriods] = useState(presetPeriod ? [presetPeriod] : []);
   const [record,  setRecord]  = useState(null); // flat {roll: "P"/"A"} for THIS batch's roster only
   const [saved,   setSaved]   = useState(false);
@@ -481,6 +408,10 @@ function AdminMarkAttendance({ user, ctx, presetPeriod, onBack }) {
   const aCount = vals.filter(v => v === "A").length;
   const allP = vals.length > 0 && aCount === 0;
   const allA = vals.length > 0 && pCount === 0;
+  const filteredRoster = !record ? roster : roster.filter(st => {
+    if (viewFilter === "all") return true;
+    return (record[st.roll] || "P") === viewFilter;
+  });
 
   return (
     <div style={{ background: P.bg, minHeight: "100vh" }}>
@@ -558,8 +489,27 @@ function AdminMarkAttendance({ user, ctx, presetPeriod, onBack }) {
             </div>
           </div>
           <div style={{ padding: "10px 16px 120px" }}>
-            <div style={{ fontSize: 12, color: P.gray, marginBottom: 10 }}>Tap a student's button to flip their status. This marking will be saved to all selected periods.</div>
-            {roster.map(st => (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: P.gray }}>Tap a student's button to flip their status.</div>
+              <select
+                value={viewFilter}
+                onChange={e => setViewFilter(e.target.value)}
+                style={{
+                  border: "1px solid " + P.border, borderRadius: 8, padding: "5px 8px",
+                  fontSize: 12, fontFamily: "inherit", background: "#fff", color: "#374151",
+                }}
+              >
+                <option value="all">Show: All</option>
+                <option value="P">Show: Present only</option>
+                <option value="A">Show: Absent only</option>
+              </select>
+            </div>
+            {viewFilter !== "all" && filteredRoster.length === 0 && (
+              <div style={{ textAlign: "center", color: P.gray, fontSize: 13, padding: "1.5rem 0" }}>
+                No {viewFilter === "P" ? "present" : "absent"} students to show.
+              </div>
+            )}
+            {filteredRoster.map(st => (
               <ARow key={st.roll} st={st} status={record[st.roll] || "P"}
                 onToggle={roll => { setRecord(r => ({ ...r, [roll]: r[roll] === "P" ? "A" : "P" })); setSaved(false); }} />
             ))}
@@ -915,6 +865,12 @@ function TabStudents({ section }) {
     setRoll(""); setName(""); setGender(""); setMobile(""); setAdding(false);
   }
 
+  async function deleteStudent(roll) {
+    if (!window.confirm("Remove this student from the section roster?\n\nNote: their past attendance records are NOT deleted — only their name is removed from this section's student list.")) return;
+    const updated = (section.students || []).filter(st => st.roll !== roll);
+    await updateDoc(doc(db, "sections", section.id), { students: updated });
+  }
+
   async function uploadCSV(e) {
     const f = e.target.files[0]; if (!f) return;
     const reader = new FileReader();
@@ -960,6 +916,11 @@ function TabStudents({ section }) {
             <div style={{ fontSize: 14, fontWeight: 600 }}>{st.name || "—"}</div>
             <div style={{ fontSize: 12, color: P.gray }}>{st.roll}{st.mobile ? " · " + st.mobile : ""}</div>
           </div>
+          <button onClick={() => deleteStudent(st.roll)}
+            title="Remove from section"
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#d32f2f", fontSize: 16, padding: "4px 8px", borderRadius: 6 }}>
+            🗑
+          </button>
         </div>
       ))}
     </div>
@@ -1343,6 +1304,78 @@ function TabAdminAtt({ section, att, secId, setAtt, onRefresh, attLoading }) {
 }
 
 // ── Reports tab ────────────────────────────────────────────
+// ── Student Data tab ─────────────────────────────────────────────────────────
+const SEM_COLS_SD = ["I-I","I-II","II-I","II-II","III-I","III-II","IV-I","IV-II"];
+const SD_HEADERS = [
+  "S.No","RollNumber","Name","ParentName","ParentOccupation","Category",
+  "StudentMobile","ParentMobile","HostelType","AttendanceRef",
+  ...SEM_COLS_SD.flatMap(s => [s + "_SGPA", s + "_Backlogs"]),
+  "FeeBalance",
+];
+
+function TabStudentData({ section }) {
+  const [status, setStatus] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const students = section.students || [];
+
+  function handleDownload() {
+    const rows = students.map((st, i) => {
+      const row = {};
+      SD_HEADERS.forEach(h => { row[h] = ""; });
+      row["S.No"] = i + 1;
+      row["RollNumber"] = st.roll || "";
+      row["Name"] = st.name || "";
+      return row;
+    });
+    const ws = XLSX.utils.json_to_sheet(rows, { header: SD_HEADERS });
+    ws["!cols"] = SD_HEADERS.map(h => ({ wch: Math.max(h.length + 2, 12) }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "StudentRecords");
+    const safeName = (section.name || "Section").replace(/[^a-zA-Z0-9 _-]/g, "");
+    XLSX.writeFile(wb, safeName + "_StudentData_Template.xlsx");
+  }
+
+  async function handleUpload(e) {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    setBusy(true);
+    setStatus(null);
+    try {
+      const result = await uploadStudentRecords(file);
+      setStatus({ type: "ok", msg: "Updated " + result.count + " record(s) successfully." });
+    } catch (err) {
+      setStatus({ type: "err", msg: "Upload failed: " + err.message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 6 }}>Student data — {section.name}</div>
+      <div style={{ fontSize: 13, color: P.gray, marginBottom: 16 }}>
+        Download the pre-filled template ({students.length} students already filled in), add marks/fee/hostel/parent details, then upload it back. Re-uploading is always safe — only the fields you filled in get updated.
+      </div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <button onClick={handleDownload}
+          style={{ fontSize: 13, color: P.blue, border: "1px solid " + P.blue, borderRadius: 8, padding: "8px 14px", background: "#fff", cursor: "pointer", fontWeight: 600 }}>
+          ⬇ Download template ({students.length} students pre-filled)
+        </button>
+        <label style={{ fontSize: 13, background: P.blue, color: "#fff", borderRadius: 8, padding: "8px 14px", cursor: busy ? "not-allowed" : "pointer", fontWeight: 600, opacity: busy ? 0.6 : 1 }}>
+          {busy ? "Uploading…" : "⬆ Upload filled sheet"}
+          <input type="file" accept=".xlsx,.xls" onChange={handleUpload} disabled={busy} style={{ display: "none" }} />
+        </label>
+      </div>
+      {status && (
+        <div style={{ marginTop: 12, fontSize: 13, color: status.type === "ok" ? "#166534" : "#b91c1c" }}>
+          {status.msg}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function TabReports({ section, att, onRefresh, attLoading }) {
   const [view, setView] = useState("table");
 

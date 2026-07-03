@@ -1,16 +1,13 @@
 // src/hod/hodAttendance.js
-// Finds a student by roll number across all sections, then sums their
-// present/total periods across every subject in their section — same
-// readStatus()/batch logic AdminApp.js already uses for reports.
-// Also returns a month-by-month breakdown for the attendance trend chart
-// (since attendance isn't tagged by semester, month is the natural grouping
-// we already have real date data for).
+// Finds a student by roll number across all sections, computes:
+//   - overallPct: single overall attendance % as on today
+//   - daily: day-by-day CUMULATIVE attendance % (running total present / running total held)
+//     plotted only for days where attendance was actually taken (weekends/holidays absent naturally)
 
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
-import { readStatus, calcPct, parseKey } from "../utils";
+import { readStatus, calcPct, parseKey, fmtDate } from "../utils";
 
-// Returns { overallPct: number|null, monthly: [{ month: "2026-01", pct: number }] }
 export async function getAttendanceSummary(rollNumber) {
   const sectionsSnap = await getDocs(collection(db, "sections"));
 
@@ -25,10 +22,10 @@ export async function getAttendanceSummary(rollNumber) {
       break;
     }
   }
-  if (!section || !student) return { overallPct: null, monthly: [] };
+  if (!section || !student) return { overallPct: null, daily: [] };
 
-  let present = 0, total = 0;
-  const byMonth = {}; // "YYYY-MM" -> { present, total }
+  // Collect all periods across all subjects, keyed by date
+  const byDate = {}; // "YYYY-MM-DD" -> { present: n, total: n }
 
   for (const sub of section.subjects || []) {
     const datesSnap = await getDocs(
@@ -36,24 +33,25 @@ export async function getAttendanceSummary(rollNumber) {
     );
     datesSnap.forEach((dateDoc) => {
       const status = readStatus(dateDoc.data(), sub, student, serial);
-      total += 1;
-      const isPresent = status !== "A";
-      if (isPresent) present += 1;
-
-      const { date } = parseKey(dateDoc.id); // "YYYY-MM-DD_period" -> date
-      const month = date.slice(0, 7); // "YYYY-MM"
-      if (!byMonth[month]) byMonth[month] = { present: 0, total: 0 };
-      byMonth[month].total += 1;
-      if (isPresent) byMonth[month].present += 1;
+      const { date } = parseKey(dateDoc.id);
+      if (!byDate[date]) byDate[date] = { present: 0, total: 0 };
+      byDate[date].total += 1;
+      if (status !== "A") byDate[date].present += 1;
     });
   }
 
-  const monthly = Object.keys(byMonth)
-    .sort()
-    .map((month) => ({ month, pct: calcPct(byMonth[month].present, byMonth[month].total) }));
+  const sortedDates = Object.keys(byDate).sort();
+  let cumPresent = 0, cumTotal = 0;
+  const daily = sortedDates.map((date) => {
+    cumPresent += byDate[date].present;
+    cumTotal += byDate[date].total;
+    return {
+      date,
+      label: fmtDate(date), // "DD/MM/YY" for chart X-axis
+      pct: calcPct(cumPresent, cumTotal),
+    };
+  });
 
-  return {
-    overallPct: total > 0 ? calcPct(present, total) : null,
-    monthly,
-  };
+  const overallPct = cumTotal > 0 ? calcPct(cumPresent, cumTotal) : null;
+  return { overallPct, daily };
 }

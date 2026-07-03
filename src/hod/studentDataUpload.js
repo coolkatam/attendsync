@@ -1,20 +1,26 @@
-// studentDataUpload.js
-// Drop into src/hod/studentDataUpload.js
+// src/hod/studentDataUpload.js
 //
-// Firestore shape this writes to:
+// Firestore shape written to:
 //   students/{rollNumber}
 //     name, parentName, parentOccupation, category, studentMobile, parentMobile, hostelType
-//     feeBalance, feeAsOnDate
-//     semesters: { "1": { sgpa, backlogs: [] }, "2": {...}, ... }   (only semesters with data entered)
+//     feeBalance
+//     semesters: {
+//       "1": { sgpa: number, backlogs: [] },
+//       ...up to the highest semester that has ANY data (SGPA or backlogs)
+//     }
 //
-// Both upload functions UPSERT with setDoc(..., { merge: true }), and only include a field in the
-// write if the source cell was non-blank — so a blank cell never overwrites existing data with 0/"".
+// Rules:
+//   - Blank SGPA + backlogs present  → sgpa: 0, backlogs: [...]   (failed with listed subjects)
+//   - SGPA = 0 explicitly            → sgpa: 0, backlogs: [...]   (failed, faculty confirmed)
+//   - Blank SGPA + blank backlogs    → semester skipped entirely   (not yet reached)
+//   - N = highest semester index that has SGPA (including 0) OR any backlog text
+//   - Re-uploading is merge-safe: blank cells never overwrite existing Firestore data
 
 import * as XLSX from "xlsx";
 import { doc, writeBatch } from "firebase/firestore";
 import { db } from "../firebase";
 
-const CHUNK = 450; // stay under Firestore's 500-write batch limit
+const CHUNK = 450;
 
 const SEM_COLUMNS = [
   ["I-I", 1], ["I-II", 2], ["II-I", 3], ["II-II", 4],
@@ -41,7 +47,9 @@ function readSheet(file) {
 async function commitInChunks(writer) {
   for (let i = 0; i < writer.length; i += CHUNK) {
     const batch = writeBatch(db);
-    writer.slice(i, i + CHUNK).forEach(({ ref, data }) => batch.set(ref, data, { merge: true }));
+    writer.slice(i, i + CHUNK).forEach(({ ref, data }) =>
+      batch.set(ref, data, { merge: true })
+    );
     await batch.commit();
   }
 }
@@ -50,13 +58,14 @@ function isBlank(v) {
   return v === "" || v === null || v === undefined;
 }
 
-/** Sheet: StudentRecords (the wide one-row-per-student template) */
-export async function uploadStudentRecords(file) {
+export async function uploadStudentRecords(file, mentorPhone) {
   const rows = await readSheet(file);
   const writes = rows
     .filter((r) => r.RollNumber)
     .map((r) => {
       const data = {};
+
+      // Basic fields — only write if non-blank
       if (!isBlank(r.Name)) data.name = r.Name;
       if (!isBlank(r.ParentName)) data.parentName = r.ParentName;
       if (!isBlank(r.ParentOccupation)) data.parentOccupation = r.ParentOccupation;
@@ -66,36 +75,48 @@ export async function uploadStudentRecords(file) {
       if (!isBlank(r.HostelType)) data.hostelType = r.HostelType;
       if (!isBlank(r.FeeBalance)) data.feeBalance = Number(r.FeeBalance);
 
+      // Semester processing
       const semesters = {};
+      let highestSem = 0; // track N = highest semester with any data
+
       SEM_COLUMNS.forEach(([label, num]) => {
-        const sgpaCell = r[label + "_SGPA"];
-        if (isBlank(sgpaCell)) return; // skip semesters not yet entered
-        const backlogs = String(r[label + "_Backlogs"] ?? "")
+        const sgpaRaw = r[label + "_SGPA"];
+        const backlogRaw = r[label + "_Backlogs"] ?? "";
+
+        const sgpaBlank = isBlank(sgpaRaw);
+        const backlogBlank = isBlank(backlogRaw) || String(backlogRaw).trim() === "";
+
+        // Skip semester entirely if BOTH SGPA and backlogs are blank
+        if (sgpaBlank && backlogBlank) return;
+
+        // Parse backlogs — keep full text including brackets as-is
+        const backlogs = String(backlogRaw)
           .split(",")
           .map((b) => b.trim())
           .filter(Boolean);
-        semesters[num] = { sgpa: Number(sgpaCell), backlogs };
+
+        // SGPA: blank means 0 (failed), explicit 0 also means failed
+        const sgpa = sgpaBlank ? 0 : Number(sgpaRaw);
+
+        semesters[num] = { sgpa, backlogs };
+        if (num > highestSem) highestSem = num;
       });
-      if (Object.keys(semesters).length) data.semesters = semesters;
 
-      return { ref: doc(db, "students", String(r.RollNumber).trim()), data };
+      // Store N so HoDStudentLookup knows the range to display
+      if (highestSem > 0) {
+        data.semesters = semesters;
+        data.completedSemesters = highestSem;
+      }
+
+      // Tag with mentor phone so mentor's page can list their students
+      if (mentorPhone) data.mentorPhone = mentorPhone;
+
+      return {
+        ref: doc(db, "students", String(r.RollNumber).trim()),
+        data,
+      };
     });
-  await commitInChunks(writes);
-  return { count: writes.length };
-}
 
-/** Sheet: FeeBalance (RollNumber, Name, FeeBalance, AsOnDate) — for ad-hoc updates from accounts office */
-export async function uploadFeeBalance(file) {
-  const rows = await readSheet(file);
-  const writes = rows
-    .filter((r) => r.RollNumber && !isBlank(r.FeeBalance))
-    .map((r) => ({
-      ref: doc(db, "students", String(r.RollNumber).trim()),
-      data: {
-        feeBalance: Number(r.FeeBalance),
-        feeAsOnDate: r.AsOnDate || "",
-      },
-    }));
   await commitInChunks(writes);
   return { count: writes.length };
 }

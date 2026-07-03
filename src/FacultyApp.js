@@ -5,13 +5,15 @@ import { collection, doc, onSnapshot, setDoc, getDoc, getDocs } from "firebase/f
 import { db } from "./firebase";
 import { P, Btn, Card, Badge, TopBar, ARow, Spinner, PeriodPicker } from "./components/UI";
 import { today, calcPct, makeKey, groupByDateBatched, rowColor, fmtDate, studentsInBatch, batchSlotKey } from "./utils";
+import MentorPage from "./mentor/MentorPage";
 
 export default function FacultyApp({ user, onLogout }) {
-  const [sections, setSections] = useState([]);
-  const [loading,  setLoading]  = useState(true);
-  const [screen,   setScreen]   = useState("home"); // home | mark | report
-  const [ctx,      setCtx]      = useState(null);
+  const [sections, setSections]     = useState([]);
+  const [loading,  setLoading]      = useState(true);
+  const [screen,   setScreen]       = useState("home");
+  const [ctx,      setCtx]          = useState(null);
   const [presetPeriod, setPresetPeriod] = useState(null);
+  const [mainTab, setMainTab]       = useState("attendance");
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "sections"), snap => {
@@ -50,31 +52,44 @@ export default function FacultyApp({ user, onLogout }) {
           </button>
         }
       />
-      <div style={{ padding: "16px 16px 80px" }}>
-        {sections.length === 0 && (
-          <div style={{ textAlign: "center", padding: "3rem", color: P.gray }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>📋</div>
-            <div style={{ fontWeight: 600, marginBottom: 6 }}>No sections assigned yet</div>
-            <div style={{ fontSize: 13 }}>Ask your admin to assign you to a section.</div>
-          </div>
-        )}
-        {sections.map(sec => {
-          const mySubs = sec.subjects.filter(s => s.facultyPhone === user.phone);
-          return (
-            <div key={sec.id} style={{ marginBottom: 16 }}>
-              <div style={{ fontWeight: 700, fontSize: 14, color: P.blue, marginBottom: 8 }}>{sec.name}</div>
-              {mySubs.map(sub => (
-                <SubjectCard
-                  key={sub.id}
-                  sec={sec} sub={sub} user={user}
-                  onMark={(period) => { setCtx({ section: sec, subject: sub }); setPresetPeriod(period || null); setScreen("mark"); }}
-                  onReport={() => { setCtx({ section: sec, subject: sub }); setScreen("report"); }}
-                />
-              ))}
-            </div>
-          );
-        })}
+      <div style={{ display: "flex", borderBottom: "1px solid " + P.border, background: "#fff", paddingLeft: 16 }}>
+        {["attendance", "mentor"].map(t => (
+          <button key={t} onClick={() => { setMainTab(t); setScreen("home"); }}
+            style={{ border: "none", background: "none", cursor: "pointer", padding: "10px 16px", fontSize: 13, fontWeight: 600, color: mainTab === t ? P.blue : P.gray, borderBottom: mainTab === t ? "3px solid " + P.blue : "3px solid transparent", fontFamily: "inherit" }}>
+            {t === "attendance" ? "📋 Attendance" : "🎓 Mentor"}
+          </button>
+        ))}
       </div>
+
+      {mainTab === "mentor" ? (
+        <MentorPage user={user} />
+      ) : (
+        <div style={{ padding: "16px 16px 80px" }}>
+          {sections.length === 0 && (
+            <div style={{ textAlign: "center", padding: "3rem", color: P.gray }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>📋</div>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>No sections assigned yet</div>
+              <div style={{ fontSize: 13 }}>Ask your admin to assign you to a section.</div>
+            </div>
+          )}
+          {sections.map(sec => {
+            const mySubs = sec.subjects.filter(s => s.facultyPhone === user.phone);
+            return (
+              <div key={sec.id} style={{ marginBottom: 16 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: P.blue, marginBottom: 8 }}>{sec.name}</div>
+                {mySubs.map(sub => (
+                  <SubjectCard
+                    key={sub.id}
+                    sec={sec} sub={sub} user={user}
+                    onMark={(period) => { setCtx({ section: sec, subject: sub }); setPresetPeriod(period || null); setScreen("mark"); }}
+                    onReport={() => { setCtx({ section: sec, subject: sub }); setScreen("report"); }}
+                  />
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -270,6 +285,7 @@ function MarkAttendance({ user, ctx, presetPeriod, onBack }) {
   const batchReady = !hasBatches || !!selBatchId;
 
   const [date, setDate]       = useState(today());
+  const [viewFilter, setViewFilter] = useState("all"); // all | P | A — display-only, doesn't affect saved data
   const [selPeriods, setSelPeriods] = useState(presetPeriod ? [presetPeriod] : []);
   const [record,  setRecord]  = useState(null); // flat {roll: "P"/"A"} for THIS batch's roster only
   const [saved,   setSaved]   = useState(false);
@@ -372,6 +388,10 @@ function MarkAttendance({ user, ctx, presetPeriod, onBack }) {
   const aCount = vals.filter(v => v === "A").length;
   const allP = vals.length > 0 && aCount === 0;
   const allA = vals.length > 0 && pCount === 0;
+  const filteredRoster = !record ? roster : roster.filter(st => {
+    if (viewFilter === "all") return true;
+    return (record[st.roll] || "P") === viewFilter;
+  });
 
   return (
     <div style={{ background: P.bg, minHeight: "100vh" }}>
@@ -449,10 +469,29 @@ function MarkAttendance({ user, ctx, presetPeriod, onBack }) {
             </div>
           </div>
           <div style={{ padding: "10px 16px 120px" }}>
-            <div style={{ fontSize: 12, color: P.gray, marginBottom: 10 }}>
-              Tap a student's button to flip their status. This marking will be saved to all selected periods.
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: P.gray }}>
+                Tap a student's button to flip their status.
+              </div>
+              <select
+                value={viewFilter}
+                onChange={e => setViewFilter(e.target.value)}
+                style={{
+                  border: "1px solid " + P.border, borderRadius: 8, padding: "5px 8px",
+                  fontSize: 12, fontFamily: "inherit", background: "#fff", color: "#374151",
+                }}
+              >
+                <option value="all">Show: All</option>
+                <option value="P">Show: Present only</option>
+                <option value="A">Show: Absent only</option>
+              </select>
             </div>
-            {roster.map(st => (
+            {viewFilter !== "all" && filteredRoster.length === 0 && (
+              <div style={{ textAlign: "center", color: P.gray, fontSize: 13, padding: "1.5rem 0" }}>
+                No {viewFilter === "P" ? "present" : "absent"} students to show.
+              </div>
+            )}
+            {filteredRoster.map(st => (
               <ARow key={st.roll} st={st} status={record[st.roll] || "P"}
                 onToggle={roll => {
                   setRecord(r => ({ ...r, [roll]: r[roll] === "P" ? "A" : "P" }));

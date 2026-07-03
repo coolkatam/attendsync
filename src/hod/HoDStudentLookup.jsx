@@ -1,14 +1,16 @@
-// HoDStudentLookup.jsx
-// Search-only screen (data entry lives in each section's "Student Data" tab in AdminApp.js).
-// Lives in src/hod/HoDStudentLookup.jsx, alongside studentDataUpload.js and hodAttendance.js.
+// src/hod/HoDStudentLookup.jsx
 
 import { useState, useEffect, useRef } from "react";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, arrayUnion, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { getAttendanceSummary } from "./hodAttendance";
 
-const SEM_LABELS = { 1: "I-I", 2: "I-II", 3: "II-I", 4: "II-II", 5: "III-I", 6: "III-II", 7: "IV-I", 8: "IV-II" };
-// Fixed credits per semester, used for credit-weighted CGPA.
+const SEM_LABELS = {
+  1: "I-I", 2: "I-II", 3: "II-I", 4: "II-II",
+  5: "III-I", 6: "III-II", 7: "IV-I", 8: "IV-II"
+};
+
+// Fixed credits per semester for credit-weighted CGPA
 const SEM_CREDITS = { 1: 19, 2: 21, 3: 20, 4: 21, 5: 22, 6: 22, 7: 23, 8: 12 };
 
 function gradeColor(pct) {
@@ -18,53 +20,60 @@ function gradeColor(pct) {
   return "#0F6E56";
 }
 
-function monthLabel(ym) {
-  const [y, m] = ym.split("-");
-  const names = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  return names[Number(m) - 1] + " " + y.slice(2);
-}
-
-function StatCard({ bg, labelColor, valueColor, label, value }) {
-  return (
-    <div style={{ background: bg, borderRadius: 8, padding: "0.85rem" }}>
-      <div style={{ fontSize: 12, color: labelColor, marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 20, fontWeight: 600, color: valueColor }}>{value}</div>
-    </div>
-  );
-}
-
 function TrendChart({ canvasId, labels, data, color, bgColor, min, max, ariaLabel }) {
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
 
   useEffect(() => {
-    if (!window.Chart) {
-      const script = document.createElement("script");
-      script.src = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js";
-      script.onload = () => draw();
-      document.body.appendChild(script);
-    } else {
-      draw();
-    }
-    return () => { if (chartRef.current) chartRef.current.destroy(); };
-
     function draw() {
       if (!canvasRef.current || !window.Chart) return;
       if (chartRef.current) chartRef.current.destroy();
       chartRef.current = new window.Chart(canvasRef.current, {
         type: "line",
-        data: { labels, datasets: [{ data, borderColor: color, backgroundColor: bgColor, fill: true, tension: 0.3, pointRadius: 3 }] },
+        data: {
+          labels,
+          datasets: [{
+            data,
+            borderColor: color,
+            backgroundColor: bgColor,
+            fill: true,
+            tension: 0.3,
+            pointRadius: labels.length > 20 ? 1 : 3,
+          }]
+        },
         options: {
           responsive: true,
           maintainAspectRatio: false,
           plugins: { legend: { display: false } },
           scales: {
-            y: { min, max, grid: { color: "#cfd9e6" }, ticks: { color: "#6b7b8c", font: { size: 10 } } },
-            x: { grid: { display: false }, ticks: { color: "#6b7b8c", font: { size: 10 } } },
+            y: {
+              min, max,
+              grid: { color: "#cfd9e6" },
+              ticks: { color: "#6b7b8c", font: { size: 10 } }
+            },
+            x: {
+              grid: { display: false },
+              ticks: {
+                color: "#6b7b8c",
+                font: { size: 10 },
+                maxTicksLimit: 10, // avoid crowding on many days
+                maxRotation: 45,
+              }
+            },
           },
         },
       });
     }
+
+    if (!window.Chart) {
+      const script = document.createElement("script");
+      script.src = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js";
+      script.onload = draw;
+      document.body.appendChild(script);
+    } else {
+      draw();
+    }
+    return () => { if (chartRef.current) chartRef.current.destroy(); };
   }, [labels, data, color, bgColor, min, max]);
 
   return (
@@ -74,28 +83,36 @@ function TrendChart({ canvasId, labels, data, color, bgColor, min, max, ariaLabe
   );
 }
 
+function StatCard({ bg, labelColor, valueColor, label, value }) {
+  return (
+    <div style={{ background: bg, borderRadius: 8, padding: "0.85rem" }}>
+      <div style={{ fontSize: 12, color: labelColor, marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 20, fontWeight: 600, color: valueColor || "#222" }}>{value}</div>
+    </div>
+  );
+}
+
 export default function HoDStudentLookup({ user, onLogout }) {
   const [roll, setRoll] = useState("");
   const [student, setStudent] = useState(null);
-  const [attendance, setAttendance] = useState({ overallPct: null, monthly: [] });
+  const [attendance, setAttendance] = useState({ overallPct: null, daily: [] });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
 
   async function handleSearch(e) {
     e.preventDefault();
     if (!roll.trim()) return;
     const rollNumber = roll.trim();
     setLoading(true);
-    setError("");
-    setStudent(null);
-    setAttendance({ overallPct: null, monthly: [] });
+    setError(""); setInfo(""); setStudent(null);
+    setAttendance({ overallPct: null, daily: [] });
     try {
       const snap = await getDoc(doc(db, "students", rollNumber));
       const profile = snap.exists() ? snap.data() : null;
       const att = await getAttendanceSummary(rollNumber);
-
       if (!profile && att.overallPct == null) {
-        setError(`No record found for roll number "${rollNumber}" — not in any section roster and no academic data uploaded.`);
+        setError(`No record found for "${rollNumber}" — not in any section roster and no academic data uploaded.`);
       } else {
         setStudent({ id: rollNumber, ...(profile || {}) });
         setAttendance(att);
@@ -107,17 +124,29 @@ export default function HoDStudentLookup({ user, onLogout }) {
     }
   }
 
-  const semesters = student?.semesters
-    ? Object.entries(student.semesters).sort((a, b) => Number(a[0]) - Number(b[0]))
+  // N = completedSemesters stored during upload (highest sem with any data)
+  const N = student?.completedSemesters || 0;
+
+  // Build array of sems 1..N, filling blanks with sgpa:0, backlogs:[]
+  const semList = N > 0
+    ? Array.from({ length: N }, (_, i) => {
+        const num = i + 1;
+        const s = student?.semesters?.[num];
+        return { num, sgpa: s?.sgpa ?? 0, backlogs: s?.backlogs || [] };
+      })
     : [];
-  const totalCredits = semesters.reduce((sum, [num]) => sum + (SEM_CREDITS[num] || 0), 0);
-  const weightedSum = semesters.reduce((sum, [num, s]) => sum + s.sgpa * (SEM_CREDITS[num] || 0), 0);
+
+  // Credit-weighted CGPA over sems 1..N
+  const totalCredits = semList.reduce((sum, s) => sum + (SEM_CREDITS[s.num] || 0), 0);
+  const weightedSum = semList.reduce((sum, s) => sum + s.sgpa * (SEM_CREDITS[s.num] || 0), 0);
   const cgpa = totalCredits > 0 ? weightedSum / totalCredits : null;
-  const allBacklogs = semesters.flatMap(([, s]) => s.backlogs || []);
-  const hasAcademicProfile = student && (student.name || semesters.length || student.feeBalance != null);
+
+  const allBacklogs = semList.flatMap((s) => s.backlogs);
+  const hasAcademicProfile = student && (student.name || N > 0 || student.feeBalance != null);
 
   return (
     <div>
+      {/* Header */}
       <div style={{ background: "#1a56a0", color: "#fff", padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <div style={{ fontWeight: 700, fontSize: 18 }}>HoD Dashboard</div>
@@ -132,8 +161,7 @@ export default function HoDStudentLookup({ user, onLogout }) {
         <h2 style={{ marginBottom: 12 }}>Student Lookup</h2>
         <form onSubmit={handleSearch} style={{ display: "flex", gap: 8, marginBottom: 20 }}>
           <input
-            value={roll}
-            onChange={(e) => setRoll(e.target.value)}
+            value={roll} onChange={(e) => setRoll(e.target.value)}
             placeholder="Enter roll number"
             style={{ flex: 1, padding: 10, fontSize: 16, border: "1px solid #ccc", borderRadius: 6 }}
           />
@@ -143,39 +171,47 @@ export default function HoDStudentLookup({ user, onLogout }) {
         </form>
 
         {error && <p style={{ color: "#d32f2f" }}>{error}</p>}
+        {info && <p style={{ color: "#166534" }}>{info}</p>}
 
         {student && (
           <div style={{ border: "1px solid #e0e0e0", borderRadius: 12, padding: 18, background: "#F1EFE8" }}>
 
+            {/* Name / roll header */}
             <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14, background: "#E6F1FB", borderRadius: 8, padding: "0.9rem 1rem" }}>
-              <div style={{ width: 56, height: 56, borderRadius: "50%", background: "#B5D4F4", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 600, color: "#0C447C" }} title="Photo not uploaded yet">
+              <button onClick={() => { setStudent(null); setAttendance({ overallPct: null, daily: [] }); setRoll(""); }}
+                style={{ background: "rgba(24,95,165,0.12)", border: "none", borderRadius: 6, padding: "5px 10px", cursor: "pointer", color: "#185FA5", fontSize: 12, whiteSpace: "nowrap" }}>
+                ← Back
+              </button>
+              <div style={{ width: 56, height: 56, borderRadius: "50%", background: "#B5D4F4", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 600, color: "#0C447C" }}>
                 {student.name?.[0] || "?"}
               </div>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 17, color: "#042C53" }}>{student.name || "—"}</div>
                 <div style={{ color: "#185FA5", fontSize: 13 }}>
-                  {student.id} {student.category ? `· ${student.category}` : ""}
+                  {student.id}{student.category ? ` · ${student.category}` : ""}
                 </div>
               </div>
             </div>
 
             {!hasAcademicProfile && (
               <div style={{ background: "#FAEEDA", color: "#854F0B", borderRadius: 8, padding: "8px 12px", marginBottom: 14, fontSize: 13 }}>
-                No academic profile uploaded yet for this roll number — showing attendance only.
+                No academic profile uploaded yet — showing attendance only.
               </div>
             )}
 
+            {/* Stat cards */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 10, marginBottom: 12 }}>
               <StatCard bg="#E1F5EE" labelColor="#0F6E56" valueColor={gradeColor(attendance.overallPct)} label="Attendance"
                 value={attendance.overallPct != null ? `${attendance.overallPct.toFixed(1)}%` : "—"} />
               <StatCard bg="#EEEDFE" labelColor="#534AB7" valueColor="#26215C" label="CGPA"
                 value={cgpa != null ? cgpa.toFixed(2) : "—"} />
               <StatCard bg="#FBEAF0" labelColor="#993556" valueColor="#4B1528" label="Backlogs"
-                value={allBacklogs.length || (semesters.length ? 0 : "—")} />
+                value={N > 0 ? allBacklogs.length : "—"} />
               <StatCard bg="#FAEEDA" labelColor="#854F0B" valueColor="#412402" label="Fee balance"
                 value={student.feeBalance != null ? `₹${student.feeBalance.toLocaleString("en-IN")}` : "—"} />
             </div>
 
+            {/* Personal & family details */}
             <div style={{ background: "#fff", border: "1px solid #e0ded6", borderRadius: 8, padding: "0.9rem 1rem", marginBottom: 12 }}>
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: "#2C2C2A" }}>Personal &amp; family details</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 13, color: "#444441" }}>
@@ -186,59 +222,74 @@ export default function HoDStudentLookup({ user, onLogout }) {
               </div>
             </div>
 
+            {/* Trend charts */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
               <div style={{ background: "#E1F5EE", borderRadius: 8, padding: "0.85rem" }}>
-                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, color: "#04342C" }}>Attendance trend (by month)</div>
-                {attendance.monthly.length > 0 ? (
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, color: "#04342C" }}>
+                  Attendance trend (cumulative, day-by-day)
+                </div>
+                {attendance.daily.length > 0 ? (
                   <TrendChart
                     canvasId="attChart"
-                    labels={attendance.monthly.map((m) => monthLabel(m.month))}
-                    data={attendance.monthly.map((m) => m.pct)}
+                    labels={attendance.daily.map((d) => d.label)}
+                    data={attendance.daily.map((d) => d.pct)}
                     color="#0F6E56"
                     bgColor="rgba(15,110,86,0.12)"
                     min={0} max={100}
-                    ariaLabel="Monthly attendance trend"
+                    ariaLabel="Cumulative daily attendance trend"
                   />
                 ) : (
                   <div style={{ fontSize: 13, color: "#5F5E5A", padding: "20px 0", textAlign: "center" }}>No attendance data yet</div>
                 )}
               </div>
-              <div style={{ background: "#E6F1FB", borderRadius: 8, padding: "0.85rem" }}>
-                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, color: "#042C53" }}>SGPA trend</div>
-                {semesters.length > 0 ? (
-                  <TrendChart
-                    canvasId="sgpaChart"
-                    labels={semesters.map(([num]) => SEM_LABELS[num] || num)}
-                    data={semesters.map(([, s]) => s.sgpa)}
-                    color="#185FA5"
-                    bgColor="rgba(24,95,165,0.12)"
-                    min={0} max={10}
-                    ariaLabel="SGPA trend across semesters"
-                  />
+
+              <div style={{ background: "#EEEDFE", borderRadius: 8, padding: "0.85rem" }}>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, color: "#26215C" }}>
+                  Mentor comments
+                </div>
+                {(student.mentorComments && student.mentorComments.length > 0) ? (
+                  <div style={{ maxHeight: 140, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
+                    {[...(student.mentorComments || [])].reverse().map((c, i) => (
+                      <div key={i} style={{ background: "#fff", borderRadius: 6, padding: "7px 10px", fontSize: 12 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                          <span style={{ fontWeight: 600, color: "#534AB7" }}>{c.date}</span>
+                          {c.mentorName && <span style={{ color: "#888", fontSize: 11 }}>{c.mentorName}</span>}
+                        </div>
+                        <div style={{ color: "#333", lineHeight: 1.4 }}>{c.comment}</div>
+                      </div>
+                    ))}
+                  </div>
                 ) : (
-                  <div style={{ fontSize: 13, color: "#5F5E5A", padding: "20px 0", textAlign: "center" }}>No SGPA data yet</div>
+                  <div style={{ fontSize: 12, color: "#888", padding: "20px 0", textAlign: "center" }}>No mentor comments yet</div>
                 )}
               </div>
             </div>
 
+            {/* Semester table */}
             <div style={{ background: "#fff", border: "1px solid #e0ded6", borderRadius: 8, padding: "0.9rem 1rem" }}>
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Semester-wise performance</div>
-              {semesters.length > 0 ? (
+              {semList.length > 0 ? (
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                   <thead>
                     <tr style={{ borderBottom: "1px solid #e0ded6" }}>
-                      <td style={td_h}>Sem</td><td style={td_h}>SGPA</td><td style={td_h}>Backlogs</td>
+                      <td style={th}>Sem</td>
+                      <td style={th}>SGPA</td>
+                      <td style={th}>Backlogs</td>
                     </tr>
                   </thead>
                   <tbody>
-                    {semesters.map(([sem, s]) => (
-                      <tr key={sem} style={{ borderBottom: "1px solid #f0eee6" }}>
-                        <td style={td}>{SEM_LABELS[sem] || sem}</td>
-                        <td style={td}>{s.sgpa}</td>
+                    {semList.map((s) => (
+                      <tr key={s.num} style={{ borderBottom: "1px solid #f0eee6" }}>
+                        <td style={td}>{SEM_LABELS[s.num]}</td>
+                        <td style={{ ...td, color: s.sgpa === 0 ? "#A32D2D" : "#222", fontWeight: s.sgpa === 0 ? 600 : 400 }}>
+                          {s.sgpa === 0 ? "0 (Failed)" : s.sgpa}
+                        </td>
                         <td style={td}>
-                          {s.backlogs?.length
-                            ? s.backlogs.map((b) => (
-                                <span key={b} style={{ background: "#FBEAF0", color: "#993556", padding: "2px 8px", borderRadius: 6, fontSize: 12, marginRight: 4 }}>{b}</span>
+                          {s.backlogs.length
+                            ? s.backlogs.map((b, i) => (
+                                <span key={i} style={{ background: "#FBEAF0", color: "#993556", padding: "2px 8px", borderRadius: 6, fontSize: 12, marginRight: 4, display: "inline-block", marginBottom: 2 }}>
+                                  {b}
+                                </span>
                               ))
                             : <span style={{ color: "#999" }}>—</span>}
                         </td>
@@ -249,6 +300,19 @@ export default function HoDStudentLookup({ user, onLogout }) {
               ) : (
                 <div style={{ fontSize: 13, color: "#5F5E5A", textAlign: "center", padding: "10px 0" }}>No semester data uploaded yet</div>
               )}
+
+              {N > 0 && (
+                <div style={{ marginTop: 12, fontSize: 13 }}>
+                  <strong>Active backlogs:</strong>{" "}
+                  {allBacklogs.length
+                    ? allBacklogs.map((b, i) => (
+                        <span key={i} style={{ background: "#FBEAF0", color: "#993556", padding: "2px 8px", borderRadius: 6, fontSize: 12, marginRight: 4, display: "inline-block" }}>
+                          {b}
+                        </span>
+                      ))
+                    : <span style={{ color: "#166534" }}>None</span>}
+                </div>
+              )}
             </div>
 
           </div>
@@ -258,5 +322,5 @@ export default function HoDStudentLookup({ user, onLogout }) {
   );
 }
 
-const td_h = { textAlign: "left", padding: "6px 4px", fontSize: 12, color: "#888" };
+const th = { textAlign: "left", padding: "6px 4px", fontSize: 12, color: "#888" };
 const td = { padding: "6px 4px" };
