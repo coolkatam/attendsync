@@ -6,6 +6,7 @@ import { db } from "./firebase";
 import { P, Btn, Card, Badge, TopBar, ARow, Spinner, PeriodPicker } from "./components/UI";
 import { today, calcPct, makeKey, groupByDateBatched, rowColor, fmtDate, studentsInBatch, batchSlotKey } from "./utils";
 import MentorPage from "./mentor/MentorPage";
+import InternalMarksPage from "./marks/InternalMarksPage";
 
 export default function FacultyApp({ user, onLogout }) {
   const [sections, setSections]     = useState([]);
@@ -13,7 +14,7 @@ export default function FacultyApp({ user, onLogout }) {
   const [screen,   setScreen]       = useState("home");
   const [ctx,      setCtx]          = useState(null);
   const [presetPeriod, setPresetPeriod] = useState(null);
-  const [mainTab, setMainTab]       = useState("attendance");
+  const [mainTab, setMainTab]       = useState("attendance"); // attendance | mentor | marks
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "sections"), snap => {
@@ -53,16 +54,18 @@ export default function FacultyApp({ user, onLogout }) {
         }
       />
       <div style={{ display: "flex", borderBottom: "1px solid " + P.border, background: "#fff", paddingLeft: 16 }}>
-        {["attendance", "mentor"].map(t => (
+        {[["attendance","📋 Attendance"],["marks","📝 Internal Marks"],["mentor","🎓 Mentor"]].map(([t, label]) => (
           <button key={t} onClick={() => { setMainTab(t); setScreen("home"); }}
-            style={{ border: "none", background: "none", cursor: "pointer", padding: "10px 16px", fontSize: 13, fontWeight: 600, color: mainTab === t ? P.blue : P.gray, borderBottom: mainTab === t ? "3px solid " + P.blue : "3px solid transparent", fontFamily: "inherit" }}>
-            {t === "attendance" ? "📋 Attendance" : "🎓 Mentor"}
+            style={{ border: "none", background: "none", cursor: "pointer", padding: "10px 14px", fontSize: 13, fontWeight: 600, color: mainTab === t ? P.blue : P.gray, borderBottom: mainTab === t ? "3px solid " + P.blue : "3px solid transparent", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+            {label}
           </button>
         ))}
       </div>
 
       {mainTab === "mentor" ? (
         <MentorPage user={user} />
+      ) : mainTab === "marks" ? (
+        <InternalMarksPage user={user} />
       ) : (
         <div style={{ padding: "16px 16px 80px" }}>
           {sections.length === 0 && (

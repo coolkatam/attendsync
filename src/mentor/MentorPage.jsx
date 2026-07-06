@@ -1,3 +1,4 @@
+
 // src/mentor/MentorPage.jsx
 // Shown in the "Mentor" tab of FacultyApp.
 //
@@ -9,7 +10,7 @@
 //   5. Click any student → editable profile (same colorful layout as HoD)
 
 import { useState, useEffect, useRef } from "react";
-import { collection, query, where, onSnapshot, doc, getDoc, setDoc, updateDoc, arrayUnion } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, deleteField } from "firebase/firestore";
 import * as XLSX from "xlsx";
 import { db } from "../firebase";
 import { getAttendanceSummary } from "../hod/hodAttendance";
@@ -74,6 +75,8 @@ function StudentProfile({ rollNumber, onBack, user }) {
   const [commentText, setCommentText] = useState("");
   const [commentDate, setCommentDate] = useState(new Date().toISOString().split("T")[0]);
   const [addingComment, setAddingComment] = useState(false);
+  const [deleteMode, setDeleteMode] = useState(false);
+  const [selectedComments, setSelectedComments] = useState([]);
 
   const [ef, setEf] = useState({}); // edit fields
   const [editSems, setEditSems] = useState({});
@@ -169,6 +172,24 @@ function StudentProfile({ rollNumber, onBack, user }) {
     } finally { setAddingComment(false); }
   }
 
+  async function handleDeleteComments() {
+    const toDelete = (profile?.mentorComments || []).filter((_, i) => selectedComments.includes(i));
+    if (toDelete.length === 0) return;
+    if (!window.confirm(`Delete ${toDelete.length} selected comment(s)? This cannot be undone.`)) return;
+    try {
+      // arrayRemove needs exact object matches
+      await updateDoc(doc(db, "students", rollNumber), {
+        mentorComments: arrayRemove(...toDelete),
+      });
+      const snap = await getDoc(doc(db, "students", rollNumber));
+      setProfile({ id: rollNumber, ...snap.data() });
+      setDeleteMode(false);
+      setSelectedComments([]);
+    } catch (err) {
+      setMsg("Failed to delete comments: " + err.message);
+    }
+  }
+
   if (loading) return <div style={{ padding: 32, textAlign: "center", color: "#888" }}>Loading…</div>;
 
   const N = profile?.completedSemesters || 0;
@@ -246,18 +267,47 @@ function StudentProfile({ rollNumber, onBack, user }) {
                 : <div style={{ fontSize: 12, color: "#5F5E5A", padding: "20px 0", textAlign: "center" }}>No data yet</div>}
             </div>
             <div style={{ background: "#EEEDFE", borderRadius: 8, padding: "0.85rem" }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#26215C", marginBottom: 6 }}>Mentor comments</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#26215C" }}>Mentor comments</div>
+                {(profile?.mentorComments?.length > 0) && !deleteMode && (
+                  <button onClick={() => { setDeleteMode(true); setSelectedComments([]); }}
+                    style={{ fontSize: 11, color: "#993556", background: "none", border: "1px solid #e5b3c4", borderRadius: 5, padding: "2px 8px", cursor: "pointer" }}>
+                    🗑 Delete comments
+                  </button>
+                )}
+                {deleteMode && (
+                  <div style={{ display: "flex", gap: 5 }}>
+                    <button onClick={handleDeleteComments} disabled={selectedComments.length === 0}
+                      style={{ fontSize: 11, color: "#fff", background: "#b91c1c", border: "none", borderRadius: 5, padding: "2px 8px", cursor: "pointer", fontWeight: 600, opacity: selectedComments.length === 0 ? 0.5 : 1 }}>
+                      Delete selected ({selectedComments.length})
+                    </button>
+                    <button onClick={() => { setDeleteMode(false); setSelectedComments([]); }}
+                      style={{ fontSize: 11, color: "#555", background: "#fff", border: "1px solid #ccc", borderRadius: 5, padding: "2px 8px", cursor: "pointer" }}>
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </div>
 
               {/* Existing comments */}
               {(profile?.mentorComments?.length > 0) ? (
                 <div style={{ maxHeight: 120, overflowY: "auto", marginBottom: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-                  {[...(profile.mentorComments)].reverse().map((c, i) => (
-                    <div key={i} style={{ background: "#fff", borderRadius: 6, padding: "6px 9px", fontSize: 12 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-                        <span style={{ fontWeight: 600, color: "#534AB7" }}>{c.date}</span>
-                        {c.mentorName && <span style={{ color: "#888", fontSize: 11 }}>{c.mentorName}</span>}
+                  {profile.mentorComments.map((c, origIdx) => ({ c, origIdx })).reverse().map(({ c, origIdx }) => (
+                    <div key={origIdx} style={{ background: deleteMode && selectedComments.includes(origIdx) ? "#fee2e2" : "#fff", borderRadius: 6, padding: "6px 9px", fontSize: 12, display: "flex", gap: 8, alignItems: "flex-start" }}>
+                      {deleteMode && (
+                        <input type="checkbox" checked={selectedComments.includes(origIdx)}
+                          onChange={e => {
+                            setSelectedComments(prev => e.target.checked ? [...prev, origIdx] : prev.filter(i => i !== origIdx));
+                          }}
+                          style={{ marginTop: 2, cursor: "pointer" }} />
+                      )}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
+                          <span style={{ fontWeight: 600, color: "#534AB7" }}>{c.date}</span>
+                          {c.mentorName && <span style={{ color: "#888", fontSize: 11 }}>{c.mentorName}</span>}
+                        </div>
+                        <div style={{ color: "#333", lineHeight: 1.4 }}>{c.comment}</div>
                       </div>
-                      <div style={{ color: "#333", lineHeight: 1.4 }}>{c.comment}</div>
                     </div>
                   ))}
                 </div>
@@ -376,6 +426,10 @@ export default function MentorPage({ user }) {
   const [selectedRoll, setSelectedRoll] = useState(null);
   const [uploadStatus, setUploadStatus] = useState(null);
   const [uploadBusy, setUploadBusy] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addRoll, setAddRoll] = useState("");
+  const [addName, setAddName] = useState("");
+  const [addBusy, setAddBusy] = useState(false);
 
   // Live list of students tagged with this mentor's phone
   useEffect(() => {
@@ -415,6 +469,30 @@ export default function MentorPage({ user }) {
     } finally { setUploadBusy(false); }
   }
 
+  async function handleAddStudent() {
+    const roll = addRoll.trim();
+    if (!roll) return;
+    setAddBusy(true);
+    try {
+      const data = { mentorPhone: user.phone };
+      if (addName.trim()) data.name = addName.trim();
+      await setDoc(doc(db, "students", roll), data, { merge: true });
+      setAddRoll(""); setAddName(""); setShowAddForm(false);
+      setUploadStatus({ type: "ok", msg: `Student ${roll} added to your mentee list.` });
+    } catch (err) {
+      setUploadStatus({ type: "err", msg: "Failed to add student: " + err.message });
+    } finally { setAddBusy(false); }
+  }
+
+  async function handleRemoveStudent(roll, name) {
+    if (!window.confirm(`Remove ${name || roll} from your mentee list?\n\nThe student's academic data is NOT deleted — they are only unlinked from you. HoD can still see all their data.`)) return;
+    try {
+      await updateDoc(doc(db, "students", roll), { mentorPhone: deleteField() });
+    } catch (err) {
+      setUploadStatus({ type: "err", msg: "Failed to remove: " + err.message });
+    }
+  }
+
   if (selectedRoll) {
     return <StudentProfile rollNumber={selectedRoll} user={user} onBack={() => setSelectedRoll(null)} />;
   }
@@ -437,7 +515,33 @@ export default function MentorPage({ user }) {
             {uploadBusy ? "Uploading…" : "⬆ Upload filled sheet"}
             <input type="file" accept=".xlsx,.xls" onChange={handleUpload} disabled={uploadBusy} style={{ display: "none" }} />
           </label>
+          <button onClick={() => setShowAddForm(v => !v)}
+            style={{ fontSize: 13, color: "#166534", border: "1px solid #166534", borderRadius: 8, padding: "8px 14px", background: "#fff", cursor: "pointer", fontWeight: 600 }}>
+            {showAddForm ? "✕ Cancel" : "+ Add student"}
+          </button>
         </div>
+
+        {showAddForm && (
+          <div style={{ marginTop: 12, background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: 12 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+              <div>
+                <div style={{ fontSize: 11, color: "#666", marginBottom: 3 }}>Roll number *</div>
+                <input value={addRoll} onChange={e => setAddRoll(e.target.value)} placeholder="e.g. 23981A0305"
+                  style={{ border: "1px solid #b0c4de", borderRadius: 6, padding: "7px 9px", fontSize: 13, fontFamily: "inherit", width: 150 }} />
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: "#666", marginBottom: 3 }}>Name (optional)</div>
+                <input value={addName} onChange={e => setAddName(e.target.value)} placeholder="Student name"
+                  style={{ border: "1px solid #b0c4de", borderRadius: 6, padding: "7px 9px", fontSize: 13, fontFamily: "inherit", width: 180 }} />
+              </div>
+              <button onClick={handleAddStudent} disabled={addBusy || !addRoll.trim()}
+                style={{ fontSize: 13, background: "#166534", color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", cursor: "pointer", fontWeight: 600, opacity: (addBusy || !addRoll.trim()) ? 0.6 : 1 }}>
+                {addBusy ? "Adding…" : "Add"}
+              </button>
+            </div>
+            <div style={{ fontSize: 11, color: "#666", marginTop: 6 }}>Remaining details (marks, parent info, etc.) can be filled by clicking on the student and using Edit, or via Excel upload.</div>
+          </div>
+        )}
         {uploadStatus && (
           <div style={{ marginTop: 10, fontSize: 13, color: uploadStatus.type === "ok" ? "#166534" : "#b91c1c" }}>
             {uploadStatus.msg}
@@ -473,6 +577,11 @@ export default function MentorPage({ user }) {
                 <div style={{ fontSize: 14, fontWeight: 600 }}>{st.name || "—"}</div>
                 <div style={{ fontSize: 12, color: "#888" }}>{st.id}</div>
               </div>
+              <button onClick={(e) => { e.stopPropagation(); handleRemoveStudent(st.id, st.name); }}
+                title="Remove from my mentee list"
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#d32f2f", fontSize: 15, padding: "4px 8px", borderRadius: 6 }}>
+                🗑
+              </button>
               <div style={{ color: "#1a56a0", fontSize: 18 }}>›</div>
             </div>
           ))}
@@ -482,3 +591,4 @@ export default function MentorPage({ user }) {
     </div>
   );
 }
+

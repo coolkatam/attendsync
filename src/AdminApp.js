@@ -1,3 +1,4 @@
+
 // src/AdminApp.js — FINAL with all 3 fixes
 
 import React, { useState, useEffect, useRef } from "react";
@@ -8,6 +9,9 @@ import {
 import { db } from "./firebase";
 import * as XLSX from "xlsx";
 import { uploadStudentRecords } from "./hod/studentDataUpload";
+import MarksAdminTab from "./marks/MarksAdminTab";
+import InternalMarksPage from "./marks/InternalMarksPage";
+import MentorPage from "./mentor/MentorPage";
 import { P, Btn, Card, Badge, Fld, Sel, TopBar, GPill, ARow, Spinner, PeriodPicker } from "./components/UI";
 import { today, calcPct, parseCSV, downloadTemplate, exportXLS, makeKey, groupByDateBatched, rowColor, MASTER_ADMIN_PHONE, fmtDate, validateBatches, studentsInBatch, readStatus, batchSlotKey } from "./utils";
 
@@ -92,6 +96,10 @@ export default function AdminApp({ user, onLogout }) {
   async function makeFaculty(phone) {
     await updateDoc(doc(db, "users", phone), { role: "faculty" });
   }
+  async function makeHod(phone) {
+    if (!window.confirm("Make this user HoD? They will get the HoD dashboard (Attendance, Internal Marks, Student Info). If they are currently an admin, they will LOSE their admin dashboard.")) return;
+    await updateDoc(doc(db, "users", phone), { role: "hod" });
+  }
   async function deleteUser(phone, name) {
     if (!window.confirm("Delete user " + name + " (" + phone + ")? This cannot be undone.")) return;
     await deleteDoc(doc(db, "users", phone));
@@ -129,6 +137,24 @@ export default function AdminApp({ user, onLogout }) {
     if (!sec) { setScreen("home"); return null; }
     return <SectionDetail secId={secId} onBack={() => { setScreen("home"); setSecId(null); }} />;
   }
+  if (screen === "myMarks") {
+    return (
+      <div style={{ background: P.bg, minHeight: "100vh" }}>
+        <TopBar title="Internal Marks" subtitle={"My subjects · " + user.name}
+          right={<button onClick={() => setScreen("home")} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>← Back</button>} />
+        <InternalMarksPage user={user} />
+      </div>
+    );
+  }
+  if (screen === "myMentor") {
+    return (
+      <div style={{ background: P.bg, minHeight: "100vh" }}>
+        <TopBar title="Mentor" subtitle={"My mentees · " + user.name}
+          right={<button onClick={() => setScreen("home")} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>← Back</button>} />
+        <MentorPage user={user} />
+      </div>
+    );
+  }
   if (screen === "users") {
     const usersToShow = isMaster ? allUsers : allUsers.filter(u => u.invitedBy === user.phone);
     return (
@@ -140,6 +166,7 @@ export default function AdminApp({ user, onLogout }) {
         onReject={rejectUser}
         onMakeAdmin={makeAdmin}
         onMakeFaculty={makeFaculty}
+        onMakeHod={makeHod}
         onDelete={deleteUser}
         onResetPin={resetPin}
         onBack={() => setScreen("home")}
@@ -163,7 +190,13 @@ export default function AdminApp({ user, onLogout }) {
     <div style={{ background: P.bg, minHeight: "100vh" }}>
       <TopBar title="Admin Dashboard" subtitle={(isMaster ? "⭐ Master Admin · " : "") + "Welcome, " + user.name}
         right={
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button onClick={() => setScreen("myMarks")} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>
+              📝 Marks
+            </button>
+            <button onClick={() => setScreen("myMentor")} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>
+              🎓 Mentor
+            </button>
             <button onClick={() => setScreen("users")} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>
               👥 Users
             </button>
@@ -527,7 +560,7 @@ function AdminMarkAttendance({ user, ctx, presetPeriod, onBack }) {
 }
 
 // ── Users management screen ────────────────────────────────
-function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReject, onMakeAdmin, onMakeFaculty, onDelete, onResetPin, onBack }) {
+function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReject, onMakeAdmin, onMakeFaculty, onMakeHod, onDelete, onResetPin, onBack }) {
   const [filter, setFilter] = useState("all"); // all | pending | approved | admin
 
   const filtered = allUsers.filter(u => {
@@ -611,7 +644,12 @@ function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReject, onM
                   {isMaster && !isPending && !isRejected && (
                     isAdmin
                       ? <Btn small variant="ghost" onClick={() => onMakeFaculty(u.id)}>↓ Demote to Faculty</Btn>
+                      : u.role === "hod"
+                      ? <Btn small variant="ghost" onClick={() => onMakeFaculty(u.id)}>↓ Remove HoD role</Btn>
                       : <Btn small variant="accent" onClick={() => onMakeAdmin(u.id)}>↑ Make Admin</Btn>
+                  )}
+                  {isMaster && !isPending && !isRejected && u.role !== "hod" && (
+                    <Btn small variant="outline" onClick={() => onMakeHod(u.id)}>👑 Make HoD</Btn>
                   )}
                   {u.status === "approved" && u.pin && (
                     <Btn small variant="ghost" onClick={() => { if (window.confirm("Reset PIN for " + u.name + "? They will be asked to set a new PIN on next login.")) onResetPin(u.id); }}>
@@ -743,10 +781,10 @@ function SectionDetail({ secId, onBack }) {
     <div style={{ background: P.bg, minHeight: "100vh" }}>
       <TopBar title={section.name} subtitle="Section detail" onBack={onBack} />
       <div style={{ background: "#fff", borderBottom: "1px solid " + P.border, display: "flex", overflowX: "auto" }}>
-        {["overview","students","subjects","attendance","reports","studentData"].map(t => (
+        {["overview","students","subjects","attendance","reports","studentData","internalMarks"].map(t => (
           <button key={t} onClick={() => { setTab(t); if (t === "reports" || t === "attendance") loadAtt(); }}
             style={{ border: "none", background: "none", cursor: "pointer", padding: "12px 16px", fontSize: 13, fontWeight: 600, color: tab === t ? P.blue : P.gray, borderBottom: tab === t ? "3px solid " + P.blue : "3px solid transparent", whiteSpace: "nowrap", fontFamily: "inherit" }}>
-            {t === "studentData" ? "Student Data" : t.charAt(0).toUpperCase() + t.slice(1)}
+            {t === "studentData" ? "Student Data" : t === "internalMarks" ? "Internal Marks" : t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}
       </div>
@@ -756,7 +794,8 @@ function SectionDetail({ secId, onBack }) {
         {tab === "subjects"   && <TabSubjects   section={section} />}
         {tab === "attendance" && <TabAdminAtt   section={section} att={att} secId={secId} setAtt={setAtt} onRefresh={loadAtt} attLoading={attLoading} />}
         {tab === "reports"    && <TabReports    section={section} att={att} onRefresh={loadAtt} attLoading={attLoading} />}
-        {tab === "studentData" && <TabStudentData section={section} />}
+        {tab === "studentData"   && <TabStudentData  section={section} />}
+        {tab === "internalMarks" && <MarksAdminTab   section={section} />}
       </div>
     </div>
   );
@@ -939,10 +978,9 @@ function TabSubjects({ section }) {
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "users"), snap => {
       const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const approvedFaculty = users.filter(u =>
-        u.status === "approved" &&
-        (u.role === "admin" || !u.invitedBy || u.invitedBy === section.adminPhone)
-      );
+      // Any approved user (faculty/admin/hod) can be assigned a subject in any section,
+      // regardless of which admin's invite link they registered through.
+      const approvedFaculty = users.filter(u => u.status === "approved");
       setFacultyList(approvedFaculty);
     });
     return unsub;
