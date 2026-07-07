@@ -1,10 +1,11 @@
+
 // src/FacultyApp.js — period-aware attendance marking + reports
 
 import React, { useState, useEffect } from "react";
 import { collection, doc, onSnapshot, setDoc, getDoc, getDocs } from "firebase/firestore";
 import { db } from "./firebase";
 import { P, Btn, Card, Badge, TopBar, ARow, Spinner, PeriodPicker } from "./components/UI";
-import { today, calcPct, makeKey, groupByDateBatched, rowColor, fmtDate, studentsInBatch, batchSlotKey } from "./utils";
+import { today, calcPct, makeKey, groupByDateBatched, rowColor, fmtDate, studentsInBatch, batchSlotKey, exportXLS } from "./utils";
 import MentorPage from "./mentor/MentorPage";
 import InternalMarksPage from "./marks/InternalMarksPage";
 
@@ -173,6 +174,13 @@ function SubjectReport({ ctx, onBack }) {
   const { dates, byDate } = groupByDateBatched(att, roster, subject);
   const totalPeriods = dates.reduce((a, d) => a + byDate[d].periodsHeld, 0);
 
+  function handleDownload() {
+    // Reuse the same exportXLS the admin uses, scoped to just this one subject.
+    const scopedSection = { ...section, subjects: [subject] };
+    const scopedAtt = { [subject.id]: att };
+    exportXLS(scopedSection, scopedAtt);
+  }
+
   // Per-student stats: day-wise present counts + total + %
   const stats = roster.map(st => {
     const daily = dates.map(d => byDate[d].byRoll[st.roll] || 0);
@@ -205,6 +213,13 @@ function SubjectReport({ ctx, onBack }) {
         onBack={onBack}
       />
       <div style={{ padding: 16 }}>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+          <button onClick={handleDownload}
+            style={{ fontSize: 13, background: P.blue, color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", cursor: "pointer", fontWeight: 600 }}>
+            ⬇ Download Excel
+          </button>
+        </div>
 
         {/* Summary stats */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
@@ -522,3 +537,4 @@ function MarkAttendance({ user, ctx, presetPeriod, onBack }) {
     </div>
   );
 }
+

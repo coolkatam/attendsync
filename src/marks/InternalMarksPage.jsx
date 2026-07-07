@@ -18,17 +18,29 @@ import {
 
 const BLUE = "#1a56a0";
 
+// Hide the up/down spinner arrows on number inputs across this whole page (Chrome/Safari + Firefox)
+function NoSpinnerStyle() {
+  return (
+    <style>{`
+      .marks-input::-webkit-outer-spin-button,
+      .marks-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+      .marks-input[type=number] { -moz-appearance: textfield; }
+    `}</style>
+  );
+}
+
 // ── Tiny helpers ──────────────────────────────────────────────────────────────
 function CellInput({ value, onChange, readOnly, warn }) {
   return (
     <input
       type="number" min="0" max="10"
+      className="marks-input"
       value={value === undefined || value === null ? "" : value}
       onChange={e => onChange(e.target.value === "" ? "" : Number(e.target.value))}
       readOnly={readOnly}
       style={{
         width: 36, height: 28, border: readOnly ? "1px solid #e0e0e0" : "1px solid #b0c4de",
-        borderRadius: 4, textAlign: "center", fontSize: 11,
+        borderRadius: 4, textAlign: "center", fontSize: 14, fontWeight: 600,
         background: readOnly ? "#f5f5f5" : warn ? "#fee2e2" : "#fff",
         color: readOnly ? "#888" : "#222",
         cursor: readOnly ? "default" : "text",
@@ -205,8 +217,8 @@ function LabSheet({ students, labData, onChange, locked }) {
                 <td style={{ ...td, padding: "4px 8px", textAlign: "left" }}>{st.name || ""}</td>
                 {fields.map(f => (
                   <td key={f} style={{ border: "0.5px solid var(--border)", padding: 4, textAlign: "center" }}>
-                    <input type="number" min="0" value={m[f] ?? ""} onChange={e => onChange(st.roll, f, e.target.value === "" ? "" : Number(e.target.value))} readOnly={locked}
-                      style={{ width: 60, height: 28, border: locked ? "1px solid #e0e0e0" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 12, background: locked ? "#f5f5f5" : "#fff", padding: 2, boxSizing: "border-box" }} />
+                    <input type="number" min="0" className="marks-input" value={m[f] ?? ""} onChange={e => onChange(st.roll, f, e.target.value === "" ? "" : Number(e.target.value))} readOnly={locked}
+                      style={{ width: 60, height: 28, border: locked ? "1px solid #e0e0e0" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 14, fontWeight: 600, background: locked ? "#f5f5f5" : "#fff", padding: 2, boxSizing: "border-box" }} />
                   </td>
                 ))}
                 <td style={{ padding: "4px 8px", textAlign: "center", fontWeight: 600, fontSize: 12, background: over ? "#fee2e2" : "#E1F5EE", color: over ? "#b91c1c" : "#0F6E56", border: "0.5px solid var(--border)" }}>
@@ -248,12 +260,12 @@ function AssignmentSheet({ students, assignData, onChange, locked }) {
                 <td style={{ ...td, padding: "4px 8px", fontSize: 11 }}>{st.roll}</td>
                 <td style={{ ...td, padding: "4px 8px", textAlign: "left" }}>{st.name || ""}</td>
                 <td style={{ border: "0.5px solid var(--border)", padding: 4, textAlign: "center" }}>
-                  <input type="number" min="0" max="5" value={m.a1 ?? ""} onChange={e => onChange(st.roll, "a1", e.target.value === "" ? "" : Number(e.target.value))} readOnly={locked}
-                    style={{ width: 80, height: 28, border: locked ? "1px solid #e0e0e0" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 12, background: locked ? "#f5f5f5" : "#fff", padding: 2, boxSizing: "border-box" }} />
+                  <input type="number" min="0" max="5" className="marks-input" value={m.a1 ?? ""} onChange={e => onChange(st.roll, "a1", e.target.value === "" ? "" : Number(e.target.value))} readOnly={locked}
+                    style={{ width: 80, height: 28, border: locked ? "1px solid #e0e0e0" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 14, fontWeight: 600, background: locked ? "#f5f5f5" : "#fff", padding: 2, boxSizing: "border-box" }} />
                 </td>
                 <td style={{ border: "0.5px solid var(--border)", padding: 4, textAlign: "center" }}>
-                  <input type="number" min="0" max="5" value={m.a2 ?? ""} onChange={e => onChange(st.roll, "a2", e.target.value === "" ? "" : Number(e.target.value))} readOnly={locked}
-                    style={{ width: 80, height: 28, border: locked ? "1px solid #e0e0e0" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 12, background: locked ? "#f5f5f5" : "#fff", padding: 2, boxSizing: "border-box" }} />
+                  <input type="number" min="0" max="5" className="marks-input" value={m.a2 ?? ""} onChange={e => onChange(st.roll, "a2", e.target.value === "" ? "" : Number(e.target.value))} readOnly={locked}
+                    style={{ width: 80, height: 28, border: locked ? "1px solid #e0e0e0" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 14, fontWeight: 600, background: locked ? "#f5f5f5" : "#fff", padding: 2, boxSizing: "border-box" }} />
                 </td>
               </tr>
             );
@@ -285,8 +297,8 @@ function DayDaySheet({ students, ddData, onChange, locked }) {
               <td style={{ ...td, padding: "4px 8px", fontSize: 11 }}>{st.roll}</td>
               <td style={{ ...td, padding: "4px 8px", textAlign: "left" }}>{st.name || ""}</td>
               <td style={{ border: "0.5px solid var(--border)", padding: 4, textAlign: "center" }}>
-                <input type="number" min="0" max="15" value={ddData?.[st.roll] ?? ""} onChange={e => onChange(st.roll, e.target.value === "" ? "" : Number(e.target.value))} readOnly={locked}
-                  style={{ width: 80, height: 28, border: locked ? "1px solid #e0e0e0" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 12, background: locked ? "#f5f5f5" : "#fff", padding: 2, boxSizing: "border-box" }} />
+                <input type="number" min="0" max="15" className="marks-input" value={ddData?.[st.roll] ?? ""} onChange={e => onChange(st.roll, e.target.value === "" ? "" : Number(e.target.value))} readOnly={locked}
+                  style={{ width: 80, height: 28, border: locked ? "1px solid #e0e0e0" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 14, fontWeight: 600, background: locked ? "#f5f5f5" : "#fff", padding: 2, boxSizing: "border-box" }} />
               </td>
             </tr>
           ))}
@@ -630,15 +642,23 @@ export default function InternalMarksPage({ user }) {
 
   if (selected) {
     return (
-      <SubjectView
-        section={selected.section}
-        subject={selected.subject}
-        user={user}
-        onBack={() => setSelected(null)}
-      />
+      <>
+        <NoSpinnerStyle />
+        <SubjectView
+          section={selected.section}
+          subject={selected.subject}
+          user={user}
+          onBack={() => setSelected(null)}
+        />
+      </>
     );
   }
 
-  return <SubjectList sections={sections} user={user} onSelectSubject={(sec, sub) => setSelected({ section: sec, subject: sub })} />;
+  return (
+    <>
+      <NoSpinnerStyle />
+      <SubjectList sections={sections} user={user} onSelectSubject={(sec, sub) => setSelected({ section: sec, subject: sub })} />
+    </>
+  );
 }
 

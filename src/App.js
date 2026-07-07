@@ -121,7 +121,7 @@ function LoginScreen({ onLogin }) {
   const [err, setErr]       = useState("");
 
   // If opened via an admin's invite link (?admin=<phone>), tag new registrations to that admin.
-  const invitedBy = new URLSearchParams(window.location.search).get("admin") || "";
+  const invitedBy = (new URLSearchParams(window.location.search).get("admin") || "").replace(/\D/g, "");
 
   // Invite links go straight to the faculty door
   useEffect(() => {
@@ -379,7 +379,7 @@ function LoginScreen({ onLogin }) {
         {step === "phone" && (
           <div>
             <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>Enter your mobile number</div>
-            <Fld label="Mobile number" value={phone} onChange={setPhone} placeholder="10-digit number" type="tel" />
+            <Fld label="Mobile number" value={phone} onChange={v => setPhone(v.replace(/\D/g, ""))} placeholder="10-digit number" type="tel" />
             {err && <div style={{ color: P.red, fontSize: 13, marginBottom: 10 }}>{err}</div>}
             <Btn full onClick={checkPhone} disabled={loading} style={{ background: d.color }}>{loading ? "Checking…" : "Continue"}</Btn>
             {door === "faculty" && !invitedBy && (

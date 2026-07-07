@@ -56,6 +56,7 @@ export default function AdminApp({ user, onLogout }) {
   const [allUsers, setAllUsers] = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [markCtx,  setMarkCtx]  = useState(null); // for admin marking their own subject
+  const [reportCtx, setReportCtx] = useState(null); // for admin viewing/downloading their own subject's report
   const isMaster = user.phone === MASTER_ADMIN_PHONE;
 
   // Load sections
@@ -127,6 +128,9 @@ export default function AdminApp({ user, onLogout }) {
   // Admin marking attendance for their own subject
   if (markCtx) {
     return <AdminMarkAttendance user={user} ctx={markCtx} presetPeriod={markCtx.presetPeriod} onBack={() => setMarkCtx(null)} />;
+  }
+  if (reportCtx) {
+    return <AdminSubjectReport ctx={reportCtx} onBack={() => setReportCtx(null)} />;
   }
 
   if (screen === "new") {
@@ -254,6 +258,7 @@ export default function AdminApp({ user, onLogout }) {
                 subject={subject}
                 user={user}
                 onMark={(period) => setMarkCtx({ section, subject, presetPeriod: period || null })}
+                onReport={() => setReportCtx({ section, subject })}
               />
             ))}
           </div>
@@ -294,7 +299,7 @@ export default function AdminApp({ user, onLogout }) {
 }
 
 // ── Admin subject card (period-aware, same as faculty card) ─
-function AdminSubjectCard({ section, subject, user, onMark }) {
+function AdminSubjectCard({ section, subject, user, onMark, onReport }) {
   const [doneMap, setDoneMap] = useState({});
   const [loading,  setLoading]  = useState(true);
   const ts = today();
@@ -331,8 +336,9 @@ function AdminSubjectCard({ section, subject, user, onMark }) {
             : <Badge color="amber">Not marked today</Badge>
         }
       </div>
-      <div style={{ marginTop: 10 }}>
+      <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
         <Btn small variant="primary" onClick={() => onMark()}>📅 Mark attendance</Btn>
+        <Btn small variant="accent" onClick={onReport}>📊 Report</Btn>
       </div>
     </Card>
   );
@@ -555,6 +561,137 @@ function AdminMarkAttendance({ user, ctx, presetPeriod, onBack }) {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// ── Admin's own subject report (mirrors FacultyApp's SubjectReport) ─────────
+function AdminSubjectReport({ ctx, onBack }) {
+  const { section, subject } = ctx;
+  const [att, setAtt] = useState({});
+  const [loading, setLoading] = useState(true);
+  const roster = section.students || [];
+
+  useEffect(() => {
+    async function load() {
+      const snap = await getDocs(
+        collection(db, "attendance", section.id, "subjects", subject.id, "dates")
+      );
+      const data = {};
+      snap.forEach(d => { data[d.id] = d.data(); });
+      setAtt(data);
+      setLoading(false);
+    }
+    load();
+  }, [section.id, subject.id]);
+
+  if (loading) return <Spinner />;
+
+  const { dates, byDate } = groupByDateBatched(att, roster, subject);
+  const totalPeriods = dates.reduce((a, d) => a + byDate[d].periodsHeld, 0);
+
+  function handleDownload() {
+    const scopedSection = { ...section, subjects: [subject] };
+    const scopedAtt = { [subject.id]: att };
+    exportXLS(scopedSection, scopedAtt);
+  }
+
+  const stats = roster.map(st => {
+    const daily = dates.map(d => byDate[d].byRoll[st.roll] || 0);
+    const present = daily.reduce((a, b) => a + b, 0);
+    const pct = calcPct(present, totalPeriods);
+    return { ...st, daily, present, pct };
+  });
+
+  const rowBg = {
+    red:    { bg: "#fee2e2", fg: P.red },
+    yellow: { bg: "#fef3c7", fg: P.amber },
+    none:   { bg: null,      fg: "#111" },
+  };
+  const thStyle = {
+    background: P.blue, color: "#fff", fontWeight: 600,
+    fontSize: 12, padding: "8px 10px", textAlign: "center",
+    border: "1px solid #1244a0", whiteSpace: "nowrap",
+  };
+  const tdStyle = {
+    fontSize: 12, padding: "7px 10px", textAlign: "center",
+    border: "1px solid " + P.border,
+  };
+
+  return (
+    <div style={{ background: P.bg, minHeight: "100vh" }}>
+      <TopBar title={subject.name} subtitle={section.name + " · My attendance report"} onBack={onBack} />
+      <div style={{ padding: 16 }}>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+          <button onClick={handleDownload}
+            style={{ fontSize: 13, background: P.blue, color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", cursor: "pointer", fontWeight: 600 }}>
+            ⬇ Download Excel
+          </button>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
+          <div style={{ background: P.blueL, borderRadius: 12, padding: "14px 12px", textAlign: "center" }}>
+            <div style={{ fontSize: 24, fontWeight: 700, color: P.blue }}>{dates.length}</div>
+            <div style={{ fontSize: 11, color: P.gray }}>Days held</div>
+          </div>
+          <div style={{ background: P.tealL, borderRadius: 12, padding: "14px 12px", textAlign: "center" }}>
+            <div style={{ fontSize: 24, fontWeight: 700, color: P.teal }}>{totalPeriods}</div>
+            <div style={{ fontSize: 11, color: P.gray }}>Total periods</div>
+          </div>
+          <div style={{ background: P.redL, borderRadius: 12, padding: "14px 12px", textAlign: "center" }}>
+            <div style={{ fontSize: 24, fontWeight: 700, color: P.red }}>{stats.filter(s => s.pct < 65).length}</div>
+            <div style={{ fontSize: 11, color: P.gray }}>&lt;65% students</div>
+          </div>
+        </div>
+
+        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8 }}>Day-wise attendance</div>
+        <div style={{ fontSize: 11, color: P.gray, marginBottom: 8 }}>
+          Each column is a date. Value = number of periods that student attended that day.
+          <span style={{ display: "inline-block", width: 10, height: 10, background: "#fef3c7", marginLeft: 10, marginRight: 4, verticalAlign: "middle" }} />65–74.99%
+          <span style={{ display: "inline-block", width: 10, height: 10, background: "#fee2e2", marginLeft: 10, marginRight: 4, verticalAlign: "middle" }} />&lt;65%
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ borderCollapse: "collapse", minWidth: "100%" }}>
+            <thead>
+              <tr>
+                <th style={thStyle}>Roll No</th>
+                <th style={thStyle}>Name</th>
+                {dates.map(d => (
+                  <th key={d} style={thStyle}>
+                    {fmtDate(d)}
+                    <div style={{ fontSize: 10, fontWeight: 400, opacity: 0.85, marginTop: 2 }}>
+                      ({byDate[d].periodsHeld} period{byDate[d].periodsHeld > 1 ? "s" : ""})
+                    </div>
+                  </th>
+                ))}
+                <th style={thStyle}>Total</th>
+                <th style={thStyle}>%</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stats.map(st => {
+                const c = rowBg[rowColor(st.pct)];
+                const rowStyle = { background: c.bg || "#fff" };
+                return (
+                  <tr key={st.roll} style={rowStyle}>
+                    <td style={{ ...tdStyle, fontWeight: 600, color: c.fg }}>{st.roll}</td>
+                    <td style={{ ...tdStyle, textAlign: "left", color: c.fg }}>{st.name}</td>
+                    {st.daily.map((v, i) => (
+                      <td key={i} style={{ ...tdStyle, color: c.fg }}>{v}</td>
+                    ))}
+                    <td style={{ ...tdStyle, fontWeight: 600, color: c.fg }}>{st.present}</td>
+                    <td style={{ ...tdStyle, fontWeight: 700, color: c.fg }}>{st.pct.toFixed(2)}%</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {stats.length === 0 && (
+            <div style={{ color: P.gray, textAlign: "center", padding: "2rem" }}>No attendance data yet.</div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
