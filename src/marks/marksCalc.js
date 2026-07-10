@@ -55,11 +55,11 @@ export function calcDrawingMidConv(marks) {
   return calcDrawingMidRaw(marks) * 15 / 30;
 }
 
-// Final internal = CEILING(MAX×0.7 + MIN×0.3)
+// Final internal = CEILING(MAX×0.8 + MIN×0.2)
 export function calcFinalInternal(mid1Total, mid2Total) {
   const hi = Math.max(mid1Total, mid2Total);
   const lo = Math.min(mid1Total, mid2Total);
-  return Math.ceil(hi * 0.7 + lo * 0.3);
+  return Math.ceil(hi * 0.8 + lo * 0.2);
 }
 
 // Assignment: if any student has a2 entered → both assignments exist → use average

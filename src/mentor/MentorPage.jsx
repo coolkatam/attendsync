@@ -430,6 +430,9 @@ export default function MentorPage({ user }) {
   const [addRoll, setAddRoll] = useState("");
   const [addName, setAddName] = useState("");
   const [addBusy, setAddBusy] = useState(false);
+  const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
+  const [selectedMentees, setSelectedMentees] = useState([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // Live list of students tagged with this mentor's phone
   useEffect(() => {
@@ -493,6 +496,22 @@ export default function MentorPage({ user }) {
     }
   }
 
+  async function handleBulkRemove() {
+    if (selectedMentees.length === 0) return;
+    if (!window.confirm(`Remove ${selectedMentees.length} selected student(s) from your mentee list?\n\nTheir academic data is NOT deleted — they are only unlinked from you. HoD can still see all their data.`)) return;
+    setBulkDeleting(true);
+    try {
+      await Promise.all(
+        selectedMentees.map(roll => updateDoc(doc(db, "students", roll), { mentorPhone: deleteField() }))
+      );
+      setUploadStatus({ type: "ok", msg: `Removed ${selectedMentees.length} student(s) from your mentee list.` });
+      setSelectedMentees([]);
+      setBulkDeleteMode(false);
+    } catch (err) {
+      setUploadStatus({ type: "err", msg: "Bulk remove failed: " + err.message });
+    } finally { setBulkDeleting(false); }
+  }
+
   if (selectedRoll) {
     return <StudentProfile rollNumber={selectedRoll} user={user} onBack={() => setSelectedRoll(null)} />;
   }
@@ -550,10 +569,30 @@ export default function MentorPage({ user }) {
       </div>
 
       {/* Mentee list */}
-      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10 }}>
-        My mentees <span style={{ fontWeight: 400, color: "#888", fontSize: 13 }}>
-          {loading ? "" : `(${mentees.length})`}
-        </span>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <div style={{ fontWeight: 600, fontSize: 14 }}>
+          My mentees <span style={{ fontWeight: 400, color: "#888", fontSize: 13 }}>
+            {loading ? "" : `(${mentees.length})`}
+          </span>
+        </div>
+        {!loading && mentees.length > 0 && !bulkDeleteMode && (
+          <button onClick={() => { setBulkDeleteMode(true); setSelectedMentees([]); }}
+            style={{ fontSize: 12, color: "#993556", background: "none", border: "1px solid #e5b3c4", borderRadius: 6, padding: "5px 10px", cursor: "pointer" }}>
+            🗑 Select &amp; remove
+          </button>
+        )}
+        {bulkDeleteMode && (
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={handleBulkRemove} disabled={selectedMentees.length === 0 || bulkDeleting}
+              style={{ fontSize: 12, color: "#fff", background: "#b91c1c", border: "none", borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontWeight: 600, opacity: (selectedMentees.length === 0 || bulkDeleting) ? 0.5 : 1 }}>
+              {bulkDeleting ? "Removing…" : `Remove selected (${selectedMentees.length})`}
+            </button>
+            <button onClick={() => { setBulkDeleteMode(false); setSelectedMentees([]); }}
+              style={{ fontSize: 12, color: "#555", background: "#fff", border: "1px solid #ccc", borderRadius: 6, padding: "5px 10px", cursor: "pointer" }}>
+              Cancel
+            </button>
+          </div>
+        )}
       </div>
 
       {loading && <div style={{ color: "#888", fontSize: 13 }}>Loading…</div>}
@@ -567,24 +606,36 @@ export default function MentorPage({ user }) {
 
       {!loading && mentees.length > 0 && (
         <div style={{ background: "#fff", border: "1px solid #e0e0e0", borderRadius: 10, overflow: "hidden" }}>
-          {mentees.map((st, i) => (
-            <div key={st.id} onClick={() => setSelectedRoll(st.id)}
-              style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", borderBottom: i < mentees.length - 1 ? "1px solid #f0f0f0" : "none", cursor: "pointer" }}>
-              <div style={{ width: 38, height: 38, borderRadius: "50%", background: "#B5D4F4", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 600, color: "#0C447C", flexShrink: 0 }}>
-                {(st.name || st.id)?.[0]?.toUpperCase() || "?"}
+          {mentees.map((st, i) => {
+            const checked = selectedMentees.includes(st.id);
+            return (
+              <div key={st.id} onClick={() => bulkDeleteMode
+                  ? setSelectedMentees(prev => checked ? prev.filter(r => r !== st.id) : [...prev, st.id])
+                  : setSelectedRoll(st.id)}
+                style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", borderBottom: i < mentees.length - 1 ? "1px solid #f0f0f0" : "none", cursor: "pointer", background: checked ? "#fee2e2" : "transparent" }}>
+                {bulkDeleteMode && (
+                  <input type="checkbox" checked={checked} onChange={() => {}} style={{ cursor: "pointer", width: 16, height: 16, flexShrink: 0 }} />
+                )}
+                <div style={{ width: 38, height: 38, borderRadius: "50%", background: "#B5D4F4", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 600, color: "#0C447C", flexShrink: 0 }}>
+                  {(st.name || st.id)?.[0]?.toUpperCase() || "?"}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>{st.name || "—"}</div>
+                  <div style={{ fontSize: 12, color: "#888" }}>{st.id}</div>
+                </div>
+                {!bulkDeleteMode && (
+                  <>
+                    <button onClick={(e) => { e.stopPropagation(); handleRemoveStudent(st.id, st.name); }}
+                      title="Remove from my mentee list"
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "#d32f2f", fontSize: 15, padding: "4px 8px", borderRadius: 6 }}>
+                      🗑
+                    </button>
+                    <div style={{ color: "#1a56a0", fontSize: 18 }}>›</div>
+                  </>
+                )}
               </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>{st.name || "—"}</div>
-                <div style={{ fontSize: 12, color: "#888" }}>{st.id}</div>
-              </div>
-              <button onClick={(e) => { e.stopPropagation(); handleRemoveStudent(st.id, st.name); }}
-                title="Remove from my mentee list"
-                style={{ background: "none", border: "none", cursor: "pointer", color: "#d32f2f", fontSize: 15, padding: "4px 8px", borderRadius: 6 }}>
-                🗑
-              </button>
-              <div style={{ color: "#1a56a0", fontSize: 18 }}>›</div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

@@ -1,11 +1,12 @@
 
+
 // src/FacultyApp.js — period-aware attendance marking + reports
 
 import React, { useState, useEffect } from "react";
 import { collection, doc, onSnapshot, setDoc, getDoc, getDocs } from "firebase/firestore";
 import { db } from "./firebase";
 import { P, Btn, Card, Badge, TopBar, ARow, Spinner, PeriodPicker } from "./components/UI";
-import { today, calcPct, makeKey, groupByDateBatched, rowColor, fmtDate, studentsInBatch, batchSlotKey, exportXLS } from "./utils";
+import { today, calcPct, makeKey, parseKey, groupByDateBatched, rowColor, fmtDate, studentsInBatch, batchSlotKey, exportXLS } from "./utils";
 import MentorPage from "./mentor/MentorPage";
 import InternalMarksPage from "./marks/InternalMarksPage";
 
@@ -154,6 +155,8 @@ function SubjectReport({ ctx, onBack }) {
   const { section, subject } = ctx;
   const [att,     setAtt]     = useState({});
   const [loading, setLoading] = useState(true);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const roster = section.students || [];
 
   useEffect(() => {
@@ -171,13 +174,28 @@ function SubjectReport({ ctx, onBack }) {
 
   if (loading) return <Spinner />;
 
-  const { dates, byDate } = groupByDateBatched(att, roster, subject);
+  const { dates: allDates, byDate } = groupByDateBatched(att, roster, subject);
+
+  // Restrict to the selected date range, if any. Leaving both blank continues
+  // showing the full history exactly as before.
+  const dates = allDates.filter(d => {
+    if (fromDate && d < fromDate) return false;
+    if (toDate && d > toDate) return false;
+    return true;
+  });
+
   const totalPeriods = dates.reduce((a, d) => a + byDate[d].periodsHeld, 0);
 
   function handleDownload() {
-    // Reuse the same exportXLS the admin uses, scoped to just this one subject.
+    // Reuse the same exportXLS the admin uses, scoped to just this one subject
+    // and to the currently selected date range.
+    const filteredAtt = {};
+    Object.keys(att).forEach(key => {
+      const { date } = parseKey(key);
+      if (dates.includes(date)) filteredAtt[key] = att[key];
+    });
     const scopedSection = { ...section, subjects: [subject] };
-    const scopedAtt = { [subject.id]: att };
+    const scopedAtt = { [subject.id]: filteredAtt };
     exportXLS(scopedSection, scopedAtt);
   }
 
@@ -214,7 +232,27 @@ function SubjectReport({ ctx, onBack }) {
       />
       <div style={{ padding: 16 }}>
 
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, background: "#fff", border: "1px solid " + P.border, borderRadius: 8, padding: "6px 10px", cursor: "pointer" }}>
+              <span style={{ color: P.gray }}>From:</span>
+              <input type="date" value={fromDate} max={toDate || undefined}
+                onChange={e => setFromDate(e.target.value)}
+                style={{ border: "none", fontSize: 13, fontFamily: "inherit", cursor: "pointer" }} />
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, background: "#fff", border: "1px solid " + P.border, borderRadius: 8, padding: "6px 10px", cursor: "pointer" }}>
+              <span style={{ color: P.gray }}>To:</span>
+              <input type="date" value={toDate} min={fromDate || undefined}
+                onChange={e => setToDate(e.target.value)}
+                style={{ border: "none", fontSize: 13, fontFamily: "inherit", cursor: "pointer" }} />
+            </label>
+            {(fromDate || toDate) && (
+              <button onClick={() => { setFromDate(""); setToDate(""); }}
+                style={{ fontSize: 12, color: P.gray, background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
+                Clear (show full range)
+              </button>
+            )}
+          </div>
           <button onClick={handleDownload}
             style={{ fontSize: 13, background: P.blue, color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", cursor: "pointer", fontWeight: 600 }}>
             ⬇ Download Excel
@@ -537,4 +575,6 @@ function MarkAttendance({ user, ctx, presetPeriod, onBack }) {
     </div>
   );
 }
+
+
 

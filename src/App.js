@@ -2,7 +2,9 @@
 import HoDStudentLookup from "./hod/HoDStudentLookup";
 import HoDApp from "./hod/HoDApp";
 import { useState, useEffect } from "react";
-import { db } from "./firebase";
+import { db, auth, functions } from "./firebase";
+import { httpsCallable } from "firebase/functions";
+import { signInWithCustomToken } from "firebase/auth";
 import {
   doc, getDoc, setDoc, onSnapshot,
   collection, getDocs, updateDoc
@@ -173,9 +175,13 @@ function LoginScreen({ onLogin }) {
     if (phone.length < 10) { setErr("Enter a valid 10-digit number"); return; }
     setLoading(true); setErr("");
     try {
-      const snap = await getDoc(doc(db, "users", phone));
-      if (snap.exists()) {
-        const data = snap.data();
+      // Phone lookup now happens server-side (Cloud Function) because
+      // Firestore security rules block reads before login. The function
+      // returns safe fields only — never the PIN itself.
+      const checkPhoneFn = httpsCallable(functions, "checkPhone");
+      const res = await checkPhoneFn({ phone });
+      const data = res.data;
+      if (data.exists) {
         if (data.status === "approved") {
           if (!roleAllowed(data)) {
             setErr(doorErrorMsg(data));
@@ -183,7 +189,7 @@ function LoginScreen({ onLogin }) {
             return;
           }
           setUserData(data);
-          if (data.pin) {
+          if (data.hasPin) {
             setStep("enter-pin");
           } else {
             setStep("setup-pin");
@@ -229,12 +235,22 @@ function LoginScreen({ onLogin }) {
     setLoading(false);
   }
 
+  // Calls the verifyLogin Cloud Function (checks phone+PIN server-side) and,
+  // if valid, signs into a real Firebase Auth session using the token it returns.
+  // This is invisible to the person logging in — same screen, same PIN, same button.
+  async function verifyLoginAndSignIn(phoneToCheck, pinToCheck) {
+    const verifyLogin = httpsCallable(functions, "verifyLogin");
+    const result = await verifyLogin({ phone: phoneToCheck, pin: pinToCheck });
+    await signInWithCustomToken(auth, result.data.token);
+  }
+
   async function createPin() {
     if (!/^\d{4}$/.test(pin)) { setErr("PIN must be exactly 4 digits"); return; }
     if (pin !== pin2) { setErr("PINs don't match"); return; }
     setLoading(true); setErr("");
     try {
       await updateDoc(doc(db, "users", phone), { pin });
+      await verifyLoginAndSignIn(phone, pin);
       onLogin({ phone, ...userData, pin });
     } catch (e) {
       setErr("Error: " + e.message);
@@ -242,10 +258,17 @@ function LoginScreen({ onLogin }) {
     setLoading(false);
   }
 
-  function submitPin() {
+  async function submitPin() {
     if (!/^\d{4}$/.test(pin)) { setErr("Enter your 4-digit PIN"); return; }
-    if (pin !== userData.pin) { setErr("Incorrect PIN"); setPin(""); return; }
-    onLogin({ phone, ...userData });
+    setLoading(true); setErr("");
+    try {
+      await verifyLoginAndSignIn(phone, pin);
+      onLogin({ phone, ...userData });
+    } catch (e) {
+      setErr("Incorrect PIN");
+      setPin("");
+    }
+    setLoading(false);
   }
 
   // ── LANDING PAGE (no door chosen yet) ──────────────────────
@@ -470,7 +493,7 @@ function LoginScreen({ onLogin }) {
             </div>
             <Fld label="4-digit PIN" value={pin} onChange={v => setPin(v.replace(/\D/g, "").slice(0, 4))} placeholder="••••" type="password" />
             {err && <div style={{ color: P.red, fontSize: 13, marginBottom: 10 }}>{err}</div>}
-            <Btn full onClick={submitPin} disabled={loading}>Login</Btn>
+            <Btn full onClick={submitPin} disabled={loading}>{loading ? "Checking…" : "Login"}</Btn>
             <div style={{ marginTop: 12, fontSize: 12, color: P.gray, textAlign: "center" }}>
               Forgot your PIN? Ask your admin to reset it.
             </div>
