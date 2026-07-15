@@ -1592,10 +1592,28 @@ function TabStudentData({ section }) {
 
 function TabReports({ section, att, onRefresh, attLoading }) {
   const [view, setView] = useState("table");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+
+  // Restrict attendance to the selected date range. Blank from/to = no
+  // restriction on that end, so leaving both empty shows full history
+  // exactly as before. Keys are "date_period", so we filter on the date part.
+  const fAtt = {};
+  (section.subjects || []).forEach(sub => {
+    const dm = att[sub.id] || {};
+    const out = {};
+    Object.keys(dm).forEach(k => {
+      const { date } = parseKey(k);
+      if (fromDate && date < fromDate) return;
+      if (toDate && date > toDate) return;
+      out[k] = dm[k];
+    });
+    fAtt[sub.id] = out;
+  });
 
   const stats = (section.students || []).map((st, stIdx) => {
     const subs = (section.subjects || []).map(sub => {
-      const dm = att[sub.id] || {};
+      const dm = fAtt[sub.id] || {};
       const keys = Object.keys(dm); // each key = "date_period" = one class
       let p = 0;
       keys.forEach(k => { if (readStatus(dm[k], sub, st, stIdx + 1) !== "A") p++; });
@@ -1606,7 +1624,7 @@ function TabReports({ section, att, onRefresh, attLoading }) {
     return { ...st, subs, tc, tp, overall: calcPct(tp, tc) };
   });
 
-  const subTotals = (section.subjects || []).map(sub => Object.keys(att[sub.id] || {}).length);
+  const subTotals = (section.subjects || []).map(sub => Object.keys(fAtt[sub.id] || {}).length);
   const grandTotal = subTotals.reduce((a, b) => a + b, 0);
 
   const th = { background: P.blue, color: "#fff", fontWeight: 600, fontSize: 12, padding: "8px 10px", textAlign: "center", border: "1px solid #1244a0", whiteSpace: "nowrap" };
@@ -1620,14 +1638,35 @@ function TabReports({ section, att, onRefresh, attLoading }) {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
         <div style={{ fontWeight: 600, fontSize: 14 }}>Consolidated report</div>
         <div style={{ display: "flex", gap: 6 }}>
           <Btn small variant="ghost" onClick={onRefresh} disabled={attLoading}>{attLoading ? "…" : "🔄"}</Btn>
           <Btn small variant={view === "cards" ? "primary" : "ghost"} onClick={() => setView("cards")}>Cards</Btn>
           <Btn small variant={view === "table" ? "primary" : "ghost"} onClick={() => setView("table")}>📊 Preview</Btn>
-          <Btn small variant="accent" onClick={() => exportXLS(section, att)}>⬇ Excel</Btn>
+          <Btn small variant="accent" onClick={() => exportXLS(section, fAtt)}>⬇ Excel</Btn>
         </div>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, background: "#fff", border: "1px solid " + P.border, borderRadius: 8, padding: "6px 10px", cursor: "pointer" }}>
+          <span style={{ color: P.gray }}>From:</span>
+          <input type="date" value={fromDate} max={toDate || undefined}
+            onChange={e => setFromDate(e.target.value)}
+            style={{ border: "none", fontSize: 13, fontFamily: "inherit", cursor: "pointer" }} />
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, background: "#fff", border: "1px solid " + P.border, borderRadius: 8, padding: "6px 10px", cursor: "pointer" }}>
+          <span style={{ color: P.gray }}>To:</span>
+          <input type="date" value={toDate} min={fromDate || undefined}
+            onChange={e => setToDate(e.target.value)}
+            style={{ border: "none", fontSize: 13, fontFamily: "inherit", cursor: "pointer" }} />
+        </label>
+        {(fromDate || toDate) && (
+          <button onClick={() => { setFromDate(""); setToDate(""); }}
+            style={{ fontSize: 12, color: P.gray, background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
+            Clear (show full range)
+          </button>
+        )}
       </div>
 
       {attLoading && <div style={{ textAlign: "center", color: P.gray, padding: "1rem" }}>Loading latest attendance…</div>}

@@ -1,7 +1,8 @@
+
 {
-  "short_name": "AttendSync",
-  "name": "AttendSync – Section Attendance",
-  "description": "Section-wise consolidated attendance platform for institutions",
+  "short_name": "Mech EMS",
+  "name": "Mech EMS – Education Management System",
+  "description": "Engineered for Education — attendance, marks, records and mentoring for the Mechanical Engineering department",
   "icons": [
     {
       "src": "favicon.ico",
@@ -38,3 +39,4 @@
     }
   ]
 }
+

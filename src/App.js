@@ -84,9 +84,9 @@ function Spinner() {
 // ── Login / Registration screen ───────────────────────────
 // Door definitions: which door allows which role(s)
 const DOORS = {
-  hod:     { label: "HoD",                icon: "👑", roles: ["hod"],     color: "#7c3aed", colorL: "#ede9fe", desc: "Head of Department" },
-  admin:   { label: "Class Coordinators", icon: "🧭", roles: ["admin"],   color: "#0e7490", colorL: "#cffafe", desc: "Section admins & year coordinators" },
-  faculty: { label: "Subject Faculty",    icon: "📘", roles: ["faculty"], color: "#166534", colorL: "#dcfce7", desc: "Attendance, marks & mentoring" },
+  hod:     { label: "HoD",                icon: "👑", roles: ["hod"],     color: "#a8681c", colorL: "#f9edd8", desc: "Head of Department" },
+  admin:   { label: "Class Coordinators", icon: "🧭", roles: ["admin"],   color: "#1a6e8a", colorL: "#dcf1f7", desc: "Section admins & year coordinators" },
+  faculty: { label: "Subject Faculty",    icon: "📘", roles: ["faculty"], color: "#3f7264", colorL: "#e2efea", desc: "Attendance, marks & mentoring" },
   master:  { label: "Master Admin",       icon: "⭐", roles: ["admin"],   color: "#92400e", colorL: "#fef3c7", desc: "" },
 };
 
@@ -276,7 +276,9 @@ function LoginScreen({ onLogin }) {
     return (
       <div style={{
         minHeight: "100vh", position: "relative", overflow: "hidden",
-        background: "linear-gradient(135deg,#1e2a3a 0%,#1f4e5f 30%,#2b6777 55%,#3d7a5c 78%,#c2680e 100%)",
+        backgroundColor: "#24303d",
+        backgroundImage: 'url("/mech-bg.jpg")',
+        backgroundSize: "cover", backgroundPosition: "center",
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 16,
       }}>
         <style>{`
@@ -284,23 +286,11 @@ function LoginScreen({ onLogin }) {
           @keyframes gearspinRev { to { transform: rotate(-360deg); } }
         `}</style>
 
-        {/* Blueprint grid overlay for engineering feel */}
+        {/* Soft dark overlay so text and cards stay readable over the machinery */}
         <div style={{
-          position: "absolute", inset: 0, pointerEvents: "none", opacity: 0.08,
-          backgroundImage: "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)",
-          backgroundSize: "44px 44px",
+          position: "absolute", inset: 0, pointerEvents: "none",
+          background: "linear-gradient(180deg, rgba(15,23,42,0.42) 0%, rgba(15,23,42,0.28) 45%, rgba(15,23,42,0.5) 100%)",
         }} />
-        {/* Warm radial glow accents */}
-        <div style={{ position: "absolute", top: "-10%", right: "-8%", width: 420, height: 420, borderRadius: "50%", background: "radial-gradient(circle, rgba(255,176,59,0.35), transparent 70%)", pointerEvents: "none" }} />
-        <div style={{ position: "absolute", bottom: "-15%", left: "-10%", width: 480, height: 480, borderRadius: "50%", background: "radial-gradient(circle, rgba(45,212,191,0.25), transparent 70%)", pointerEvents: "none" }} />
-
-        {/* Decorative colorful gears */}
-        <Gear size={190} x="-60px" y="-50px" duration={38} color="#ffb03b" opacity={0.22} />
-        <Gear size={110} x="110px" y="70px" duration={26} reverse color="#2dd4bf" opacity={0.20} />
-        <Gear size={230} x="calc(100% - 150px)" y="calc(100% - 170px)" duration={44} color="#ffb03b" opacity={0.20} />
-        <Gear size={120} x="calc(100% - 240px)" y="calc(100% - 60px)" duration={30} reverse color="#f97316" opacity={0.22} />
-        <Gear size={90}  x="calc(100% - 120px)" y="60px" duration={22} color="#2dd4bf" opacity={0.16} />
-        <Gear size={70}  x="40px" y="calc(100% - 120px)" duration={18} reverse color="#f97316" opacity={0.16} />
 
         {/* Master admin subtle corner link */}
         <button onClick={() => openDoor("master")}
@@ -315,12 +305,12 @@ function LoginScreen({ onLogin }) {
 
         {/* Title */}
         <div style={{ textAlign: "center", marginBottom: 36, zIndex: 5 }}>
-          <img src="/logo192.png" alt="AttendSync" style={{ width: 68, height: 68, borderRadius: 16, margin: "0 auto 14px", display: "block", boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }} />
-          <div style={{ fontSize: 32, fontWeight: 800, color: "#fff", letterSpacing: 0.5, textShadow: "0 2px 12px rgba(0,0,0,0.35)" }}>AttendSync</div>
-          <div style={{ fontSize: 13, color: "#ffd9a0", marginTop: 6, letterSpacing: 2, textTransform: "uppercase", fontWeight: 600 }}>
-            Department of Mechanical Engineering
+          <img src="/logo192.png" alt="Mech EMS" style={{ width: 68, height: 68, borderRadius: 16, margin: "0 auto 14px", display: "block", boxShadow: "0 4px 20px rgba(0,0,0,0.5)" }} />
+          <div style={{ fontSize: 32, fontWeight: 800, color: "#fff", letterSpacing: 0.5, textShadow: "0 2px 14px rgba(0,0,0,0.65)" }}>Mech EMS</div>
+          <div style={{ fontSize: 13, color: "#ffd9a0", marginTop: 6, letterSpacing: 2, textTransform: "uppercase", fontWeight: 600, textShadow: "0 1px 8px rgba(0,0,0,0.7)" }}>
+            Engineered for Education
           </div>
-          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.7)", marginTop: 4 }}>
+          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.85)", marginTop: 4, textShadow: "0 1px 6px rgba(0,0,0,0.7)" }}>
             Attendance · Internal Marks · Student Records · Mentoring
           </div>
         </div>
@@ -332,9 +322,11 @@ function LoginScreen({ onLogin }) {
             return (
               <div key={k} onClick={() => openDoor(k)}
                 style={{
-                  background: "rgba(255,255,255,0.98)", borderRadius: 16, padding: "26px 22px",
+                  background: "rgba(255,255,255,0.9)", borderRadius: 16, padding: "26px 22px",
                   width: 220, cursor: "pointer", textAlign: "center",
-                  boxShadow: "0 10px 34px rgba(0,0,0,0.35)",
+                  backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
+                  boxShadow: "0 12px 38px rgba(0,0,0,0.45)",
+                  border: "1px solid rgba(255,255,255,0.55)",
                   borderTop: `5px solid ${d.color}`,
                   transition: "transform .15s",
                 }}
@@ -346,8 +338,8 @@ function LoginScreen({ onLogin }) {
                   display: "flex", alignItems: "center", justifyContent: "center",
                   fontSize: 26, margin: "0 auto 12px",
                 }}>{d.icon}</div>
-                <div style={{ fontWeight: 700, fontSize: 16, color: "#1e293b", marginBottom: 4 }}>{d.label}</div>
-                <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.4 }}>{d.desc}</div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: "#22303c", marginBottom: 4 }}>{d.label}</div>
+                <div style={{ fontSize: 12, color: "#5b6b78", lineHeight: 1.4 }}>{d.desc}</div>
                 <div style={{
                   marginTop: 14, fontSize: 13, fontWeight: 600, color: d.color,
                   border: `1.5px solid ${d.color}`, borderRadius: 8, padding: "7px 0",
@@ -357,7 +349,7 @@ function LoginScreen({ onLogin }) {
           })}
         </div>
 
-        <div style={{ position: "absolute", bottom: 14, fontSize: 11, color: "rgba(255,255,255,0.55)", zIndex: 5 }}>
+        <div style={{ position: "absolute", bottom: 14, fontSize: 11, color: "rgba(255,255,255,0.75)", zIndex: 5, textShadow: "0 1px 6px rgba(0,0,0,0.7)" }}>
           Raghu Engineering College · Mechanical Engineering
         </div>
       </div>
