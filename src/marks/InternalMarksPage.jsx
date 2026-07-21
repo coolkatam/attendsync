@@ -635,7 +635,7 @@ export default function InternalMarksPage({ user }) {
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "sections"), snap => {
       const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setSections(all.filter(sec => sec.subjects?.some(s => s.facultyPhone === user.phone)));
+      setSections(all.filter(sec => !sec.deleted && sec.subjects?.some(s => s.facultyPhone === user.phone)));
     });
     return unsub;
   }, [user.phone]);

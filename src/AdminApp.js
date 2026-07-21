@@ -6,12 +6,17 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   collection, doc, getDocs, getDoc,
   setDoc, updateDoc, onSnapshot, deleteDoc,
+  serverTimestamp, deleteField,
 } from "firebase/firestore";
 import { db } from "./firebase";
 import * as XLSX from "xlsx";
 import { uploadStudentRecords } from "./hod/studentDataUpload";
 import MarksAdminTab from "./marks/MarksAdminTab";
 import InternalMarksPage from "./marks/InternalMarksPage";
+import FacultyProfilePage from "./profile/FacultyProfilePage";
+import FacultyProfilesDirectory from "./profile/FacultyProfilesDirectory";
+import HomeShell from "./components/HomeShell";
+import HoDStudentLookup from "./hod/HoDStudentLookup";
 import MentorPage from "./mentor/MentorPage";
 import { P, Btn, Card, Badge, Fld, Sel, TopBar, GPill, ARow, Spinner, PeriodPicker } from "./components/UI";
 import { today, calcPct, parseCSV, downloadTemplate, exportXLS, makeKey, parseKey, groupByDateBatched, rowColor, MASTER_ADMIN_PHONE, fmtDate, validateBatches, studentsInBatch, readStatus, batchSlotKey } from "./utils";
@@ -51,21 +56,46 @@ function InviteLinkCard({ adminPhone }) {
 
 export default function AdminApp({ user, onLogout }) {
   const [screen,   setScreen]   = useState("home");
+  const [homeTab,  setHomeTab]  = useState("allSections");
   const [secId,    setSecId]    = useState(null);
   const [sections, setSections] = useState([]);
+  const [trashedSections, setTrashedSections] = useState([]);
   const [pending,  setPending]  = useState([]);
   const [allUsers, setAllUsers] = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [markCtx,  setMarkCtx]  = useState(null); // for admin marking their own subject
   const [reportCtx, setReportCtx] = useState(null); // for admin viewing/downloading their own subject's report
   const isMaster = user.phone === MASTER_ADMIN_PHONE;
+  const backfilledRef = useRef(new Set());
+
+  // One-time-per-session sync: make sure every subject that already has a
+  // faculty assigned also has that phone stamped on its attendance/marks
+  // doc, so the Firestore rules (which check that stamp) can let the
+  // assigned teacher keep marking attendance / entering marks. Runs
+  // automatically whenever an admin/master admin loads their sections.
+  function backfillTeacherPhones(secs) {
+    secs.forEach(sec => {
+      (sec.subjects || []).forEach(sub => {
+        if (!sub.facultyPhone) return;
+        const key = sec.id + "/" + sub.id;
+        if (backfilledRef.current.has(key)) return;
+        backfilledRef.current.add(key);
+        setDoc(doc(db, "attendance", sec.id, "subjects", sub.id), { teacherPhone: sub.facultyPhone }, { merge: true }).catch(() => {});
+        setDoc(doc(db, "internalMarks", sec.id, "subjects", sub.id), { teacherPhone: sub.facultyPhone }, { merge: true }).catch(() => {});
+      });
+    });
+  }
 
   // Load sections
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "sections"), snap => {
       const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setSections(isMaster ? all : all.filter(s => s.adminPhone === user.phone));
+      const visible = all.filter(s => !s.deleted);
+      const mine = isMaster ? visible : visible.filter(s => s.adminPhone === user.phone);
+      setSections(mine);
+      setTrashedSections(isMaster ? all.filter(s => s.deleted) : []);
       setLoading(false);
+      backfillTeacherPhones(mine);
     });
     return unsub;
   }, [user.phone, isMaster]);
@@ -74,9 +104,10 @@ export default function AdminApp({ user, onLogout }) {
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "users"), snap => {
       const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const myPending = isMaster
-        ? users.filter(u => u.status === "pending")
-        : users.filter(u => u.status === "pending" && u.invitedBy === user.phone);
+      // Any new registration must be approved by HoD, master admin, or any
+      // designated admin/coordinator — not only the person whose invite link
+      // was used. Everyone with approval rights sees every pending request.
+      const myPending = users.filter(u => u.status === "pending");
       setPending(myPending);
       setAllUsers(users);
     });
@@ -106,9 +137,24 @@ export default function AdminApp({ user, onLogout }) {
     if (!window.confirm("Delete user " + name + " (" + phone + ")? This cannot be undone.")) return;
     await deleteDoc(doc(db, "users", phone));
   }
-  async function deleteSection(sec) {
-    if (!window.confirm("Delete section '" + sec.name + "' and ALL its attendance data? This cannot be undone.")) return;
-    // Delete all attendance subcollections
+  // Soft-delete: move the section to Trash. Nothing is actually destroyed —
+  // it's just flagged and hidden from the normal lists. Master-admin only.
+  async function trashSection(sec) {
+    if (!window.confirm("Move section '" + sec.name + "' to Trash? It will disappear from the section list, but nothing is deleted — it can be restored from Trash any time.")) return;
+    await updateDoc(doc(db, "sections", sec.id), {
+      deleted: true, deletedAt: serverTimestamp(), deletedBy: user.phone,
+    });
+  }
+
+  async function restoreSection(sec) {
+    await updateDoc(doc(db, "sections", sec.id), {
+      deleted: false, deletedAt: deleteField(), deletedBy: deleteField(),
+    });
+  }
+
+  // The real, irreversible delete — only reachable from the Trash screen.
+  async function permanentlyDeleteSection(sec) {
+    if (!window.confirm("Permanently delete section '" + sec.name + "' and ALL its attendance/marks data? This cannot be undone.")) return;
     try {
       const subSnap = await getDocs(collection(db, "attendance", sec.id, "subjects"));
       for (const subDoc of subSnap.docs) {
@@ -120,7 +166,12 @@ export default function AdminApp({ user, onLogout }) {
       }
       await deleteDoc(doc(db, "attendance", sec.id));
     } catch (e) {}
-    // Delete section document
+    try {
+      const marksSnap = await getDocs(collection(db, "internalMarks", sec.id, "subjects"));
+      for (const subDoc of marksSnap.docs) {
+        await deleteDoc(subDoc.ref);
+      }
+    } catch (e) {}
     await deleteDoc(doc(db, "sections", sec.id));
   }
 
@@ -136,6 +187,28 @@ export default function AdminApp({ user, onLogout }) {
 
   if (screen === "new") {
     return <NewSectionForm user={user} onBack={() => setScreen("home")} />;
+  }
+  if (screen === "studentData") {
+    return (
+      <div style={{ position: "relative" }}>
+        <HoDStudentLookup user={user} onLogout={onLogout} />
+        <button onClick={() => setScreen("home")}
+          style={{ position: "fixed", bottom: 20, right: 20, zIndex: 1000, background: "#1C1C1A", color: "#fff", border: "none", borderRadius: 30, padding: "13px 22px", fontSize: 14, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 14px rgba(0,0,0,0.3)", fontFamily: "inherit" }}>
+          ← Back to dashboard
+        </button>
+      </div>
+    );
+  }
+  if (screen === "myProfile") {
+    return (
+      <div style={{ background: P.bg, minHeight: "100vh" }}>
+        <TopBar title="My Profile" subtitle={user.name}
+          right={<button onClick={() => setScreen("home")} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>← Back</button>} />
+        <div style={{ padding: "16px 16px 80px" }}>
+          <FacultyProfilePage user={user} />
+        </div>
+      </div>
+    );
   }
   if (screen === "detail" && secId) {
     const sec = sections.find(s => s.id === secId);
@@ -161,7 +234,7 @@ export default function AdminApp({ user, onLogout }) {
     );
   }
   if (screen === "users") {
-    const usersToShow = isMaster ? allUsers : allUsers.filter(u => u.invitedBy === user.phone);
+    const usersToShow = allUsers; // approval rights are shared across HoD, admins, and master admin
     return (
       <UsersScreen
         allUsers={usersToShow}
@@ -193,25 +266,62 @@ export default function AdminApp({ user, onLogout }) {
 
   return (
     <div style={{ background: P.bg, minHeight: "100vh" }}>
-      <TopBar title="Admin Dashboard" subtitle={(isMaster ? "⭐ Master Admin · " : "") + "Welcome, " + user.name}
-        right={
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button onClick={() => setScreen("myMarks")} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>
-              📝 Marks
-            </button>
-            <button onClick={() => setScreen("myMentor")} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>
-              🎓 Mentor
-            </button>
-            <button onClick={() => setScreen("users")} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>
-              👥 Users
-            </button>
-            <button onClick={onLogout} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>
-              Logout
-            </button>
-          </div>
-        }
+      <HomeShell
+        user={user}
+        onLogout={onLogout}
+        theme={isMaster ? "master" : "admin"}
+        roleLabel={isMaster ? "Master Admin" : "Class Coordinator"}
+        masterStar={isMaster}
+        tabs={[
+          { id: "myAttendance", label: "My section attendance", icon: "📋", color: isMaster ? "amber" : "blue" },
+          { id: "allSections", label: "All sections", icon: "🏫", color: "teal" },
+          { id: "marks", label: "Internal marks", icon: "📝", color: "blue" },
+          { id: "mentor", label: "Mentor", icon: "🎓", color: "purple" },
+          ...(isMaster ? [
+            { id: "studentData", label: "Student data", icon: "🔍", color: "green" },
+            { id: "profiles", label: "Faculty profiles", icon: "🧑‍🏫", color: "coral" },
+            { id: "trash", label: "Trash", icon: "🗑️", color: "slate" },
+          ] : []),
+          { id: "users", label: "Users", icon: "👥", color: "slate" },
+          { id: "profile", label: "My profile", icon: "👤", color: "pink" },
+        ]}
+        active={homeTab}
+        onSelect={id => {
+          if (id === "marks") setScreen("myMarks");
+          else if (id === "mentor") setScreen("myMentor");
+          else if (id === "users") setScreen("users");
+          else if (id === "profile") setScreen("myProfile");
+          else if (id === "studentData") setScreen("studentData");
+          else setHomeTab(id);
+        }}
       />
-      <div style={{ padding: "16px 16px 80px" }}>
+      <div style={{ padding: "16px 16px 80px", maxWidth: 1100, margin: "0 auto" }}>
+
+        {homeTab === "myAttendance" && (
+          <>
+            <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 14 }}>📋 My section attendance</div>
+            {mySubjectsAsTeacher.length === 0 && (
+              <div style={{ textAlign: "center", color: P.gray, border: "2px dashed " + P.border, borderRadius: 12, padding: 30, fontSize: 14 }}>
+                No subjects are assigned to you for marking attendance.
+              </div>
+            )}
+            {mySubjectsAsTeacher.map(({ section, subject }) => (
+              <AdminSubjectCard
+                key={subject.id}
+                section={section}
+                subject={subject}
+                user={user}
+                onMark={(period) => setMarkCtx({ section, subject, presetPeriod: period || null })}
+                onReport={() => setReportCtx({ section, subject })}
+              />
+            ))}
+          </>
+        )}
+
+        {homeTab === "profiles" && isMaster && <FacultyProfilesDirectory user={user} />}
+
+        {homeTab === "allSections" && (
+        <>
 
         {/* Invite link */}
         <InviteLinkCard adminPhone={user.phone} />
@@ -248,23 +358,6 @@ export default function AdminApp({ user, onLogout }) {
           </div>
         )}
 
-        {/* ── FIX 2: Admin's own subjects to mark attendance ── */}
-        {mySubjectsAsTeacher.length > 0 && (
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 10 }}>📝 My subjects (mark attendance)</div>
-            {mySubjectsAsTeacher.map(({ section, subject }) => (
-              <AdminSubjectCard
-                key={subject.id}
-                section={section}
-                subject={subject}
-                user={user}
-                onMark={(period) => setMarkCtx({ section, subject, presetPeriod: period || null })}
-                onReport={() => setReportCtx({ section, subject })}
-              />
-            ))}
-          </div>
-        )}
-
         {/* Sections */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <div style={{ fontWeight: 600, fontSize: 15 }}>{isMaster ? "All sections (every admin)" : "My sections"}</div>
@@ -284,16 +377,44 @@ export default function AdminApp({ user, onLogout }) {
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <button
-                  onClick={() => deleteSection(sec)}
-                  style={{ background: P.redL, border: "none", color: P.red, borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
-                  title="Delete section"
-                >🗑</button>
+                {isMaster && (
+                  <button
+                    onClick={() => trashSection(sec)}
+                    style={{ background: P.redL, border: "none", color: P.red, borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
+                    title="Move to Trash"
+                  >🗑</button>
+                )}
                 <span onClick={() => { setSecId(sec.id); setScreen("detail"); }} style={{ color: P.gray, fontSize: 20, cursor: "pointer" }}>›</span>
               </div>
             </div>
           </Card>
         ))}
+        </>
+        )}
+
+        {homeTab === "trash" && isMaster && (
+          <>
+            <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 6 }}>🗑️ Trash</div>
+            <div style={{ fontSize: 13, color: P.gray, marginBottom: 16 }}>
+              Deleted sections land here first — nothing is destroyed until you permanently delete it.
+            </div>
+            {trashedSections.length === 0 && (
+              <div style={{ color: P.gray, textAlign: "center", padding: "2rem" }}>Trash is empty.</div>
+            )}
+            {trashedSections.map(sec => (
+              <Card key={sec.id}>
+                <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>{sec.name}</div>
+                <div style={{ fontSize: 12, color: P.gray, marginBottom: 10 }}>
+                  {sec.students?.length || 0} students · deleted by {sec.deletedBy || "unknown"}
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <Btn small variant="success" onClick={() => restoreSection(sec)}>↩ Restore</Btn>
+                  <Btn small variant="danger" onClick={() => permanentlyDeleteSection(sec)}>🗑 Delete permanently</Btn>
+                </div>
+              </Card>
+            ))}
+          </>
+        )}
       </div>
     </div>
   );
@@ -736,8 +857,61 @@ function AdminSubjectReport({ ctx, onBack }) {
 }
 
 // ── Users management screen ────────────────────────────────
-function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReject, onMakeAdmin, onMakeFaculty, onMakeHod, onDelete, onResetPin, onBack }) {
+export function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReject, onMakeAdmin, onMakeFaculty, onMakeHod, onDelete, onResetPin, onBack }) {
   const [filter, setFilter] = useState("all"); // all | pending | approved | admin
+  const [showRoster, setShowRoster] = useState(false);
+  const [rosterMsg, setRosterMsg] = useState("");
+  const [rosterCount, setRosterCount] = useState(null);
+  const canManageRoster = isMaster || currentUser.role === "hod";
+
+  useEffect(() => {
+    if (!canManageRoster) return;
+    getDocs(collection(db, "employeeRoster")).then(snap => setRosterCount(snap.size));
+  }, [canManageRoster]);
+
+  function downloadRosterTemplate() {
+    const headers = ["Employee ID", "Full Name", "Designation", "Department"];
+    const sample = ["EMP1042", "K Arun Kumar", "Assistant Professor", "Mechanical Engineering"];
+    const ws = XLSX.utils.aoa_to_sheet([headers, sample]);
+    ws["!cols"] = headers.map(h => ({ wch: Math.max(h.length, 16) }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Roster");
+    XLSX.writeFile(wb, "employee_roster_template.xlsx");
+  }
+
+  function handleRosterFile(file) {
+    if (!file) return;
+    setRosterMsg("Reading file…");
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const wb = XLSX.read(e.target.result, { type: "array" });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+        const norm = v => String(v ?? "").normalize("NFKC").replace(/[\u200B-\u200D\uFEFF]/g, "").trim();
+        const entries = rows.slice(1)
+          .map(r => ({ id: norm(r[0]), name: norm(r[1]), designation: norm(r[2]), department: norm(r[3]) }))
+          .filter(e => e.id && e.name);
+
+        if (entries.length === 0) {
+          setRosterMsg("No valid rows found — check the file matches the template.");
+          return;
+        }
+        setRosterMsg("Uploading " + entries.length + " entries…");
+        for (const e of entries) {
+          await setDoc(doc(db, "employeeRoster", e.id), {
+            name: e.name, designation: e.designation, department: e.department,
+            uploadedAt: new Date().toISOString(), uploadedBy: currentUser.phone,
+          });
+        }
+        setRosterCount(prev => (prev || 0) + entries.length);
+        setRosterMsg("✅ Uploaded " + entries.length + " employee IDs successfully.");
+      } catch (err) {
+        setRosterMsg("Could not read that file. Please use the downloaded template format.");
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
 
   const filtered = allUsers.filter(u => {
     if (filter === "pending")  return u.status === "pending";
@@ -772,6 +946,47 @@ function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReject, onM
             }}>{f.label}</button>
           ))}
         </div>
+
+        {/* ── Employee roster management (HoD / master admin only) ── */}
+        {canManageRoster && (
+          <div style={{ background: "#fff", border: "1.5px solid " + P.border, borderRadius: 12, marginBottom: 16, overflow: "hidden" }}>
+            <div onClick={() => setShowRoster(!showRoster)}
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", cursor: "pointer", background: "#fef3c7" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 18 }}>🪪</span>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: "#78350f" }}>Employee ID roster</div>
+                  <div style={{ fontSize: 12, color: "#92400e" }}>
+                    {rosterCount === null ? "Loading…" : rosterCount + " employee IDs on file"} · used to verify new registrations
+                  </div>
+                </div>
+              </div>
+              <span style={{ fontSize: 13, color: "#92400e", fontWeight: 700 }}>{showRoster ? "▲ Hide" : "▼ Manage"}</span>
+            </div>
+            {showRoster && (
+              <div style={{ padding: 16 }}>
+                <div style={{ fontSize: 13, color: P.gray, marginBottom: 12, lineHeight: 1.6 }}>
+                  Upload every faculty member's Employee ID once. When someone registers, their typed Employee ID and name
+                  are checked against this list in the background — the result (matched / name mismatch / not found) is
+                  shown to whoever approves them, as an extra safeguard against impersonation.
+                </div>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+                  <Btn small variant="outline" onClick={downloadRosterTemplate}>⬇ Download template</Btn>
+                  <label style={{ display: "inline-block" }}>
+                    <span style={{ background: "#fef3c7", color: "#78350f", borderRadius: 8, padding: "7px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "inline-block" }}>
+                      📤 Upload Excel
+                    </span>
+                    <input type="file" accept=".xlsx,.xls" style={{ display: "none" }}
+                      onChange={e => { handleRosterFile(e.target.files[0]); e.target.value = ""; }} />
+                  </label>
+                </div>
+                {rosterMsg && (
+                  <div style={{ fontSize: 13, color: "#78350f", background: "#fef3c7", borderRadius: 8, padding: "8px 12px" }}>{rosterMsg}</div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {filtered.length === 0 && (
           <div style={{ color: P.gray, textAlign: "center", padding: "2rem" }}>No users found.</div>
@@ -1175,6 +1390,10 @@ function TabSubjects({ section }) {
     if (!fp) return;
     const subs = (section.subjects || []).map(s => s.id === subId ? { ...s, facultyPhone: fp } : s);
     await updateDoc(doc(db, "sections", section.id), { subjects: subs });
+    // Stamp the assignment onto the attendance/marks docs too — the security
+    // rules check this field to let only the assigned teacher write there.
+    await setDoc(doc(db, "attendance", section.id, "subjects", subId), { teacherPhone: fp }, { merge: true });
+    await setDoc(doc(db, "internalMarks", section.id, "subjects", subId), { teacherPhone: fp }, { merge: true });
     setEditId(null); setFp("");
   }
 

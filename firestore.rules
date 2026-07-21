@@ -1,7 +1,7 @@
 rules_version = '2';
 
-// AttendSync Firestore security rules — v2
-// Fix: attendance & internalMarks now cover ALL levels (subjects → dates → ...)
+// Mech EMS Firestore security rules — v3
+// Adds facultyProfiles for the faculty profile module.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -15,10 +15,27 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
 
+    // The master admin is identified by phone number (same constant the
+    // client uses in src/utils.js), not by a role field — that way this
+    // check can't be defeated by anyone editing a role value.
+    function isMasterAdmin() {
+      return isSignedIn() && request.auth.uid == '9502808301';
+    }
+
     function isAdmin() {
       return isSignedIn() &&
-        (myRole() == 'admin' || myRole() == 'master admin' ||
-         myRole() == 'hod'   || myRole() == 'coordinator');
+        (myRole() == 'admin' || myRole() == 'hod' || isMasterAdmin());
+    }
+
+    // True if this update touches any of the soft-delete bookkeeping fields.
+    function touchesDeleteFields() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['deleted', 'deletedAt', 'deletedBy']);
+    }
+
+    function isAssignedTeacher(collectionName, sectionId, subjectId) {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/$(collectionName)/$(sectionId)/subjects/$(subjectId)).data.teacherPhone == request.auth.uid;
     }
 
     // ── USERS ────────────────────────────────────────────
@@ -37,13 +54,39 @@ service cloud.firestore {
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pin'])
         );
 
-      allow delete: if isAdmin();
+      // Only the master admin can permanently delete a user account.
+      allow delete: if isMasterAdmin();
+    }
+
+    // ── FACULTY PROFILES (bio, qualifications, experience,
+    //    publications, workshops, conferences, projects) ──
+    // Any signed-in user can view profiles (faculty directory, HoD views).
+    // Only the profile's own faculty member — or an admin/HoD — can edit.
+    match /facultyProfiles/{phone} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() &&
+        (request.auth.uid == phone || isAdmin());
+    }
+
+    // ── EMPLOYEE ROSTER (for background ID verification at signup) ──
+    // Only admins/HoD/master admin can read or manage this list.
+    // The actual registration-time check does NOT read this directly —
+    // it goes through the checkEmployeeId Cloud Function (server-side,
+    // using admin privileges), so the roster is never exposed to someone
+    // who hasn't logged in yet.
+    match /employeeRoster/{employeeId} {
+      allow read, write: if isAdmin();
     }
 
     // ── SECTIONS (roster metadata) ───────────────────────
+    // Admins/HoD can create sections and edit rosters/subjects freely, but
+    // only the master admin may move a section to Trash (or back), and only
+    // the master admin may permanently delete it (used to empty the Trash).
     match /sections/{sectionId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow create: if isAdmin();
+      allow update: if isAdmin() && (isMasterAdmin() || !touchesDeleteFields());
+      allow delete: if isMasterAdmin();
     }
 
     // ── STUDENTS (academic records — sensitive) ──────────
@@ -52,14 +95,44 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // ── ATTENDANCE (covers subjects, dates, and any deeper levels) ──
-    match /attendance/{document=**} {
-      allow read, write: if isSignedIn();
+    // ── ATTENDANCE ────────────────────────────────────────
+    // Reads stay open to any signed-in user (reports, student lookup, etc).
+    // Writes to the actual attendance marks (the "dates" docs) are limited
+    // to admins/HoD or the specific faculty member assigned to that subject
+    // (recorded in the subject doc's teacherPhone field by an admin — see
+    // assignFaculty() in AdminApp.js). The subject-level doc itself (which
+    // holds that teacherPhone assignment) can only be written by an admin,
+    // so a faculty member can never assign themselves a subject.
+    match /attendance/{sectionId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+
+      match /subjects/{subjectId} {
+        allow read: if isSignedIn();
+        allow write: if isAdmin();
+
+        match /dates/{dateId} {
+          allow read: if isSignedIn();
+          allow write: if isAdmin() || isAssignedTeacher('attendance', sectionId, subjectId);
+        }
+      }
     }
 
-    // ── INTERNAL MARKS (covers subjects and any deeper levels) ──
-    match /internalMarks/{document=**} {
-      allow read, write: if isSignedIn();
+    // ── INTERNAL MARKS ────────────────────────────────────
+    // Same shape as attendance: the per-subject doc carries both the
+    // teacherPhone assignment and the actual marks data, so a faculty
+    // member may update it only while leaving teacherPhone unchanged.
+    match /internalMarks/{sectionId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+
+      match /subjects/{subjectId} {
+        allow read: if isSignedIn();
+        allow write: if isAdmin() ||
+          (isSignedIn() &&
+           resource.data.teacherPhone == request.auth.uid &&
+           request.resource.data.teacherPhone == resource.data.teacherPhone);
+      }
     }
 
     // ── Everything else: locked by default ───────────────

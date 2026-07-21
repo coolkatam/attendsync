@@ -14,6 +14,7 @@ export async function getAttendanceSummary(rollNumber) {
   let section = null, student = null, serial = null;
   for (const sDoc of sectionsSnap.docs) {
     const sec = { id: sDoc.id, ...sDoc.data() };
+    if (sec.deleted) continue;
     const idx = (sec.students || []).findIndex((st) => st.roll === rollNumber);
     if (idx !== -1) {
       section = sec;

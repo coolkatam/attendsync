@@ -9,20 +9,22 @@ import { P, Btn, Card, Badge, TopBar, ARow, Spinner, PeriodPicker } from "./comp
 import { today, calcPct, makeKey, parseKey, groupByDateBatched, rowColor, fmtDate, studentsInBatch, batchSlotKey, exportXLS } from "./utils";
 import MentorPage from "./mentor/MentorPage";
 import InternalMarksPage from "./marks/InternalMarksPage";
+import FacultyProfilePage from "./profile/FacultyProfilePage";
+import HomeShell from "./components/HomeShell";
 
-export default function FacultyApp({ user, onLogout }) {
+export default function FacultyApp({ user, onLogout, hideShell = false, initialTab = "attendance" }) {
   const [sections, setSections]     = useState([]);
   const [loading,  setLoading]      = useState(true);
   const [screen,   setScreen]       = useState("home");
   const [ctx,      setCtx]          = useState(null);
   const [presetPeriod, setPresetPeriod] = useState(null);
-  const [mainTab, setMainTab]       = useState("attendance"); // attendance | mentor | marks
+  const [mainTab, setMainTab]       = useState(initialTab); // attendance | mentor | marks
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "sections"), snap => {
       const mine = snap.docs
         .map(d => ({ id: d.id, ...d.data() }))
-        .filter(sec => sec.subjects?.some(s => s.facultyPhone === user.phone));
+        .filter(sec => !sec.deleted && sec.subjects?.some(s => s.facultyPhone === user.phone));
       setSections(mine);
       setLoading(false);
     });
@@ -46,28 +48,31 @@ export default function FacultyApp({ user, onLogout }) {
 
   return (
     <div style={{ background: P.bg, minHeight: "100vh" }}>
-      <TopBar
-        title="Faculty Portal"
-        subtitle={"Welcome, " + user.name}
-        right={
-          <button onClick={onLogout} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>
-            Logout
-          </button>
-        }
-      />
-      <div style={{ display: "flex", borderBottom: "1px solid " + P.border, background: "#fff", paddingLeft: 16 }}>
-        {[["attendance","📋 Attendance"],["marks","📝 Internal Marks"],["mentor","🎓 Mentor"]].map(([t, label]) => (
-          <button key={t} onClick={() => { setMainTab(t); setScreen("home"); }}
-            style={{ border: "none", background: "none", cursor: "pointer", padding: "10px 14px", fontSize: 13, fontWeight: 600, color: mainTab === t ? P.blue : P.gray, borderBottom: mainTab === t ? "3px solid " + P.blue : "3px solid transparent", fontFamily: "inherit", whiteSpace: "nowrap" }}>
-            {label}
-          </button>
-        ))}
-      </div>
+      {!hideShell && (
+        <HomeShell
+          user={user}
+          onLogout={onLogout}
+          theme="faculty"
+          roleLabel={user.designation || "Faculty"}
+          tabs={[
+            { id: "attendance", label: "My section attendance", icon: "📋", color: "teal" },
+            { id: "marks", label: "Internal marks", icon: "📝", color: "blue" },
+            { id: "mentor", label: "Mentor", icon: "🎓", color: "purple" },
+            { id: "profile", label: "My profile", icon: "👤", color: "pink" },
+          ]}
+          active={mainTab}
+          onSelect={t => { setMainTab(t); setScreen("home"); }}
+        />
+      )}
 
       {mainTab === "mentor" ? (
         <MentorPage user={user} />
       ) : mainTab === "marks" ? (
         <InternalMarksPage user={user} />
+      ) : mainTab === "profile" ? (
+        <div style={{ padding: "16px 16px 80px" }}>
+          <FacultyProfilePage user={user} />
+        </div>
       ) : (
         <div style={{ padding: "16px 16px 80px" }}>
           {sections.length === 0 && (
