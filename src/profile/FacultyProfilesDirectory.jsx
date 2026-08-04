@@ -12,6 +12,8 @@ import * as XLSX from "xlsx";
 import { db } from "../firebase";
 import { P, Spinner, Badge } from "../components/UI";
 import FacultyProfilePage from "./FacultyProfilePage";
+import FacultyOverview from "./FacultyOverview";
+import ResumeView from "./ResumeView";
 
 const CATS = [
   { id: "publications", label: "Publications", icon: "📄", main: "#0f766e", light: "#ccfbf1", dark: "#134e4a" },
@@ -30,7 +32,10 @@ function fmtMY(v) {
 export default function FacultyProfilesDirectory({ user }) {
   const [view, setView] = useState("directory"); // directory | research
   const [faculty, setFaculty] = useState(null);  // [{phone, name, designation, profile}]
+  const [sections, setSections] = useState([]);
   const [openPhone, setOpenPhone] = useState(null);
+  const [showFullProfile, setShowFullProfile] = useState(false);
+  const [showResume, setShowResume] = useState(false);
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("publications");
   const [fromDate, setFromDate] = useState("");
@@ -38,21 +43,29 @@ export default function FacultyProfilesDirectory({ user }) {
 
   useEffect(() => {
     async function load() {
-      const [usersSnap, profSnap] = await Promise.all([
+      const [usersSnap, profSnap, sectionsSnap] = await Promise.all([
         getDocs(collection(db, "users")),
         getDocs(collection(db, "facultyProfiles")),
+        getDocs(collection(db, "sections")),
       ]);
+      setSections(sectionsSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(s => !s.deleted));
       const profiles = {};
       profSnap.forEach(d => { profiles[d.id] = d.data(); });
       const list = [];
       usersSnap.forEach(d => {
         const u = d.data();
         if (u.status !== "approved") return;
+        const rawPhotoURL = profiles[d.id]?.bio?.photoURL || "";
+        // Cache-bust with the doc's last-updated time so a re-uploaded photo
+        // never keeps showing the previously cached image at the same URL.
+        const photoURL = rawPhotoURL
+          ? rawPhotoURL + (rawPhotoURL.includes("?") ? "&" : "?") + "cb=" + encodeURIComponent(profiles[d.id]?.updatedAt || "")
+          : "";
         list.push({
           phone: d.id,
           name: u.name || d.id,
           designation: (profiles[d.id]?.bio?.designation) || u.designation || "",
-          photoURL: profiles[d.id]?.bio?.photoURL || "",
+          photoURL,
           profile: profiles[d.id] || {},
         });
       });
@@ -64,14 +77,36 @@ export default function FacultyProfilesDirectory({ user }) {
 
   if (openPhone) {
     const person = faculty?.find(f => f.phone === openPhone);
+    const facultySections = sections.filter(sec => sec.subjects?.some(s => s.facultyPhone === openPhone));
     return (
       <div>
-        <button onClick={() => setOpenPhone(null)}
+        <button onClick={() => { setOpenPhone(null); setShowFullProfile(false); }}
           style={{ background: "#fff", color: "#374151", border: "1.5px solid " + P.border, borderRadius: 10, padding: "10px 18px", fontWeight: 700, fontSize: 14, cursor: "pointer", fontFamily: "inherit", marginBottom: 14 }}>
           ← Back to faculty list
         </button>
-        <FacultyProfilePage user={user} viewPhone={openPhone} readOnly={true} key={openPhone} />
-        {person && <div style={{ height: 8 }} />}
+        {showFullProfile ? (
+          <>
+            <button onClick={() => setShowFullProfile(false)}
+              style={{ background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 10, padding: "9px 16px", fontWeight: 700, fontSize: 13.5, cursor: "pointer", fontFamily: "inherit", marginBottom: 14 }}>
+              ← Back to overview
+            </button>
+            <FacultyProfilePage user={user} viewPhone={openPhone} readOnly={true} key={openPhone} />
+          </>
+        ) : (
+          person && (
+            <FacultyOverview
+              personName={person.name}
+              phone={person.phone}
+              profile={person.profile}
+              facultySections={facultySections}
+              onOpenFullProfile={() => setShowFullProfile(true)}
+              onDownloadResume={() => setShowResume(true)}
+            />
+          )
+        )}
+        {showResume && person && (
+          <ResumeView personName={person.name} phone={person.phone} profile={person.profile} onClose={() => setShowResume(false)} />
+        )}
       </div>
     );
   }
@@ -150,7 +185,7 @@ export default function FacultyProfilesDirectory({ user }) {
                   onMouseEnter={e => e.currentTarget.style.boxShadow = "0 6px 18px rgba(0,0,0,0.1)"}
                   onMouseLeave={e => e.currentTarget.style.boxShadow = "none"}>
                   <div style={{
-                    width: 54, height: 54, borderRadius: "50%", flexShrink: 0,
+                    width: 54, height: 54, borderRadius: 12, flexShrink: 0,
                     background: f.photoURL ? "transparent" : "#0f766e",
                     backgroundImage: f.photoURL ? "url(" + f.photoURL + ")" : "none",
                     backgroundSize: "cover", backgroundPosition: "center",

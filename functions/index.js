@@ -149,3 +149,55 @@ exports.checkPhone = onCall(async (request) => {
     hasPin: !!pin,
   };
 });
+
+// ── syncFacultyStats ──────────────────────────────────────────
+// Given a faculty member's ORCID iD, pulls their publication list from the
+// public ORCID API. Runs server-side so the client never needs direct CORS
+// access to it.
+exports.syncFacultyStats = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "You must be signed in.");
+  }
+  const orcidId = (request.data?.orcidId || "").trim().toUpperCase();
+  if (!/^\d{4}-\d{4}-\d{4}-\d{3}[0-9X]$/.test(orcidId)) {
+    throw new HttpsError("invalid-argument", "Enter a valid ORCID iD, e.g. 0000-0002-1825-0097.");
+  }
+
+  const result = { publications: [] };
+
+  try {
+    const orcidRes = await fetch("https://pub.orcid.org/v3.0/" + orcidId + "/works", {
+      headers: { Accept: "application/json" },
+    });
+    if (orcidRes.ok) {
+      const data = await orcidRes.json();
+      const groups = data.group || [];
+      result.publications = groups
+        .map(g => (g["work-summary"] || [])[0])
+        .filter(Boolean)
+        .map(w => {
+          const year = w["publication-date"]?.year?.value || "";
+          const month = w["publication-date"]?.month?.value || "01";
+          const externalIds = w["external-ids"]?.["external-id"] || [];
+          const doiEntry = externalIds.find(x => x["external-id-type"] === "doi");
+          const type = (w.type || "").toUpperCase();
+          return {
+            id: "orcid-" + w["put-code"],
+            title: w.title?.title?.value || "",
+            venue: w["journal-title"]?.value || "",
+            date: year ? year + "-" + String(month).padStart(2, "0") + "-01" : "",
+            pubType: type.includes("CONFERENCE") ? "Conference" : type.includes("JOURNAL") ? "Journal" : "Journal",
+            indexing: "Other",
+            authors: [],
+            doi: doiEntry ? doiEntry["external-id-value"] : "",
+            source: "orcid",
+          };
+        })
+        .filter(p => p.title);
+    }
+  } catch (e) {
+    // ORCID unreachable/invalid — leave publications empty, don't fail the whole sync
+  }
+
+  return result;
+});

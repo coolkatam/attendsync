@@ -98,6 +98,20 @@ Write-Host "Output: $outputFile" -ForegroundColor Cyan
         "source": "**",
         "destination": "/index.html"
       }
+    ],
+    "headers": [
+      {
+        "source": "**",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+        ]
+      },
+      {
+        "source": "/static/**",
+        "headers": [
+          { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+        ]
+      }
     ]
   },
   "functions": [
@@ -18604,6 +18618,51 @@ service firebase.storage {
 === END_FILE: .\storage.rules ===
 
 
+=== START_FILE: .claude\launch.json ===
+
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "attendsync-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
+      "port": 3000
+    }
+  ]
+}
+
+
+=== END_FILE: .claude\launch.json ===
+
+
+=== START_FILE: .claude\settings.local.json ===
+
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ' *)",
+      "Bash(python extract_exams.py)",
+      "Bash(sort -t= -k5 -n -r)",
+      "Bash(cd \"C:/Users/aruni/ncc-exam-portal\" && find src -iname \"*landing*\" -o -iname \"*study*\" 2>/dev/null)",
+      "Bash(firebase deploy *)",
+      "mcp__visualize__show_widget",
+      "Bash(npm install *)",
+      "Bash(npm audit *)",
+      "Bash(npx vite *)",
+      "Bash(bash \"C:\\\\Users\\\\aruni\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-aruni-attendsync\\\\77d9cae7-83ef-4177-88b9-c2860d8a30a1\\\\scratchpad\\\\gen_export.sh\")",
+      "Bash(curl -s https://attendsync-66e55.web.app/)",
+      "Bash(curl -s https://attendsync-66e55.web.app/static/js/main.df30782a.js)",
+      "Bash(curl -sI https://attendsync-66e55.web.app/)",
+      "Bash(npx react-scripts *)"
+    ]
+  }
+}
+
+
+=== END_FILE: .claude\settings.local.json ===
+
+
 === START_FILE: .\functions\.gitignore ===
 
 node_modules/
@@ -18764,6 +18823,58 @@ exports.checkPhone = onCall(async (request) => {
     ...safeData,
     hasPin: !!pin,
   };
+});
+
+// ── syncFacultyStats ──────────────────────────────────────────
+// Given a faculty member's ORCID iD, pulls their publication list from the
+// public ORCID API. Runs server-side so the client never needs direct CORS
+// access to it.
+exports.syncFacultyStats = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "You must be signed in.");
+  }
+  const orcidId = (request.data?.orcidId || "").trim().toUpperCase();
+  if (!/^\d{4}-\d{4}-\d{4}-\d{3}[0-9X]$/.test(orcidId)) {
+    throw new HttpsError("invalid-argument", "Enter a valid ORCID iD, e.g. 0000-0002-1825-0097.");
+  }
+
+  const result = { publications: [] };
+
+  try {
+    const orcidRes = await fetch("https://pub.orcid.org/v3.0/" + orcidId + "/works", {
+      headers: { Accept: "application/json" },
+    });
+    if (orcidRes.ok) {
+      const data = await orcidRes.json();
+      const groups = data.group || [];
+      result.publications = groups
+        .map(g => (g["work-summary"] || [])[0])
+        .filter(Boolean)
+        .map(w => {
+          const year = w["publication-date"]?.year?.value || "";
+          const month = w["publication-date"]?.month?.value || "01";
+          const externalIds = w["external-ids"]?.["external-id"] || [];
+          const doiEntry = externalIds.find(x => x["external-id-type"] === "doi");
+          const type = (w.type || "").toUpperCase();
+          return {
+            id: "orcid-" + w["put-code"],
+            title: w.title?.title?.value || "",
+            venue: w["journal-title"]?.value || "",
+            date: year ? year + "-" + String(month).padStart(2, "0") + "-01" : "",
+            pubType: type.includes("CONFERENCE") ? "Conference" : type.includes("JOURNAL") ? "Journal" : "Journal",
+            indexing: "Other",
+            authors: [],
+            doi: doiEntry ? doiEntry["external-id-value"] : "",
+            source: "orcid",
+          };
+        })
+        .filter(p => p.title);
+    }
+  } catch (e) {
+    // ORCID unreachable/invalid — leave publications empty, don't fail the whole sync
+  }
+
+  return result;
 });
 
 
@@ -33250,10 +33361,10 @@ import { db } from "../firebase";
 
 // Per-role header themes (cool, professional palettes)
 export const SHELL_THEMES = {
-  faculty: { header: "#04342C", accent: "#0F6E56", nameText: "#E1F5EE", subText: "#9FE1CB", border: "#0F6E56" },
-  admin:   { header: "#042C53", accent: "#185FA5", nameText: "#E6F1FB", subText: "#85B7EB", border: "#185FA5" },
-  hod:     { header: "#2E1065", accent: "#6D28D9", nameText: "#EDE9FE", subText: "#C4B5FD", border: "#6D28D9" },
-  master:  { header: "#1C1C1A", accent: "#B45309", nameText: "#F5F5F4", subText: "#D6D3D1", border: "#57534E" },
+  faculty: { header: "linear-gradient(135deg,#3B8C82,#2F7268)", accent: "#0F6E56", nameText: "#ffffff", subText: "#D6F0EC", border: "#8FCFC5" },
+  admin:   { header: "linear-gradient(135deg,#4A72B8,#3B5D9C)", accent: "#185FA5", nameText: "#ffffff", subText: "#DCE7F7", border: "#9DB9E3" },
+  hod:     { header: "linear-gradient(135deg,#8266C4,#6C51AE)", accent: "#6D28D9", nameText: "#ffffff", subText: "#E6DFF7", border: "#C3B2E8" },
+  master:  { header: "linear-gradient(135deg,#38BDF8,#0EA5E9)", accent: "#0284C7", nameText: "#ffffff", subText: "#E0F5FF", border: "#BAE6FD" },
 };
 
 // Pill color sets — light bg + dark text when inactive, solid + white when active
@@ -33271,13 +33382,21 @@ export const PILL_COLORS = {
 export default function HomeShell({ user, onLogout, theme = "faculty", roleLabel, tabs, active, onSelect, masterStar }) {
   const t = SHELL_THEMES[theme] || SHELL_THEMES.faculty;
   const [photoURL, setPhotoURL] = useState("");
+  const [imgFailed, setImgFailed] = useState(false);
 
   // Pull the profile photo (if the person has uploaded one)
   useEffect(() => {
     let alive = true;
     getDoc(doc(db, "facultyProfiles", user.phone))
       .then(snap => {
-        if (alive && snap.exists() && snap.data().bio?.photoURL) setPhotoURL(snap.data().bio.photoURL);
+        if (!alive || !snap.exists()) return;
+        const d = snap.data();
+        const url = d.bio?.photoURL;
+        if (!url) return;
+        // Cache-bust with the doc's last-updated time so an old cached image
+        // (from before a photo re-upload) is never shown for a stale URL.
+        setImgFailed(false);
+        setPhotoURL(url + (url.includes("?") ? "&" : "?") + "cb=" + encodeURIComponent(d.updatedAt || ""));
       })
       .catch(() => {});
     return () => { alive = false; };
@@ -33289,28 +33408,37 @@ export default function HomeShell({ user, onLogout, theme = "faculty", roleLabel
   return (
     <div>
       {/* ── Header bar ── */}
-      <div style={{ background: t.header, padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 30 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+      <div style={{ background: t.header, padding: "18px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 30 }}>
+        <div
+          onClick={() => onSelect("profile")}
+          title="Go to My Profile"
+          style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0, cursor: "pointer" }}
+        >
           <div style={{
-            width: 46, height: 46, borderRadius: "50%", flexShrink: 0,
-            background: photoURL ? "transparent" : t.accent,
-            backgroundImage: photoURL ? "url(" + photoURL + ")" : "none",
-            backgroundSize: "cover", backgroundPosition: "center",
-            border: "2px solid " + t.border,
+            width: 92, height: 92, borderRadius: 18, flexShrink: 0,
+            background: (photoURL && !imgFailed) ? "transparent" : t.accent,
+            border: "3px solid " + t.border, boxShadow: "0 3px 10px rgba(0,0,0,0.18)",
             display: "flex", alignItems: "center", justifyContent: "center",
-            color: t.nameText, fontWeight: 700, fontSize: 16,
+            color: t.nameText, fontWeight: 700, fontSize: 30, overflow: "hidden",
           }}>
-            {!photoURL && initials}
+            {photoURL && !imgFailed ? (
+              <img
+                src={photoURL}
+                alt=""
+                onError={() => { console.error("HomeShell: profile photo failed to load:", photoURL); setImgFailed(true); }}
+                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+              />
+            ) : initials}
           </div>
           <div style={{ minWidth: 0 }}>
-            <div style={{ color: t.nameText, fontWeight: 700, fontSize: 15.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            <div style={{ color: t.nameText, fontWeight: 700, fontSize: 19, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {user.name} {masterStar && <span title="Master Admin">⭐</span>}
             </div>
-            <div style={{ color: t.subText, fontSize: 12, fontWeight: 600 }}>{roleLabel}</div>
+            <div style={{ color: t.subText, fontSize: 13.5, fontWeight: 600 }}>{roleLabel}</div>
           </div>
         </div>
         <button onClick={onLogout}
-          style={{ background: "transparent", color: t.subText, border: "1.5px solid " + t.border, borderRadius: 9, padding: "7px 16px", cursor: "pointer", fontSize: 13, fontWeight: 700, fontFamily: "inherit", flexShrink: 0 }}>
+          style={{ background: "rgba(255,255,255,0.15)", color: t.nameText, border: "1.5px solid " + t.border, borderRadius: 9, padding: "8px 18px", cursor: "pointer", fontSize: 13.5, fontWeight: 700, fontFamily: "inherit", flexShrink: 0 }}>
           Logout
         </button>
       </div>
@@ -36070,6 +36198,221 @@ export default function MentorPage({ user }) {
 === END_FILE: .\src\mentor\MentorPage.jsx ===
 
 
+=== START_FILE: .\src\profile\FacultyOverview.jsx ===
+
+// src/profile/FacultyOverview.jsx
+// One-page "at a glance" faculty summary for HoD / Master Admin — everything
+// they'd want to know about a faculty member without clicking through tabs:
+// contact, experience, subjects currently taught (pulled live from Sections),
+// research interests, a publications breakdown, and projects guided.
+// Publications/experience/interests are computed straight from the faculty's
+// own profile data, so this view never goes stale or needs manual upkeep.
+
+import React from "react";
+import { SC, fmtMY } from "./profileShared";
+
+function initialsOf(name) {
+  return (name || "").split(" ").map(w => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
+}
+
+function yearsSince(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (isNaN(d)) return null;
+  const now = new Date();
+  let years = now.getFullYear() - d.getFullYear();
+  const monthDiff = now.getMonth() - d.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < d.getDate())) years--;
+  return Math.max(years, 0);
+}
+
+// Indian academic year runs June–May.
+function currentAcademicYearStart() {
+  const now = new Date();
+  const year = now.getMonth() >= 5 ? now.getFullYear() : now.getFullYear() - 1;
+  return year + "-06-01";
+}
+
+function pubBreakdown(pubs) {
+  const ayStart = currentAcademicYearStart();
+  function tally(list) {
+    let sci = 0, scopus = 0, conf = 0, notIndexed = 0;
+    list.forEach(p => {
+      if (p.pubType === "Conference") { conf++; return; }
+      if (p.indexing === "SCI") sci++;
+      else if (p.indexing === "Scopus") scopus++;
+      else notIndexed++;
+    });
+    return { sci, scopus, conf, notIndexed, total: list.length };
+  }
+  return {
+    total: tally(pubs),
+    recent: tally(pubs.filter(p => p.date && p.date >= ayStart)),
+  };
+}
+
+function StatTile({ label, value, c }) {
+  return (
+    <div style={{ background: c.light, borderRadius: 10, padding: "10px 8px", textAlign: "center" }}>
+      <div style={{ fontSize: 20, fontWeight: 800, color: c.dark }}>{value}</div>
+      <div style={{ fontSize: 10.5, fontWeight: 700, color: c.main, marginTop: 2, textTransform: "uppercase" }}>{label}</div>
+    </div>
+  );
+}
+
+function Panel({ title, icon, c, children }) {
+  return (
+    <div style={{ background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 14, padding: 18, marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 800, fontSize: 14.5, color: c.dark, marginBottom: 14 }}>
+        <span style={{ background: c.light, color: c.main, width: 30, height: 30, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>{icon}</span>
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+export default function FacultyOverview({ personName, phone, profile, facultySections, onOpenFullProfile, onDownloadResume }) {
+  const bio = profile.bio || {};
+  const experience = profile.experience || [];
+  const publications = profile.publications || [];
+  const projects = profile.projects || [];
+
+  const currentRole = experience.find(e => e.current) || [...experience].sort((a, b) => (b.from || "").localeCompare(a.from || ""))[0];
+  const totalExperienceYears = bio.experienceYears || "";
+  const collegeExperienceYears = yearsSince(bio.doj);
+  const pubs = pubBreakdown(publications);
+  const btechGuided = projects.filter(p => p.projType === "B.Tech Guided").length;
+  const mtechGuided = projects.filter(p => p.projType === "M.Tech Guided").length;
+
+  const subjects = [];
+  (facultySections || []).forEach(sec => {
+    (sec.subjects || []).forEach(sub => {
+      if (sub.facultyPhone === phone) subjects.push({ section: sec.name, subject: sub.name, type: sub.type });
+    });
+  });
+
+  return (
+    <div>
+      {/* ── Header banner ── */}
+      <div style={{ background: "linear-gradient(135deg,#0f766e,#0369a1)", borderRadius: 16, padding: 22, marginBottom: 16, display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{
+          width: 92, height: 92, borderRadius: 16, flexShrink: 0, overflow: "hidden",
+          background: bio.photoURL ? "transparent" : "rgba(255,255,255,0.25)", border: "3px solid #fff",
+          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30, fontWeight: 800, color: "#fff",
+        }}>
+          {bio.photoURL ? <img src={bio.photoURL} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : initialsOf(personName)}
+        </div>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ fontWeight: 800, fontSize: 23, color: "#fff" }}>{personName}</div>
+          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", marginTop: 2 }}>College ID: {bio.employeeId || "— (not set)"}</div>
+          <div style={{ fontSize: 15, color: "#fff", marginTop: 6 }}>
+            {bio.designation || "Designation not set"}{bio.department ? " · " + bio.department : ""}
+          </div>
+          <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 10, fontSize: 12.5, color: "rgba(255,255,255,0.9)" }}>
+            {bio.email && <span>✉️ {bio.email}</span>}
+            <span>📞 {phone}</span>
+            {bio.orcidId && <span>🆔 ORCID {bio.orcidId}</span>}
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={onDownloadResume} style={{ background: "#0f172a", color: "#fff", border: "none", borderRadius: 10, padding: "10px 16px", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>📄 Resume</button>
+          <button onClick={onOpenFullProfile} style={{ background: "rgba(255,255,255,0.2)", color: "#fff", border: "none", borderRadius: 10, padding: "10px 16px", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Full profile →</button>
+        </div>
+      </div>
+
+      {/* ── Top stat row ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 10, marginBottom: 16 }}>
+        <StatTile label="Total Experience" value={totalExperienceYears ? totalExperienceYears + " yrs" : "—"} c={SC.experience} />
+        <StatTile label="Experience Here" value={collegeExperienceYears != null ? collegeExperienceYears + " yrs" : "—"} c={SC.qualifications} />
+        <StatTile label="Publications" value={pubs.total.total} c={SC.publications} />
+        <StatTile label="Projects Guided" value={btechGuided + mtechGuided} c={SC.projects} />
+      </div>
+
+      {/* ── Subjects teaching (live from Sections) ── */}
+      <Panel title="Subjects Teaching — Current" icon="📘" c={SC.qualifications}>
+        {subjects.length === 0 ? (
+          <div style={{ color: "#9ca3af", fontSize: 13.5 }}>Not currently assigned any subject in Sections.</div>
+        ) : (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {subjects.map((s, i) => (
+              <span key={i} style={{ fontSize: 12.5, fontWeight: 600, background: SC.qualifications.light, color: SC.qualifications.dark, padding: "6px 12px", borderRadius: 16 }}>
+                {s.subject} <span style={{ opacity: 0.7 }}>· {s.section}</span>
+              </span>
+            ))}
+          </div>
+        )}
+      </Panel>
+
+      {/* ── Roles & responsibilities (current position) ── */}
+      <Panel title="Roles & Responsibilities" icon="💼" c={SC.experience}>
+        {!currentRole ? (
+          <div style={{ color: "#9ca3af", fontSize: 13.5 }}>No experience entries added yet.</div>
+        ) : (
+          <>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>
+              {currentRole.designation} — {currentRole.organization}
+              <span style={{ fontWeight: 500, fontSize: 12, color: "#6b7280", marginLeft: 8 }}>
+                {fmtMY(currentRole.from)} – {currentRole.current ? "Present" : fmtMY(currentRole.to)}
+              </span>
+            </div>
+            {(currentRole.responsibilities || []).length > 0 ? (
+              <div style={{ fontSize: 13, lineHeight: 1.8, color: "#374151" }}>
+                {currentRole.responsibilities.map((r, i) => <div key={i}>• {r}</div>)}
+              </div>
+            ) : (
+              <div style={{ color: "#9ca3af", fontSize: 13.5 }}>No responsibilities listed for this role.</div>
+            )}
+          </>
+        )}
+      </Panel>
+
+      {/* ── Areas of research interest ── */}
+      <Panel title="Areas of Research Interest" icon="🔬" c={SC.interest}>
+        {(bio.specializations || []).length === 0 ? (
+          <div style={{ color: "#9ca3af", fontSize: 13.5 }}>None added yet.</div>
+        ) : (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {bio.specializations.map((s, i) => (
+              <span key={i} style={{ fontSize: 12.5, fontWeight: 600, background: SC.interest.light, color: SC.interest.dark, padding: "6px 12px", borderRadius: 16 }}>{s}</span>
+            ))}
+          </div>
+        )}
+      </Panel>
+
+      {/* ── Publications summary ── */}
+      <Panel title="Publications Summary" icon="📄" c={SC.publications}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: "#6b7280", marginBottom: 8, textTransform: "uppercase" }}>Total (all-time)</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 18 }}>
+          <StatTile label="SCI" value={pubs.total.sci} c={SC.publications} />
+          <StatTile label="Scopus" value={pubs.total.scopus} c={SC.qualifications} />
+          <StatTile label="Conferences" value={pubs.total.conf} c={SC.conferences} />
+          <StatTile label="Not Indexed" value={pubs.total.notIndexed} c={SC.workshops} />
+        </div>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: "#6b7280", marginBottom: 8, textTransform: "uppercase" }}>Recent (current academic year)</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
+          <StatTile label="SCI" value={pubs.recent.sci} c={SC.publications} />
+          <StatTile label="Scopus" value={pubs.recent.scopus} c={SC.qualifications} />
+          <StatTile label="Conferences" value={pubs.recent.conf} c={SC.conferences} />
+          <StatTile label="Not Indexed" value={pubs.recent.notIndexed} c={SC.workshops} />
+        </div>
+      </Panel>
+
+      {/* ── Projects guided ── */}
+      <Panel title="Projects Guided / Undertaken" icon="🧪" c={SC.projects}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
+          <StatTile label="B.Tech Projects" value={btechGuided} c={SC.projects} />
+          <StatTile label="M.Tech Projects" value={mtechGuided} c={SC.skills} />
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+
+=== END_FILE: .\src\profile\FacultyOverview.jsx ===
+
+
 === START_FILE: .\src\profile\FacultyProfilePage.jsx ===
 
 // src/profile/FacultyProfilePage.jsx
@@ -36080,20 +36423,12 @@ export default function MentorPage({ user }) {
 import React, { useState, useEffect, useRef } from "react";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { httpsCallable } from "firebase/functions";
 import * as XLSX from "xlsx";
-import { db, storage } from "../firebase";
+import { db, storage, functions } from "../firebase";
 import { P, Btn, Card, Badge, Fld, Sel, Spinner } from "../components/UI";
-
-// ── Section colors — bold, distinct per section ─────────────────
-const SC = {
-  qualifications: { main: "#1d4ed8", light: "#dbeafe", dark: "#1e3a8a", icon: "🎓" },
-  experience:     { main: "#be185d", light: "#fce7f3", dark: "#831843", icon: "💼" },
-  publications:   { main: "#0f766e", light: "#ccfbf1", dark: "#134e4a", icon: "📄" },
-  workshops:      { main: "#b45309", light: "#fef3c7", dark: "#78350f", icon: "🛠️" },
-  conferences:    { main: "#6d28d9", light: "#ede9fe", dark: "#4c1d95", icon: "🎤" },
-  projects:       { main: "#c2410c", light: "#ffedd5", dark: "#7c2d12", icon: "🧪" },
-  bio:            { main: "#0369a1", light: "#e0f2fe", dark: "#0c4a6e", icon: "👤" },
-};
+import ResumeView from "./ResumeView";
+import { SC, fmtMY } from "./profileShared";
 
 const TABS = [
   ["bio", "Bio"],
@@ -36106,26 +36441,19 @@ const TABS = [
 ];
 
 const EMPTY_PROFILE = {
-  bio: { designation: "", department: "", doj: "", email: "", experienceYears: "", specializations: [], about: "", photoURL: "" },
+  bio: { designation: "", department: "", doj: "", email: "", employeeId: "", orcidId: "", scholarLink: "", experienceYears: "", specializations: [], technicalSkills: [], about: "", photoURL: "" },
   qualifications: [], experience: [], publications: [],
   workshops: [], conferences: [], projects: [],
 };
 
 function newId() { return "e" + Date.now() + Math.floor(Math.random() * 1000); }
 
-function fmtMY(v) {
-  if (!v) return "";
-  const [y, m] = v.split("-");
-  const months = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  return (months[Number(m)] || "") + " " + y;
-}
-
 // ── Shared form field components ─────────────────────────────────
 // IMPORTANT: these live at module level (not inside EntryForm). Defining
 // them inside the form component makes React remount the input on every
 // keystroke, which throws the cursor out after each letter.
-const LBL_STYLE = { fontSize: 13.5, color: "#374151", marginBottom: 6, fontWeight: 600 };
-const INPUT_STYLE = { width: "100%", boxSizing: "border-box", border: "1.5px solid " + P.border, borderRadius: 10, padding: "11px 13px", fontSize: 15, fontFamily: "inherit" };
+const LBL_STYLE = { fontSize: 16.5, color: "#374151", marginBottom: 6, fontWeight: 600 };
+const INPUT_STYLE = { width: "100%", boxSizing: "border-box", border: "1.5px solid " + P.border, borderRadius: 10, padding: "11px 13px", fontSize: 18, fontFamily: "inherit" };
 
 function Field({ label, value, onChange, placeholder, type = "text" }) {
   return (
@@ -36236,13 +36564,18 @@ export default function FacultyProfilePage({ user, viewPhone, readOnly = false }
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [bulkMsg, setBulkMsg] = useState("");
   const [photoFile, setPhotoFile] = useState(null); // data URL staged for the adjust modal
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState(null);
+  const [showResume, setShowResume] = useState(false);
   const fileInputRef = useRef(null);
   const bulkInputRef = useRef({});
 
   useEffect(() => {
     async function load() {
       const snap = await getDoc(doc(db, "facultyProfiles", phone));
-      let base = snap.exists() ? { ...EMPTY_PROFILE, ...snap.data(), bio: { ...EMPTY_PROFILE.bio, ...(snap.data().bio || {}) } } : { ...EMPTY_PROFILE };
+      let base = snap.exists()
+        ? { ...EMPTY_PROFILE, ...snap.data(), bio: { ...EMPTY_PROFILE.bio, ...(snap.data().bio || {}) } }
+        : { ...EMPTY_PROFILE };
 
       // Auto-fill designation/department/name from the users record on first
       // load, so faculty don't have to retype what they already gave at signup.
@@ -36268,6 +36601,37 @@ export default function FacultyProfilePage({ user, viewPhone, readOnly = false }
       await setDoc(doc(db, "facultyProfiles", phone), { ...next, updatedAt: new Date().toISOString() });
     } finally {
       setSaving(false);
+    }
+  }
+
+  // Merge ORCID publications into the existing list, skipping anything that
+  // already matches an existing entry by title (so re-syncing never creates
+  // duplicates, and manually entered publications are never touched).
+  function mergeOrcidPublications(existing, incoming) {
+    const norm = s => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const existingTitles = new Set(existing.map(e => norm(e.title)));
+    const newOnes = incoming.filter(p => p.title && !existingTitles.has(norm(p.title)));
+    return [...existing, ...newOnes];
+  }
+
+  async function syncFromOrcid() {
+    const orcidId = (profile.bio.orcidId || "").trim();
+    if (!orcidId) { setSyncMsg({ ok: false, text: "Add your ORCID iD above first." }); return; }
+    setSyncing(true);
+    setSyncMsg(null);
+    try {
+      const call = httpsCallable(functions, "syncFacultyStats");
+      const res = await call({ orcidId });
+      const { publications } = res.data;
+      const mergedPubs = mergeOrcidPublications(profile.publications || [], publications || []);
+      const addedCount = mergedPubs.length - (profile.publications || []).length;
+      await persist({ ...profile, publications: mergedPubs });
+      setSyncMsg({ ok: true, text: "Synced — added " + addedCount + " new publication(s) from ORCID." });
+    } catch (e) {
+      setSyncMsg({ ok: false, text: e.message || "Sync failed. Please check the ORCID iD and try again." });
+    } finally {
+      setSyncing(false);
+      setTimeout(() => setSyncMsg(null), 6000);
     }
   }
 
@@ -36316,7 +36680,10 @@ export default function FacultyProfilePage({ user, viewPhone, readOnly = false }
     try {
       const photoRef = ref(storage, "profilePhotos/" + phone);
       await uploadBytes(photoRef, blob, { contentType: "image/jpeg" });
-      const url = await getDownloadURL(photoRef);
+      const rawUrl = await getDownloadURL(photoRef);
+      // Every upload reuses the same storage path, so without a cache-buster
+      // browsers keep showing the previously cached image at that same URL.
+      const url = rawUrl + (rawUrl.includes("?") ? "&" : "?") + "v=" + Date.now();
       // Read the CURRENT profile fresh from state (not a stale form snapshot)
       // so uploading a photo never gets overwritten by an unrelated save.
       setProfile(prev => {
@@ -36343,6 +36710,12 @@ export default function FacultyProfilePage({ user, viewPhone, readOnly = false }
 
   const initials = (personName || phone).split(" ").map(w => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
 
+  // Cache-bust with the doc's last-updated time so a re-uploaded photo never
+  // keeps showing a previously cached image at the same URL.
+  const displayPhotoURL = profile.bio.photoURL
+    ? profile.bio.photoURL + (profile.bio.photoURL.includes("?") ? "&" : "?") + "cb=" + encodeURIComponent(profile.updatedAt || "")
+    : "";
+
   return (
     <div>
       {/* ── Profile header ── */}
@@ -36351,17 +36724,17 @@ export default function FacultyProfilePage({ user, viewPhone, readOnly = false }
           <div
             onClick={() => !readOnly && fileInputRef.current?.click()}
             style={{
-              width: 100, height: 100, borderRadius: "50%", background: profile.bio.photoURL ? "none" : "rgba(255,255,255,0.25)",
+              width: 100, height: 100, borderRadius: 16, background: displayPhotoURL ? "none" : "rgba(255,255,255,0.25)",
               border: "3px solid #fff", display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 34, fontWeight: 800, color: "#fff", cursor: readOnly ? "default" : "pointer",
-              backgroundImage: profile.bio.photoURL ? "url(" + profile.bio.photoURL + ")" : "none",
+              fontSize: 37, fontWeight: 800, color: "#fff", cursor: readOnly ? "default" : "pointer",
+              backgroundImage: displayPhotoURL ? "url(" + displayPhotoURL + ")" : "none",
               backgroundSize: "cover", backgroundPosition: "center", overflow: "hidden",
             }}>
             {!profile.bio.photoURL && (uploadingPhoto ? "…" : initials || "?")}
           </div>
           {!readOnly && (
             <div onClick={() => fileInputRef.current?.click()}
-              style={{ position: "absolute", bottom: 0, right: 0, width: 30, height: 30, borderRadius: "50%", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, cursor: "pointer", boxShadow: "0 2px 6px rgba(0,0,0,0.3)" }}>
+              style={{ position: "absolute", bottom: 0, right: 0, width: 30, height: 30, borderRadius: "50%", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, cursor: "pointer", boxShadow: "0 2px 6px rgba(0,0,0,0.3)" }}>
               📷
             </div>
           )}
@@ -36369,23 +36742,40 @@ export default function FacultyProfilePage({ user, viewPhone, readOnly = false }
             onChange={e => { handlePhotoSelect(e.target.files[0]); e.target.value = ""; }} />
         </div>
         <div style={{ flex: 1, minWidth: 200 }}>
-          <div style={{ fontWeight: 800, fontSize: 22, color: "#fff" }}>{personName || phone}</div>
-          <div style={{ fontSize: 15, color: "rgba(255,255,255,0.9)", marginTop: 2 }}>
+          <div style={{ fontWeight: 800, fontSize: 25, color: "#fff" }}>{personName || phone}</div>
+          <div style={{ fontSize: 18, color: "rgba(255,255,255,0.9)", marginTop: 2 }}>
             {profile.bio.designation || "Designation not set"}
             {profile.bio.department ? " · " + profile.bio.department : ""}
             {profile.bio.experienceYears ? " · " + profile.bio.experienceYears + " yrs experience" : ""}
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
             {(profile.bio.specializations || []).map((s, i) => (
-              <span key={i} style={{ fontSize: 12, fontWeight: 600, background: "rgba(255,255,255,0.22)", color: "#fff", padding: "4px 12px", borderRadius: 20 }}>{s}</span>
+              <span key={i} style={{ fontSize: 15, fontWeight: 600, background: "rgba(255,255,255,0.22)", color: "#fff", padding: "4px 12px", borderRadius: 20 }}>{s}</span>
             ))}
           </div>
         </div>
-        {saving && <div style={{ fontSize: 12, color: "#fff" }}>Saving…</div>}
+        {saving && <div style={{ fontSize: 15, color: "#fff" }}>Saving…</div>}
+      </div>
+
+      {/* ── Action bar: sync + resume download ── */}
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 16 }}>
+        {!readOnly && (
+          <button onClick={syncFromOrcid} disabled={syncing}
+            style={{ background: "#4338ca", color: "#fff", border: "none", borderRadius: 10, padding: "10px 18px", fontWeight: 700, fontSize: 16.5, cursor: syncing ? "default" : "pointer", opacity: syncing ? 0.7 : 1 }}>
+            {syncing ? "🔄 Syncing…" : "🔄 Sync from ORCID"}
+          </button>
+        )}
+        <button onClick={() => setShowResume(true)}
+          style={{ background: "#0f172a", color: "#fff", border: "none", borderRadius: 10, padding: "10px 18px", fontWeight: 700, fontSize: 16.5, cursor: "pointer" }}>
+          📄 Download Resume
+        </button>
+        {syncMsg && (
+          <span style={{ fontSize: 16, fontWeight: 600, color: syncMsg.ok ? "#15803d" : "#dc2626" }}>{syncMsg.text}</span>
+        )}
       </div>
 
       {/* ── Stat counters ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 10, marginBottom: 16 }}>
         {[
           ["Publications", counts.publications, SC.publications],
           ["Workshops", counts.workshops, SC.workshops],
@@ -36394,8 +36784,8 @@ export default function FacultyProfilePage({ user, viewPhone, readOnly = false }
           ["Experience", counts.experience, SC.experience],
         ].map(([label, n, c]) => (
           <div key={label} style={{ background: c.light, borderRadius: 12, padding: "14px 12px", textAlign: "center" }}>
-            <div style={{ fontSize: 26, fontWeight: 800, color: c.dark }}>{n}</div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: c.main, marginTop: 2 }}>{label}</div>
+            <div style={{ fontSize: 29, fontWeight: 800, color: c.dark }}>{n}</div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: c.main, marginTop: 2 }}>{label}</div>
           </div>
         ))}
       </div>
@@ -36412,10 +36802,10 @@ export default function FacultyProfilePage({ user, viewPhone, readOnly = false }
                 background: active ? c.main : c.light,
                 color: active ? "#fff" : c.dark,
                 border: "none", borderRadius: 24, cursor: "pointer", fontFamily: "inherit",
-                fontSize: 14, fontWeight: 700, padding: "9px 16px",
+                fontSize: 17, fontWeight: 700, padding: "9px 16px",
                 boxShadow: active ? "0 3px 10px rgba(0,0,0,0.18)" : "none",
               }}>
-              <span style={{ fontSize: 15 }}>{c.icon}</span> {label}
+              <span style={{ fontSize: 18 }}>{c.icon}</span> {label}
             </button>
           );
         })}
@@ -36456,6 +36846,15 @@ export default function FacultyProfilePage({ user, viewPhone, readOnly = false }
           uploading={uploadingPhoto}
           onCancel={() => setPhotoFile(null)}
           onConfirm={uploadCroppedPhoto}
+        />
+      )}
+
+      {showResume && (
+        <ResumeView
+          personName={personName || phone}
+          phone={phone}
+          profile={profile}
+          onClose={() => setShowResume(false)}
         />
       )}
     </div>
@@ -36504,11 +36903,11 @@ function PhotoAdjustModal({ src, onCancel, onConfirm, uploading }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.65)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
       <div style={{ background: "#fff", borderRadius: 16, padding: 24, width: "100%", maxWidth: 380, textAlign: "center" }}>
-        <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 4 }}>📷 Adjust your photo</div>
-        <div style={{ fontSize: 13, color: P.gray, marginBottom: 16 }}>Drag to reposition · use the slider to zoom</div>
+        <div style={{ fontWeight: 800, fontSize: 20, marginBottom: 4 }}>📷 Adjust your photo</div>
+        <div style={{ fontSize: 16, color: P.gray, marginBottom: 16 }}>Drag to reposition · use the slider to zoom</div>
 
         <div
-          style={{ width: BOX, height: BOX, borderRadius: "50%", overflow: "hidden", margin: "0 auto 18px", position: "relative", background: "#f3f4f6", cursor: "grab", border: "3px solid #e5e7eb", touchAction: "none" }}
+          style={{ width: BOX, height: BOX, borderRadius: 16, overflow: "hidden", margin: "0 auto 18px", position: "relative", background: "#f3f4f6", cursor: "grab", border: "3px solid #e5e7eb", touchAction: "none" }}
           onMouseDown={e => startDrag(e.clientX, e.clientY)}
           onMouseMove={e => moveDrag(e.clientX, e.clientY)}
           onMouseUp={endDrag}
@@ -36522,15 +36921,15 @@ function PhotoAdjustModal({ src, onCancel, onConfirm, uploading }) {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
-          <span style={{ fontSize: 13, color: P.gray }}>🔍</span>
+          <span style={{ fontSize: 16, color: P.gray }}>🔍</span>
           <input type="range" min="1" max="3" step="0.05" value={zoom} onChange={e => setZoom(Number(e.target.value))} style={{ flex: 1 }} />
         </div>
 
         <div style={{ display: "flex", justifyContent: "center", gap: 10 }}>
           <button onClick={onCancel} disabled={uploading}
-            style={{ background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 10, padding: "12px 22px", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>Cancel</button>
+            style={{ background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 10, padding: "12px 22px", fontWeight: 700, fontSize: 17, cursor: "pointer" }}>Cancel</button>
           <button onClick={confirm} disabled={uploading}
-            style={{ background: "#0369a1", color: "#fff", border: "none", borderRadius: 10, padding: "12px 26px", fontWeight: 700, fontSize: 14, cursor: "pointer", opacity: uploading ? 0.6 : 1 }}>
+            style={{ background: "#0369a1", color: "#fff", border: "none", borderRadius: 10, padding: "12px 26px", fontWeight: 700, fontSize: 17, cursor: "pointer", opacity: uploading ? 0.6 : 1 }}>
             {uploading ? "Uploading…" : "Use this photo"}
           </button>
         </div>
@@ -36543,6 +36942,7 @@ function PhotoAdjustModal({ src, onCancel, onConfirm, uploading }) {
 function BioForm({ bio, onSave, readOnly }) {
   const [d, setD] = useState({ ...bio });
   const [specInput, setSpecInput] = useState("");
+  const [skillInput, setSkillInput] = useState("");
   const [saved, setSaved] = useState(false);
   const c = SC.bio;
 
@@ -36559,15 +36959,27 @@ function BioForm({ bio, onSave, readOnly }) {
     setSpecInput("");
   }
 
-  const lbl = { fontSize: 14, color: "#374151", marginBottom: 6, fontWeight: 600 };
-  const inputStyle = { width: "100%", boxSizing: "border-box", border: "1.5px solid " + P.border, borderRadius: 10, padding: "12px 14px", fontSize: 15, fontFamily: "inherit" };
+  function addSkill() {
+    const v = skillInput.trim();
+    if (!v) return;
+    setD({ ...d, technicalSkills: [...(d.technicalSkills || []), v] });
+    setSkillInput("");
+  }
+
+  const lbl = { fontSize: 16.5, color: "#4b5563", marginBottom: 5, fontWeight: 600 };
+  const inputStyle = { width: "100%", boxSizing: "border-box", border: "1.5px solid " + P.border, borderRadius: 9, padding: "9px 12px", fontSize: 18.5, fontFamily: "inherit" };
+  const row2 = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 };
+  const row3 = { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 14 };
 
   if (readOnly) {
     return (
       <Card style={{ borderTop: "4px solid " + c.main, padding: 20 }}>
         <Row label="Designation" value={bio.designation} />
         <Row label="Department" value={bio.department} />
+        <Row label="Employee / College ID" value={bio.employeeId} />
         <Row label="Email" value={bio.email} />
+        <Row label="ORCID iD" value={bio.orcidId ? <a href={"https://orcid.org/" + bio.orcidId} target="_blank" rel="noreferrer" style={{ color: "#0369a1" }}>{bio.orcidId}</a> : ""} />
+        <Row label="Google Scholar" value={bio.scholarLink ? <a href={bio.scholarLink} target="_blank" rel="noreferrer" style={{ color: "#0369a1" }}>View profile →</a> : ""} />
         <Row label="Date of joining" value={bio.doj} />
         <Row label="Total experience" value={bio.experienceYears ? bio.experienceYears + " years" : ""} />
         <Row label="About" value={bio.about} />
@@ -36576,43 +36988,74 @@ function BioForm({ bio, onSave, readOnly }) {
   }
 
   return (
-    <Card style={{ borderTop: "4px solid " + c.main, padding: 20 }}>
-      <div style={{ marginBottom: 16 }}>
-        <div style={lbl}>Designation</div>
-        <select value={d.designation} onChange={e => setD({ ...d, designation: e.target.value })} style={inputStyle}>
-          <option value="">— select —</option>
-          <option value="Professor">Professor</option>
-          <option value="Associate Professor">Associate Professor</option>
-          <option value="Assistant Professor">Assistant Professor</option>
-          <option value="Lab Assistant">Lab Assistant</option>
-        </select>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
+    <Card style={{ borderTop: "4px solid " + c.main, padding: "18px 20px" }}>
+      <div style={row2}>
+        <div>
+          <div style={lbl}>Designation</div>
+          <select value={d.designation} onChange={e => setD({ ...d, designation: e.target.value })} style={inputStyle}>
+            <option value="">— select —</option>
+            <option value="Professor">Professor</option>
+            <option value="Associate Professor">Associate Professor</option>
+            <option value="Assistant Professor">Assistant Professor</option>
+            <option value="Lab Assistant">Lab Assistant</option>
+          </select>
+        </div>
         <div>
           <div style={lbl}>Department</div>
           <input value={d.department} onChange={e => setD({ ...d, department: e.target.value })} placeholder="Mechanical Engineering" style={inputStyle} />
         </div>
-        <div>
-          <div style={lbl}>Total experience (years)</div>
-          <input type="number" value={d.experienceYears} onChange={e => setD({ ...d, experienceYears: e.target.value })} placeholder="12" style={inputStyle} />
-        </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
+      <div style={row3}>
+        <div>
+          <div style={lbl}>Employee / College ID</div>
+          <input value={d.employeeId} onChange={e => setD({ ...d, employeeId: e.target.value.trim() })} placeholder="e.g. RE0009" style={inputStyle} />
+        </div>
         <div>
           <div style={lbl}>Date of joining</div>
           <input type="date" value={d.doj} onChange={e => setD({ ...d, doj: e.target.value })} style={inputStyle} />
         </div>
         <div>
+          <div style={lbl}>Total experience (yrs)</div>
+          <input type="number" value={d.experienceYears} onChange={e => setD({ ...d, experienceYears: e.target.value })} placeholder="12" style={inputStyle} />
+        </div>
+      </div>
+      <div style={row3}>
+        <div>
           <div style={lbl}>Email</div>
           <input type="email" value={d.email} onChange={e => setD({ ...d, email: e.target.value })} placeholder="name@college.in" style={inputStyle} />
         </div>
+        <div>
+          <div style={lbl}>ORCID iD</div>
+          <input value={d.orcidId} onChange={e => setD({ ...d, orcidId: e.target.value.trim() })} placeholder="0000-0002-1825-0097" style={inputStyle} />
+        </div>
+        <div>
+          <div style={lbl}>Google Scholar link</div>
+          <input value={d.scholarLink} onChange={e => setD({ ...d, scholarLink: e.target.value.trim() })} placeholder="scholar.google.com/citations?user=…" style={inputStyle} />
+        </div>
       </div>
 
-      <div style={lbl}>Areas of specialization</div>
+      <div style={lbl}>Core / Technical skills</div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+        {(d.technicalSkills || []).map((s, i) => (
+          <span key={i} onClick={() => setD({ ...d, technicalSkills: d.technicalSkills.filter((_, j) => j !== i) })}
+            style={{ fontSize: 16, fontWeight: 600, background: c.light, color: c.dark, padding: "5px 12px", borderRadius: 20, cursor: "pointer" }}>
+            {s} ✕
+          </span>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+        <input value={skillInput} onChange={e => setSkillInput(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addSkill(); } }}
+          placeholder="e.g. AutoCAD, ANSYS, Six Sigma — press Enter or Add"
+          style={{ ...inputStyle, flex: 1 }} />
+        <button onClick={addSkill} style={{ background: c.main, color: "#fff", border: "none", borderRadius: 10, padding: "0 20px", fontWeight: 700, cursor: "pointer", fontSize: 17 }}>Add</button>
+      </div>
+
+      <div style={lbl}>Areas of interest</div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
         {(d.specializations || []).map((s, i) => (
           <span key={i} onClick={() => setD({ ...d, specializations: d.specializations.filter((_, j) => j !== i) })}
-            style={{ fontSize: 13, fontWeight: 600, background: c.light, color: c.dark, padding: "5px 12px", borderRadius: 20, cursor: "pointer" }}>
+            style={{ fontSize: 16, fontWeight: 600, background: c.light, color: c.dark, padding: "5px 12px", borderRadius: 20, cursor: "pointer" }}>
             {s} ✕
           </span>
         ))}
@@ -36622,7 +37065,7 @@ function BioForm({ bio, onSave, readOnly }) {
           onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addSpec(); } }}
           placeholder="e.g. Sustainable manufacturing — press Enter or Add"
           style={{ ...inputStyle, flex: 1 }} />
-        <button onClick={addSpec} style={{ background: c.main, color: "#fff", border: "none", borderRadius: 10, padding: "0 20px", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>Add</button>
+        <button onClick={addSpec} style={{ background: c.main, color: "#fff", border: "none", borderRadius: 10, padding: "0 20px", fontWeight: 700, cursor: "pointer", fontSize: 17 }}>Add</button>
       </div>
 
       <div style={lbl}>About me (2–4 sentences, appears at the top of your CV)</div>
@@ -36630,10 +37073,10 @@ function BioForm({ bio, onSave, readOnly }) {
         style={{ ...inputStyle, resize: "vertical", marginBottom: 20, lineHeight: 1.6 }} />
 
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-        <button onClick={handleSave} style={{ background: saved ? "#16a34a" : c.main, color: "#fff", border: "none", borderRadius: 10, padding: "13px 26px", fontWeight: 700, fontSize: 15, cursor: "pointer" }}>
+        <button onClick={handleSave} style={{ background: saved ? "#16a34a" : c.main, color: "#fff", border: "none", borderRadius: 10, padding: "13px 26px", fontWeight: 700, fontSize: 18, cursor: "pointer" }}>
           {saved ? "✅ Saved!" : "Save bio"}
         </button>
-        {saved && <span style={{ fontSize: 14, fontWeight: 600, color: "#16a34a" }}>Your bio has been saved successfully.</span>}
+        {saved && <span style={{ fontSize: 17, fontWeight: 600, color: "#16a34a" }}>Your bio has been saved successfully.</span>}
       </div>
     </Card>
   );
@@ -36642,8 +37085,8 @@ function BioForm({ bio, onSave, readOnly }) {
 function Row({ label, value }) {
   return (
     <div style={{ marginBottom: 12 }}>
-      <div style={{ fontSize: 12, color: P.gray, fontWeight: 600 }}>{label}</div>
-      <div style={{ fontSize: 15, marginTop: 2 }}>{value || "—"}</div>
+      <div style={{ fontSize: 15, color: P.gray, fontWeight: 600 }}>{label}</div>
+      <div style={{ fontSize: 18, marginTop: 2 }}>{value || "—"}</div>
     </div>
   );
 }
@@ -36658,34 +37101,34 @@ function SectionList({ section, entries, onAdd, onEdit, onDelete, onTemplate, on
     <div>
       {!readOnly && (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: c.dark }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: c.dark }}>
             {entries.length} {entries.length === 1 ? "entry" : "entries"}
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button onClick={onTemplate}
-              style={{ background: "#fff", color: c.main, border: "1.5px solid " + c.main, borderRadius: 10, padding: "10px 16px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" }}>
+              style={{ background: "#fff", color: c.main, border: "1.5px solid " + c.main, borderRadius: 10, padding: "10px 16px", fontWeight: 700, fontSize: 16.5, cursor: "pointer" }}>
               ⬇ Download template
             </button>
             <button onClick={() => bulkRef.current?.click()}
-              style={{ background: c.light, color: c.dark, border: "none", borderRadius: 10, padding: "10px 16px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" }}>
+              style={{ background: c.light, color: c.dark, border: "none", borderRadius: 10, padding: "10px 16px", fontWeight: 700, fontSize: 16.5, cursor: "pointer" }}>
               📤 Upload Excel
             </button>
             <input ref={bulkRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }}
               onChange={e => { onBulkFile(e.target.files[0]); e.target.value = ""; }} />
             <button onClick={onAdd}
-              style={{ background: c.main, color: "#fff", border: "none", borderRadius: 10, padding: "10px 18px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" }}>
+              style={{ background: c.main, color: "#fff", border: "none", borderRadius: 10, padding: "10px 18px", fontWeight: 700, fontSize: 16.5, cursor: "pointer" }}>
               ＋ Add
             </button>
           </div>
         </div>
       )}
       {bulkMsg && (
-        <div style={{ background: c.light, color: c.dark, borderRadius: 10, padding: "10px 14px", fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>
+        <div style={{ background: c.light, color: c.dark, borderRadius: 10, padding: "10px 14px", fontSize: 16.5, fontWeight: 600, marginBottom: 12 }}>
           {bulkMsg}
         </div>
       )}
       {sorted.length === 0 && (
-        <div style={{ textAlign: "center", color: P.gray, fontSize: 14, border: "2px dashed " + P.border, borderRadius: 12, padding: 30 }}>
+        <div style={{ textAlign: "center", color: P.gray, fontSize: 17, border: "2px dashed " + P.border, borderRadius: 12, padding: 30 }}>
           Nothing added yet{readOnly ? "" : " — use Add for one entry, or Upload Excel for many at once"}
         </div>
       )}
@@ -36697,8 +37140,8 @@ function SectionList({ section, entries, onAdd, onEdit, onDelete, onTemplate, on
             </div>
             {!readOnly && (
               <div style={{ display: "flex", gap: 12, flexShrink: 0 }}>
-                <span onClick={() => onEdit(e)} style={{ cursor: "pointer", fontSize: 18 }} title="Edit">✏️</span>
-                <span onClick={() => onDelete(e.id)} style={{ cursor: "pointer", fontSize: 18 }} title="Delete">🗑️</span>
+                <span onClick={() => onEdit(e)} style={{ cursor: "pointer", fontSize: 21 }} title="Edit">✏️</span>
+                <span onClick={() => onDelete(e.id)} style={{ cursor: "pointer", fontSize: 21 }} title="Delete">🗑️</span>
               </div>
             )}
           </div>
@@ -36710,8 +37153,8 @@ function SectionList({ section, entries, onAdd, onEdit, onDelete, onTemplate, on
 
 // ── How each entry type is displayed on its card ────────────────
 function EntryDisplay({ section, e, c }) {
-  const titleStyle = { fontWeight: 700, fontSize: 15.5, color: "#111827" };
-  const subStyle = { fontSize: 13, color: P.gray, marginTop: 4 };
+  const titleStyle = { fontWeight: 700, fontSize: 18.5, color: "#111827" };
+  const subStyle = { fontSize: 16, color: P.gray, marginTop: 4 };
   if (section === "qualifications") {
     return (
       <>
@@ -36729,7 +37172,7 @@ function EntryDisplay({ section, e, c }) {
         </div>
         <div style={subStyle}>{fmtMY(e.from)} – {e.current ? "Present" : fmtMY(e.to)}</div>
         {(e.responsibilities || []).length > 0 && (
-          <div style={{ fontSize: 13.5, color: "#374151", marginTop: 8, lineHeight: 1.8 }}>
+          <div style={{ fontSize: 16.5, color: "#374151", marginTop: 8, lineHeight: 1.8 }}>
             {e.responsibilities.map((r, i) => <div key={i}>• {r}</div>)}
           </div>
         )}
@@ -36844,8 +37287,8 @@ function EntryForm({ section, entry, onSave, onCancel }) {
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.6)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
       <div style={{ background: "#fff", borderRadius: 16, width: "100%", maxWidth: 640, maxHeight: "92vh", overflowY: "auto" }}>
         <div style={{ background: c.main, padding: "18px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", borderRadius: "16px 16px 0 0" }}>
-          <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>{c.icon} {entry ? "Edit" : "Add"} {titles[section]}</div>
-          <span onClick={onCancel} style={{ cursor: "pointer", fontSize: 20, color: "#fff" }}>✕</span>
+          <div style={{ fontWeight: 800, fontSize: 21, color: "#fff" }}>{c.icon} {entry ? "Edit" : "Add"} {titles[section]}</div>
+          <span onClick={onCancel} style={{ cursor: "pointer", fontSize: 23, color: "#fff" }}>✕</span>
         </div>
 
         <div style={{ padding: 24 }}>
@@ -36872,7 +37315,7 @@ function EntryForm({ section, entry, onSave, onCancel }) {
                 <Field label="From *" type="month" value={m(d.from)} onChange={v => set("from", v)} />
                 <Field label="To (leave blank if current)" type="month" value={m(d.to)} onChange={v => set("to", v)} />
               </div>
-              <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, marginBottom: 16, cursor: "pointer" }}>
+              <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 17, marginBottom: 16, cursor: "pointer" }}>
                 <input type="checkbox" checked={!!d.current} onChange={e => set("current", e.target.checked)} />
                 This is my current position
               </label>
@@ -36904,10 +37347,10 @@ function EntryForm({ section, entry, onSave, onCancel }) {
               <div style={lbl}>Authors in order (first author first)</div>
               {(d.authors || []).map((a, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, border: "1.5px solid " + P.border, borderRadius: 10, padding: "9px 13px", marginBottom: 7 }}>
-                  <span style={{ fontSize: 14, flex: 1 }}>{i + 1}. {a}</span>
-                  <span onClick={() => moveAuthor(i, -1)} style={{ cursor: "pointer", fontSize: 15 }}>↑</span>
-                  <span onClick={() => moveAuthor(i, 1)} style={{ cursor: "pointer", fontSize: 15 }}>↓</span>
-                  <span onClick={() => set("authors", d.authors.filter((_, j) => j !== i))} style={{ cursor: "pointer", fontSize: 15 }}>✕</span>
+                  <span style={{ fontSize: 17, flex: 1 }}>{i + 1}. {a}</span>
+                  <span onClick={() => moveAuthor(i, -1)} style={{ cursor: "pointer", fontSize: 18 }}>↑</span>
+                  <span onClick={() => moveAuthor(i, 1)} style={{ cursor: "pointer", fontSize: 18 }}>↓</span>
+                  <span onClick={() => set("authors", d.authors.filter((_, j) => j !== i))} style={{ cursor: "pointer", fontSize: 18 }}>✕</span>
                 </div>
               ))}
               <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
@@ -36967,11 +37410,11 @@ function EntryForm({ section, entry, onSave, onCancel }) {
             </>
           )}
 
-          {err && <div style={{ color: P.red, fontSize: 14, marginBottom: 14, fontWeight: 600 }}>{err}</div>}
+          {err && <div style={{ color: P.red, fontSize: 17, marginBottom: 14, fontWeight: 600 }}>{err}</div>}
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, borderTop: "1.5px solid " + P.border, paddingTop: 16 }}>
-            <button onClick={onCancel} style={{ background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 10, padding: "12px 22px", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>Cancel</button>
-            <button onClick={validateAndSave} style={{ background: c.main, color: "#fff", border: "none", borderRadius: 10, padding: "12px 26px", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>Save</button>
+            <button onClick={onCancel} style={{ background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 10, padding: "12px 22px", fontWeight: 700, fontSize: 17, cursor: "pointer" }}>Cancel</button>
+            <button onClick={validateAndSave} style={{ background: c.main, color: "#fff", border: "none", borderRadius: 10, padding: "12px 26px", fontWeight: 700, fontSize: 17, cursor: "pointer" }}>Save</button>
           </div>
         </div>
       </div>
@@ -36999,6 +37442,8 @@ import * as XLSX from "xlsx";
 import { db } from "../firebase";
 import { P, Spinner, Badge } from "../components/UI";
 import FacultyProfilePage from "./FacultyProfilePage";
+import FacultyOverview from "./FacultyOverview";
+import ResumeView from "./ResumeView";
 
 const CATS = [
   { id: "publications", label: "Publications", icon: "📄", main: "#0f766e", light: "#ccfbf1", dark: "#134e4a" },
@@ -37017,7 +37462,10 @@ function fmtMY(v) {
 export default function FacultyProfilesDirectory({ user }) {
   const [view, setView] = useState("directory"); // directory | research
   const [faculty, setFaculty] = useState(null);  // [{phone, name, designation, profile}]
+  const [sections, setSections] = useState([]);
   const [openPhone, setOpenPhone] = useState(null);
+  const [showFullProfile, setShowFullProfile] = useState(false);
+  const [showResume, setShowResume] = useState(false);
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("publications");
   const [fromDate, setFromDate] = useState("");
@@ -37025,21 +37473,29 @@ export default function FacultyProfilesDirectory({ user }) {
 
   useEffect(() => {
     async function load() {
-      const [usersSnap, profSnap] = await Promise.all([
+      const [usersSnap, profSnap, sectionsSnap] = await Promise.all([
         getDocs(collection(db, "users")),
         getDocs(collection(db, "facultyProfiles")),
+        getDocs(collection(db, "sections")),
       ]);
+      setSections(sectionsSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(s => !s.deleted));
       const profiles = {};
       profSnap.forEach(d => { profiles[d.id] = d.data(); });
       const list = [];
       usersSnap.forEach(d => {
         const u = d.data();
         if (u.status !== "approved") return;
+        const rawPhotoURL = profiles[d.id]?.bio?.photoURL || "";
+        // Cache-bust with the doc's last-updated time so a re-uploaded photo
+        // never keeps showing the previously cached image at the same URL.
+        const photoURL = rawPhotoURL
+          ? rawPhotoURL + (rawPhotoURL.includes("?") ? "&" : "?") + "cb=" + encodeURIComponent(profiles[d.id]?.updatedAt || "")
+          : "";
         list.push({
           phone: d.id,
           name: u.name || d.id,
           designation: (profiles[d.id]?.bio?.designation) || u.designation || "",
-          photoURL: profiles[d.id]?.bio?.photoURL || "",
+          photoURL,
           profile: profiles[d.id] || {},
         });
       });
@@ -37051,14 +37507,36 @@ export default function FacultyProfilesDirectory({ user }) {
 
   if (openPhone) {
     const person = faculty?.find(f => f.phone === openPhone);
+    const facultySections = sections.filter(sec => sec.subjects?.some(s => s.facultyPhone === openPhone));
     return (
       <div>
-        <button onClick={() => setOpenPhone(null)}
+        <button onClick={() => { setOpenPhone(null); setShowFullProfile(false); }}
           style={{ background: "#fff", color: "#374151", border: "1.5px solid " + P.border, borderRadius: 10, padding: "10px 18px", fontWeight: 700, fontSize: 14, cursor: "pointer", fontFamily: "inherit", marginBottom: 14 }}>
           ← Back to faculty list
         </button>
-        <FacultyProfilePage user={user} viewPhone={openPhone} readOnly={true} key={openPhone} />
-        {person && <div style={{ height: 8 }} />}
+        {showFullProfile ? (
+          <>
+            <button onClick={() => setShowFullProfile(false)}
+              style={{ background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 10, padding: "9px 16px", fontWeight: 700, fontSize: 13.5, cursor: "pointer", fontFamily: "inherit", marginBottom: 14 }}>
+              ← Back to overview
+            </button>
+            <FacultyProfilePage user={user} viewPhone={openPhone} readOnly={true} key={openPhone} />
+          </>
+        ) : (
+          person && (
+            <FacultyOverview
+              personName={person.name}
+              phone={person.phone}
+              profile={person.profile}
+              facultySections={facultySections}
+              onOpenFullProfile={() => setShowFullProfile(true)}
+              onDownloadResume={() => setShowResume(true)}
+            />
+          )
+        )}
+        {showResume && person && (
+          <ResumeView personName={person.name} phone={person.phone} profile={person.profile} onClose={() => setShowResume(false)} />
+        )}
       </div>
     );
   }
@@ -37137,7 +37615,7 @@ export default function FacultyProfilesDirectory({ user }) {
                   onMouseEnter={e => e.currentTarget.style.boxShadow = "0 6px 18px rgba(0,0,0,0.1)"}
                   onMouseLeave={e => e.currentTarget.style.boxShadow = "none"}>
                   <div style={{
-                    width: 54, height: 54, borderRadius: "50%", flexShrink: 0,
+                    width: 54, height: 54, borderRadius: 12, flexShrink: 0,
                     background: f.photoURL ? "transparent" : "#0f766e",
                     backgroundImage: f.photoURL ? "url(" + f.photoURL + ")" : "none",
                     backgroundSize: "cover", backgroundPosition: "center",
@@ -37239,5 +37717,251 @@ export default function FacultyProfilesDirectory({ user }) {
 
 
 === END_FILE: .\src\profile\FacultyProfilesDirectory.jsx ===
+
+
+=== START_FILE: .\src\profile\profileShared.js ===
+
+// src/profile/profileShared.js
+// Small shared constants/helpers used by both FacultyProfilePage and
+// ResumeView. Kept in their own module (rather than one importing from the
+// other) to avoid a circular import between the two.
+
+export const SC = {
+  qualifications: { main: "#1d4ed8", light: "#dbeafe", dark: "#1e3a8a", icon: "🎓" },
+  experience:     { main: "#be185d", light: "#fce7f3", dark: "#831843", icon: "💼" },
+  publications:   { main: "#0f766e", light: "#ccfbf1", dark: "#134e4a", icon: "📄" },
+  workshops:      { main: "#b45309", light: "#fef3c7", dark: "#78350f", icon: "🛠️" },
+  conferences:    { main: "#6d28d9", light: "#ede9fe", dark: "#4c1d95", icon: "🎤" },
+  projects:       { main: "#c2410c", light: "#ffedd5", dark: "#7c2d12", icon: "🧪" },
+  bio:            { main: "#0369a1", light: "#e0f2fe", dark: "#0c4a6e", icon: "👤" },
+  skills:         { main: "#4338ca", light: "#e0e7ff", dark: "#312e81", icon: "🧰" },
+  interest:       { main: "#e11d48", light: "#ffe4e6", dark: "#881337", icon: "🔬" },
+};
+
+export function fmtMY(v) {
+  if (!v) return "";
+  const [y, m] = v.split("-");
+  const months = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return (months[Number(m)] || "") + " " + y;
+}
+
+
+=== END_FILE: .\src\profile\profileShared.js ===
+
+
+=== START_FILE: .\src\profile\ResumeView.jsx ===
+
+// src/profile/ResumeView.jsx
+// Full-page resume/CV preview built from a faculty member's profile data —
+// two columns (photo + contact on the left, everything else on the right),
+// downloadable via the browser's own print-to-PDF (keeps all text real and
+// selectable, which is what makes a PDF resume ATS-parseable — unlike a
+// screenshot-style export, nothing here is rendered as an image).
+
+import React from "react";
+import { SC, fmtMY } from "./profileShared";
+
+function initialsOf(name) {
+  return (name || "").split(" ").map(w => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
+}
+
+function SectionHeading({ c, children }) {
+  return (
+    <div style={{ fontSize: 14.5, fontWeight: 800, color: c.dark, borderBottom: "2.5px solid " + c.main, paddingBottom: 5, marginBottom: 10, marginTop: 20, letterSpacing: 0.3, textTransform: "uppercase" }}>
+      {c.icon} {children}
+    </div>
+  );
+}
+
+function TagRow({ items, c }) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
+      {items.map((s, i) => (
+        <span key={i} style={{ fontSize: 12, fontWeight: 600, background: c.light, color: c.dark, padding: "4px 11px", borderRadius: 14 }}>{s}</span>
+      ))}
+    </div>
+  );
+}
+
+export default function ResumeView({ personName, phone, profile, onClose }) {
+  const bio = profile.bio || {};
+  const experience = [...(profile.experience || [])].sort((a, b) => (b.from || "").localeCompare(a.from || ""));
+  const qualifications = [...(profile.qualifications || [])].sort((a, b) => String(b.year || "").localeCompare(String(a.year || "")));
+  const publications = [...(profile.publications || [])].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  const workshops = [...(profile.workshops || [])].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  const conferences = [...(profile.conferences || [])].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  const projects = [...(profile.projects || [])].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#525659", zIndex: 300, overflowY: "auto" }}>
+      <style>{`
+        @media print {
+          body * { visibility: hidden; }
+          #resume-print-root, #resume-print-root * { visibility: visible; }
+          #resume-print-root { position: absolute; top: 0; left: 0; width: 100%; box-shadow: none !important; margin: 0 !important; }
+          .resume-no-print { display: none !important; }
+          @page { size: A4; margin: 0; }
+        }
+      `}</style>
+
+      {/* ── Toolbar (hidden when printing) ── */}
+      <div className="resume-no-print" style={{ position: "sticky", top: 0, zIndex: 10, background: "#1f2937", padding: "12px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ color: "#fff", fontWeight: 700, fontSize: 14 }}>Resume preview</div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={() => window.print()}
+            style={{ background: "#2563eb", color: "#fff", border: "none", borderRadius: 8, padding: "9px 18px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" }}>
+            🖨️ Print / Save as PDF
+          </button>
+          <button onClick={onClose}
+            style={{ background: "rgba(255,255,255,0.15)", color: "#fff", border: "none", borderRadius: 8, padding: "9px 18px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" }}>
+            ✕ Close
+          </button>
+        </div>
+      </div>
+
+      {/* ── The resume page itself ── */}
+      <div id="resume-print-root" style={{ background: "#fff", maxWidth: 850, margin: "20px auto 60px", boxShadow: "0 4px 24px rgba(0,0,0,0.35)", fontFamily: "Georgia, 'Times New Roman', serif", color: "#1f2937", display: "flex", minHeight: 1100 }}>
+
+        {/* ── Left sidebar ── */}
+        <div style={{ width: "28%", background: "linear-gradient(180deg,#1e3a8a,#2563eb)", color: "#fff", padding: "30px 18px" }}>
+          <div style={{
+            width: 110, height: 110, borderRadius: 16, margin: "0 auto 16px", overflow: "hidden",
+            background: bio.photoURL ? "transparent" : "#334155", border: "3px solid rgba(255,255,255,0.5)",
+            display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, fontWeight: 800,
+          }}>
+            {bio.photoURL ? <img src={bio.photoURL} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : initialsOf(personName)}
+          </div>
+          <div style={{ textAlign: "center", fontSize: 19, fontWeight: 800 }}>{personName}</div>
+          <div style={{ textAlign: "center", fontSize: 13, color: "#93c5fd", marginTop: 4, marginBottom: 18 }}>
+            {bio.designation || ""}{bio.department ? " · " + bio.department : ""}
+          </div>
+
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#93c5fd", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Contact</div>
+          <div style={{ fontSize: 12.5, lineHeight: 2, marginBottom: 18, wordBreak: "break-word" }}>
+            {bio.employeeId && <div>🪪 College ID: {bio.employeeId}</div>}
+            {bio.email && <div>✉️ {bio.email}</div>}
+            {phone && <div>📞 {phone}</div>}
+            {bio.orcidId && <div>🆔 ORCID: {bio.orcidId}</div>}
+            {bio.scholarLink && <div>🎓 Google Scholar profile</div>}
+          </div>
+
+        </div>
+
+        {/* ── Right main column ── */}
+        <div style={{ width: "72%", padding: "34px 30px" }}>
+
+          {bio.about && (
+            <>
+              <SectionHeading c={SC.bio}>Professional Summary</SectionHeading>
+              <div style={{ fontSize: 13, lineHeight: 1.7, color: "#374151" }}>{bio.about}</div>
+            </>
+          )}
+
+          {qualifications.length > 0 && (
+            <>
+              <SectionHeading c={SC.qualifications}>Education</SectionHeading>
+              {qualifications.map((q, i) => (
+                <div key={i} style={{ marginBottom: 10 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14 }}>{q.degree}{q.specialization ? " — " + q.specialization : ""}</div>
+                  <div style={{ fontSize: 12.5, color: "#6b7280" }}>{[q.institution, q.university, q.year, q.grade].filter(Boolean).join(" · ")}</div>
+                </div>
+              ))}
+            </>
+          )}
+
+          {(bio.technicalSkills || []).length > 0 && (
+            <>
+              <SectionHeading c={SC.skills}>Core / Technical Skills</SectionHeading>
+              <TagRow items={bio.technicalSkills} c={SC.skills} />
+            </>
+          )}
+
+          {(bio.specializations || []).length > 0 && (
+            <>
+              <SectionHeading c={SC.interest}>Areas of Interest</SectionHeading>
+              <TagRow items={bio.specializations} c={SC.interest} />
+            </>
+          )}
+
+          {experience.length > 0 && (
+            <>
+              <SectionHeading c={SC.experience}>Work Experience</SectionHeading>
+              {experience.map((e, i) => (
+                <div key={i} style={{ marginBottom: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: 14 }}>
+                    <span>{e.designation} — {e.organization}</span>
+                    <span style={{ fontWeight: 600, fontSize: 12, color: "#6b7280" }}>{fmtMY(e.from)} – {e.current ? "Present" : fmtMY(e.to)}</span>
+                  </div>
+                  {(e.responsibilities || []).length > 0 && (
+                    <div style={{ fontSize: 12.5, marginTop: 4, lineHeight: 1.7, color: "#374151" }}>
+                      {e.responsibilities.map((r, j) => <div key={j}>• {r}</div>)}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </>
+          )}
+
+          {publications.length > 0 && (
+            <>
+              <SectionHeading c={SC.publications}>Publications / Research</SectionHeading>
+              {publications.map((p, i) => (
+                <div key={i} style={{ marginBottom: 10 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13.5 }}>{i + 1}. {p.title}</div>
+                  <div style={{ fontSize: 12, color: "#6b7280" }}>
+                    {[p.venue, fmtMY(p.date ? p.date.slice(0, 7) : ""), (p.authors || []).join(", "), p.doi].filter(Boolean).join(" · ")}
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+
+          {workshops.length > 0 && (
+            <>
+              <SectionHeading c={SC.workshops}>Workshops & FDPs</SectionHeading>
+              {workshops.map((w, i) => (
+                <div key={i} style={{ marginBottom: 8, fontSize: 12.5 }}>
+                  <span style={{ fontWeight: 700 }}>{w.title}</span> — {[w.role, w.organizer, fmtMY(w.date ? w.date.slice(0, 7) : "")].filter(Boolean).join(", ")}
+                </div>
+              ))}
+            </>
+          )}
+
+          {conferences.length > 0 && (
+            <>
+              <SectionHeading c={SC.conferences}>Conferences</SectionHeading>
+              {conferences.map((c, i) => (
+                <div key={i} style={{ marginBottom: 8, fontSize: 12.5 }}>
+                  <span style={{ fontWeight: 700 }}>{c.title}</span> — {[c.role, c.venue, fmtMY(c.date ? c.date.slice(0, 7) : "")].filter(Boolean).join(", ")}
+                </div>
+              ))}
+            </>
+          )}
+
+          {projects.length > 0 && (
+            <>
+              <SectionHeading c={SC.projects}>Projects</SectionHeading>
+              {projects.map((p, i) => (
+                <div key={i} style={{ marginBottom: 8, fontSize: 12.5 }}>
+                  <span style={{ fontWeight: 700 }}>{p.title}</span> — {[p.projType, p.agency, p.status, fmtMY(p.date ? p.date.slice(0, 7) : "")].filter(Boolean).join(", ")}
+                </div>
+              ))}
+            </>
+          )}
+
+          {experience.length === 0 && qualifications.length === 0 && publications.length === 0 &&
+            workshops.length === 0 && conferences.length === 0 && projects.length === 0 && (
+            <div style={{ color: "#9ca3af", fontSize: 14, textAlign: "center", marginTop: 60 }}>
+              Nothing added yet — fill in Qualifications, Experience, Publications etc. to build your resume.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+=== END_FILE: .\src\profile\ResumeView.jsx ===
 
 

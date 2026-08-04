@@ -10,10 +10,10 @@ import { db } from "../firebase";
 
 // Per-role header themes (cool, professional palettes)
 export const SHELL_THEMES = {
-  faculty: { header: "#04342C", accent: "#0F6E56", nameText: "#E1F5EE", subText: "#9FE1CB", border: "#0F6E56" },
-  admin:   { header: "#042C53", accent: "#185FA5", nameText: "#E6F1FB", subText: "#85B7EB", border: "#185FA5" },
-  hod:     { header: "#2E1065", accent: "#6D28D9", nameText: "#EDE9FE", subText: "#C4B5FD", border: "#6D28D9" },
-  master:  { header: "#1C1C1A", accent: "#B45309", nameText: "#F5F5F4", subText: "#D6D3D1", border: "#57534E" },
+  faculty: { header: "linear-gradient(135deg,#3B8C82,#2F7268)", accent: "#0F6E56", nameText: "#ffffff", subText: "#D6F0EC", border: "#8FCFC5" },
+  admin:   { header: "linear-gradient(135deg,#4A72B8,#3B5D9C)", accent: "#185FA5", nameText: "#ffffff", subText: "#DCE7F7", border: "#9DB9E3" },
+  hod:     { header: "linear-gradient(135deg,#8266C4,#6C51AE)", accent: "#6D28D9", nameText: "#ffffff", subText: "#E6DFF7", border: "#C3B2E8" },
+  master:  { header: "linear-gradient(135deg,#38BDF8,#0EA5E9)", accent: "#0284C7", nameText: "#ffffff", subText: "#E0F5FF", border: "#BAE6FD" },
 };
 
 // Pill color sets — light bg + dark text when inactive, solid + white when active
@@ -31,13 +31,21 @@ export const PILL_COLORS = {
 export default function HomeShell({ user, onLogout, theme = "faculty", roleLabel, tabs, active, onSelect, masterStar }) {
   const t = SHELL_THEMES[theme] || SHELL_THEMES.faculty;
   const [photoURL, setPhotoURL] = useState("");
+  const [imgFailed, setImgFailed] = useState(false);
 
   // Pull the profile photo (if the person has uploaded one)
   useEffect(() => {
     let alive = true;
     getDoc(doc(db, "facultyProfiles", user.phone))
       .then(snap => {
-        if (alive && snap.exists() && snap.data().bio?.photoURL) setPhotoURL(snap.data().bio.photoURL);
+        if (!alive || !snap.exists()) return;
+        const d = snap.data();
+        const url = d.bio?.photoURL;
+        if (!url) return;
+        // Cache-bust with the doc's last-updated time so an old cached image
+        // (from before a photo re-upload) is never shown for a stale URL.
+        setImgFailed(false);
+        setPhotoURL(url + (url.includes("?") ? "&" : "?") + "cb=" + encodeURIComponent(d.updatedAt || ""));
       })
       .catch(() => {});
     return () => { alive = false; };
@@ -49,28 +57,37 @@ export default function HomeShell({ user, onLogout, theme = "faculty", roleLabel
   return (
     <div>
       {/* ── Header bar ── */}
-      <div style={{ background: t.header, padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 30 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+      <div style={{ background: t.header, padding: "18px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 30 }}>
+        <div
+          onClick={() => onSelect("profile")}
+          title="Go to My Profile"
+          style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0, cursor: "pointer" }}
+        >
           <div style={{
-            width: 46, height: 46, borderRadius: "50%", flexShrink: 0,
-            background: photoURL ? "transparent" : t.accent,
-            backgroundImage: photoURL ? "url(" + photoURL + ")" : "none",
-            backgroundSize: "cover", backgroundPosition: "center",
-            border: "2px solid " + t.border,
+            width: 92, height: 92, borderRadius: 18, flexShrink: 0,
+            background: (photoURL && !imgFailed) ? "transparent" : t.accent,
+            border: "3px solid " + t.border, boxShadow: "0 3px 10px rgba(0,0,0,0.18)",
             display: "flex", alignItems: "center", justifyContent: "center",
-            color: t.nameText, fontWeight: 700, fontSize: 16,
+            color: t.nameText, fontWeight: 700, fontSize: 30, overflow: "hidden",
           }}>
-            {!photoURL && initials}
+            {photoURL && !imgFailed ? (
+              <img
+                src={photoURL}
+                alt=""
+                onError={() => { console.error("HomeShell: profile photo failed to load:", photoURL); setImgFailed(true); }}
+                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+              />
+            ) : initials}
           </div>
           <div style={{ minWidth: 0 }}>
-            <div style={{ color: t.nameText, fontWeight: 700, fontSize: 15.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            <div style={{ color: t.nameText, fontWeight: 700, fontSize: 19, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {user.name} {masterStar && <span title="Master Admin">⭐</span>}
             </div>
-            <div style={{ color: t.subText, fontSize: 12, fontWeight: 600 }}>{roleLabel}</div>
+            <div style={{ color: t.subText, fontSize: 13.5, fontWeight: 600 }}>{roleLabel}</div>
           </div>
         </div>
         <button onClick={onLogout}
-          style={{ background: "transparent", color: t.subText, border: "1.5px solid " + t.border, borderRadius: 9, padding: "7px 16px", cursor: "pointer", fontSize: 13, fontWeight: 700, fontFamily: "inherit", flexShrink: 0 }}>
+          style={{ background: "rgba(255,255,255,0.15)", color: t.nameText, border: "1.5px solid " + t.border, borderRadius: 9, padding: "8px 18px", cursor: "pointer", fontSize: 13.5, fontWeight: 700, fontFamily: "inherit", flexShrink: 0 }}>
           Logout
         </button>
       </div>

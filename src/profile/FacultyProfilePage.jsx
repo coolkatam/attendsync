@@ -6,20 +6,12 @@
 import React, { useState, useEffect, useRef } from "react";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { httpsCallable } from "firebase/functions";
 import * as XLSX from "xlsx";
-import { db, storage } from "../firebase";
+import { db, storage, functions } from "../firebase";
 import { P, Btn, Card, Badge, Fld, Sel, Spinner } from "../components/UI";
-
-// ── Section colors — bold, distinct per section ─────────────────
-const SC = {
-  qualifications: { main: "#1d4ed8", light: "#dbeafe", dark: "#1e3a8a", icon: "🎓" },
-  experience:     { main: "#be185d", light: "#fce7f3", dark: "#831843", icon: "💼" },
-  publications:   { main: "#0f766e", light: "#ccfbf1", dark: "#134e4a", icon: "📄" },
-  workshops:      { main: "#b45309", light: "#fef3c7", dark: "#78350f", icon: "🛠️" },
-  conferences:    { main: "#6d28d9", light: "#ede9fe", dark: "#4c1d95", icon: "🎤" },
-  projects:       { main: "#c2410c", light: "#ffedd5", dark: "#7c2d12", icon: "🧪" },
-  bio:            { main: "#0369a1", light: "#e0f2fe", dark: "#0c4a6e", icon: "👤" },
-};
+import ResumeView from "./ResumeView";
+import { SC, fmtMY } from "./profileShared";
 
 const TABS = [
   ["bio", "Bio"],
@@ -32,26 +24,19 @@ const TABS = [
 ];
 
 const EMPTY_PROFILE = {
-  bio: { designation: "", department: "", doj: "", email: "", experienceYears: "", specializations: [], about: "", photoURL: "" },
+  bio: { designation: "", department: "", doj: "", email: "", employeeId: "", orcidId: "", scholarLink: "", experienceYears: "", specializations: [], technicalSkills: [], about: "", photoURL: "" },
   qualifications: [], experience: [], publications: [],
   workshops: [], conferences: [], projects: [],
 };
 
 function newId() { return "e" + Date.now() + Math.floor(Math.random() * 1000); }
 
-function fmtMY(v) {
-  if (!v) return "";
-  const [y, m] = v.split("-");
-  const months = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  return (months[Number(m)] || "") + " " + y;
-}
-
 // ── Shared form field components ─────────────────────────────────
 // IMPORTANT: these live at module level (not inside EntryForm). Defining
 // them inside the form component makes React remount the input on every
 // keystroke, which throws the cursor out after each letter.
-const LBL_STYLE = { fontSize: 13.5, color: "#374151", marginBottom: 6, fontWeight: 600 };
-const INPUT_STYLE = { width: "100%", boxSizing: "border-box", border: "1.5px solid " + P.border, borderRadius: 10, padding: "11px 13px", fontSize: 15, fontFamily: "inherit" };
+const LBL_STYLE = { fontSize: 16.5, color: "#374151", marginBottom: 6, fontWeight: 600 };
+const INPUT_STYLE = { width: "100%", boxSizing: "border-box", border: "1.5px solid " + P.border, borderRadius: 10, padding: "11px 13px", fontSize: 18, fontFamily: "inherit" };
 
 function Field({ label, value, onChange, placeholder, type = "text" }) {
   return (
@@ -162,13 +147,18 @@ export default function FacultyProfilePage({ user, viewPhone, readOnly = false }
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [bulkMsg, setBulkMsg] = useState("");
   const [photoFile, setPhotoFile] = useState(null); // data URL staged for the adjust modal
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState(null);
+  const [showResume, setShowResume] = useState(false);
   const fileInputRef = useRef(null);
   const bulkInputRef = useRef({});
 
   useEffect(() => {
     async function load() {
       const snap = await getDoc(doc(db, "facultyProfiles", phone));
-      let base = snap.exists() ? { ...EMPTY_PROFILE, ...snap.data(), bio: { ...EMPTY_PROFILE.bio, ...(snap.data().bio || {}) } } : { ...EMPTY_PROFILE };
+      let base = snap.exists()
+        ? { ...EMPTY_PROFILE, ...snap.data(), bio: { ...EMPTY_PROFILE.bio, ...(snap.data().bio || {}) } }
+        : { ...EMPTY_PROFILE };
 
       // Auto-fill designation/department/name from the users record on first
       // load, so faculty don't have to retype what they already gave at signup.
@@ -194,6 +184,37 @@ export default function FacultyProfilePage({ user, viewPhone, readOnly = false }
       await setDoc(doc(db, "facultyProfiles", phone), { ...next, updatedAt: new Date().toISOString() });
     } finally {
       setSaving(false);
+    }
+  }
+
+  // Merge ORCID publications into the existing list, skipping anything that
+  // already matches an existing entry by title (so re-syncing never creates
+  // duplicates, and manually entered publications are never touched).
+  function mergeOrcidPublications(existing, incoming) {
+    const norm = s => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const existingTitles = new Set(existing.map(e => norm(e.title)));
+    const newOnes = incoming.filter(p => p.title && !existingTitles.has(norm(p.title)));
+    return [...existing, ...newOnes];
+  }
+
+  async function syncFromOrcid() {
+    const orcidId = (profile.bio.orcidId || "").trim();
+    if (!orcidId) { setSyncMsg({ ok: false, text: "Add your ORCID iD above first." }); return; }
+    setSyncing(true);
+    setSyncMsg(null);
+    try {
+      const call = httpsCallable(functions, "syncFacultyStats");
+      const res = await call({ orcidId });
+      const { publications } = res.data;
+      const mergedPubs = mergeOrcidPublications(profile.publications || [], publications || []);
+      const addedCount = mergedPubs.length - (profile.publications || []).length;
+      await persist({ ...profile, publications: mergedPubs });
+      setSyncMsg({ ok: true, text: "Synced — added " + addedCount + " new publication(s) from ORCID." });
+    } catch (e) {
+      setSyncMsg({ ok: false, text: e.message || "Sync failed. Please check the ORCID iD and try again." });
+    } finally {
+      setSyncing(false);
+      setTimeout(() => setSyncMsg(null), 6000);
     }
   }
 
@@ -242,7 +263,10 @@ export default function FacultyProfilePage({ user, viewPhone, readOnly = false }
     try {
       const photoRef = ref(storage, "profilePhotos/" + phone);
       await uploadBytes(photoRef, blob, { contentType: "image/jpeg" });
-      const url = await getDownloadURL(photoRef);
+      const rawUrl = await getDownloadURL(photoRef);
+      // Every upload reuses the same storage path, so without a cache-buster
+      // browsers keep showing the previously cached image at that same URL.
+      const url = rawUrl + (rawUrl.includes("?") ? "&" : "?") + "v=" + Date.now();
       // Read the CURRENT profile fresh from state (not a stale form snapshot)
       // so uploading a photo never gets overwritten by an unrelated save.
       setProfile(prev => {
@@ -269,6 +293,12 @@ export default function FacultyProfilePage({ user, viewPhone, readOnly = false }
 
   const initials = (personName || phone).split(" ").map(w => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
 
+  // Cache-bust with the doc's last-updated time so a re-uploaded photo never
+  // keeps showing a previously cached image at the same URL.
+  const displayPhotoURL = profile.bio.photoURL
+    ? profile.bio.photoURL + (profile.bio.photoURL.includes("?") ? "&" : "?") + "cb=" + encodeURIComponent(profile.updatedAt || "")
+    : "";
+
   return (
     <div>
       {/* ── Profile header ── */}
@@ -277,17 +307,17 @@ export default function FacultyProfilePage({ user, viewPhone, readOnly = false }
           <div
             onClick={() => !readOnly && fileInputRef.current?.click()}
             style={{
-              width: 100, height: 100, borderRadius: "50%", background: profile.bio.photoURL ? "none" : "rgba(255,255,255,0.25)",
+              width: 100, height: 100, borderRadius: 16, background: displayPhotoURL ? "none" : "rgba(255,255,255,0.25)",
               border: "3px solid #fff", display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 34, fontWeight: 800, color: "#fff", cursor: readOnly ? "default" : "pointer",
-              backgroundImage: profile.bio.photoURL ? "url(" + profile.bio.photoURL + ")" : "none",
+              fontSize: 37, fontWeight: 800, color: "#fff", cursor: readOnly ? "default" : "pointer",
+              backgroundImage: displayPhotoURL ? "url(" + displayPhotoURL + ")" : "none",
               backgroundSize: "cover", backgroundPosition: "center", overflow: "hidden",
             }}>
             {!profile.bio.photoURL && (uploadingPhoto ? "…" : initials || "?")}
           </div>
           {!readOnly && (
             <div onClick={() => fileInputRef.current?.click()}
-              style={{ position: "absolute", bottom: 0, right: 0, width: 30, height: 30, borderRadius: "50%", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, cursor: "pointer", boxShadow: "0 2px 6px rgba(0,0,0,0.3)" }}>
+              style={{ position: "absolute", bottom: 0, right: 0, width: 30, height: 30, borderRadius: "50%", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, cursor: "pointer", boxShadow: "0 2px 6px rgba(0,0,0,0.3)" }}>
               📷
             </div>
           )}
@@ -295,23 +325,40 @@ export default function FacultyProfilePage({ user, viewPhone, readOnly = false }
             onChange={e => { handlePhotoSelect(e.target.files[0]); e.target.value = ""; }} />
         </div>
         <div style={{ flex: 1, minWidth: 200 }}>
-          <div style={{ fontWeight: 800, fontSize: 22, color: "#fff" }}>{personName || phone}</div>
-          <div style={{ fontSize: 15, color: "rgba(255,255,255,0.9)", marginTop: 2 }}>
+          <div style={{ fontWeight: 800, fontSize: 25, color: "#fff" }}>{personName || phone}</div>
+          <div style={{ fontSize: 18, color: "rgba(255,255,255,0.9)", marginTop: 2 }}>
             {profile.bio.designation || "Designation not set"}
             {profile.bio.department ? " · " + profile.bio.department : ""}
             {profile.bio.experienceYears ? " · " + profile.bio.experienceYears + " yrs experience" : ""}
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
             {(profile.bio.specializations || []).map((s, i) => (
-              <span key={i} style={{ fontSize: 12, fontWeight: 600, background: "rgba(255,255,255,0.22)", color: "#fff", padding: "4px 12px", borderRadius: 20 }}>{s}</span>
+              <span key={i} style={{ fontSize: 15, fontWeight: 600, background: "rgba(255,255,255,0.22)", color: "#fff", padding: "4px 12px", borderRadius: 20 }}>{s}</span>
             ))}
           </div>
         </div>
-        {saving && <div style={{ fontSize: 12, color: "#fff" }}>Saving…</div>}
+        {saving && <div style={{ fontSize: 15, color: "#fff" }}>Saving…</div>}
+      </div>
+
+      {/* ── Action bar: sync + resume download ── */}
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 16 }}>
+        {!readOnly && (
+          <button onClick={syncFromOrcid} disabled={syncing}
+            style={{ background: "#4338ca", color: "#fff", border: "none", borderRadius: 10, padding: "10px 18px", fontWeight: 700, fontSize: 16.5, cursor: syncing ? "default" : "pointer", opacity: syncing ? 0.7 : 1 }}>
+            {syncing ? "🔄 Syncing…" : "🔄 Sync from ORCID"}
+          </button>
+        )}
+        <button onClick={() => setShowResume(true)}
+          style={{ background: "#0f172a", color: "#fff", border: "none", borderRadius: 10, padding: "10px 18px", fontWeight: 700, fontSize: 16.5, cursor: "pointer" }}>
+          📄 Download Resume
+        </button>
+        {syncMsg && (
+          <span style={{ fontSize: 16, fontWeight: 600, color: syncMsg.ok ? "#15803d" : "#dc2626" }}>{syncMsg.text}</span>
+        )}
       </div>
 
       {/* ── Stat counters ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 10, marginBottom: 16 }}>
         {[
           ["Publications", counts.publications, SC.publications],
           ["Workshops", counts.workshops, SC.workshops],
@@ -320,8 +367,8 @@ export default function FacultyProfilePage({ user, viewPhone, readOnly = false }
           ["Experience", counts.experience, SC.experience],
         ].map(([label, n, c]) => (
           <div key={label} style={{ background: c.light, borderRadius: 12, padding: "14px 12px", textAlign: "center" }}>
-            <div style={{ fontSize: 26, fontWeight: 800, color: c.dark }}>{n}</div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: c.main, marginTop: 2 }}>{label}</div>
+            <div style={{ fontSize: 29, fontWeight: 800, color: c.dark }}>{n}</div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: c.main, marginTop: 2 }}>{label}</div>
           </div>
         ))}
       </div>
@@ -338,10 +385,10 @@ export default function FacultyProfilePage({ user, viewPhone, readOnly = false }
                 background: active ? c.main : c.light,
                 color: active ? "#fff" : c.dark,
                 border: "none", borderRadius: 24, cursor: "pointer", fontFamily: "inherit",
-                fontSize: 14, fontWeight: 700, padding: "9px 16px",
+                fontSize: 17, fontWeight: 700, padding: "9px 16px",
                 boxShadow: active ? "0 3px 10px rgba(0,0,0,0.18)" : "none",
               }}>
-              <span style={{ fontSize: 15 }}>{c.icon}</span> {label}
+              <span style={{ fontSize: 18 }}>{c.icon}</span> {label}
             </button>
           );
         })}
@@ -382,6 +429,15 @@ export default function FacultyProfilePage({ user, viewPhone, readOnly = false }
           uploading={uploadingPhoto}
           onCancel={() => setPhotoFile(null)}
           onConfirm={uploadCroppedPhoto}
+        />
+      )}
+
+      {showResume && (
+        <ResumeView
+          personName={personName || phone}
+          phone={phone}
+          profile={profile}
+          onClose={() => setShowResume(false)}
         />
       )}
     </div>
@@ -430,11 +486,11 @@ function PhotoAdjustModal({ src, onCancel, onConfirm, uploading }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.65)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
       <div style={{ background: "#fff", borderRadius: 16, padding: 24, width: "100%", maxWidth: 380, textAlign: "center" }}>
-        <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 4 }}>📷 Adjust your photo</div>
-        <div style={{ fontSize: 13, color: P.gray, marginBottom: 16 }}>Drag to reposition · use the slider to zoom</div>
+        <div style={{ fontWeight: 800, fontSize: 20, marginBottom: 4 }}>📷 Adjust your photo</div>
+        <div style={{ fontSize: 16, color: P.gray, marginBottom: 16 }}>Drag to reposition · use the slider to zoom</div>
 
         <div
-          style={{ width: BOX, height: BOX, borderRadius: "50%", overflow: "hidden", margin: "0 auto 18px", position: "relative", background: "#f3f4f6", cursor: "grab", border: "3px solid #e5e7eb", touchAction: "none" }}
+          style={{ width: BOX, height: BOX, borderRadius: 16, overflow: "hidden", margin: "0 auto 18px", position: "relative", background: "#f3f4f6", cursor: "grab", border: "3px solid #e5e7eb", touchAction: "none" }}
           onMouseDown={e => startDrag(e.clientX, e.clientY)}
           onMouseMove={e => moveDrag(e.clientX, e.clientY)}
           onMouseUp={endDrag}
@@ -448,15 +504,15 @@ function PhotoAdjustModal({ src, onCancel, onConfirm, uploading }) {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
-          <span style={{ fontSize: 13, color: P.gray }}>🔍</span>
+          <span style={{ fontSize: 16, color: P.gray }}>🔍</span>
           <input type="range" min="1" max="3" step="0.05" value={zoom} onChange={e => setZoom(Number(e.target.value))} style={{ flex: 1 }} />
         </div>
 
         <div style={{ display: "flex", justifyContent: "center", gap: 10 }}>
           <button onClick={onCancel} disabled={uploading}
-            style={{ background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 10, padding: "12px 22px", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>Cancel</button>
+            style={{ background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 10, padding: "12px 22px", fontWeight: 700, fontSize: 17, cursor: "pointer" }}>Cancel</button>
           <button onClick={confirm} disabled={uploading}
-            style={{ background: "#0369a1", color: "#fff", border: "none", borderRadius: 10, padding: "12px 26px", fontWeight: 700, fontSize: 14, cursor: "pointer", opacity: uploading ? 0.6 : 1 }}>
+            style={{ background: "#0369a1", color: "#fff", border: "none", borderRadius: 10, padding: "12px 26px", fontWeight: 700, fontSize: 17, cursor: "pointer", opacity: uploading ? 0.6 : 1 }}>
             {uploading ? "Uploading…" : "Use this photo"}
           </button>
         </div>
@@ -469,6 +525,7 @@ function PhotoAdjustModal({ src, onCancel, onConfirm, uploading }) {
 function BioForm({ bio, onSave, readOnly }) {
   const [d, setD] = useState({ ...bio });
   const [specInput, setSpecInput] = useState("");
+  const [skillInput, setSkillInput] = useState("");
   const [saved, setSaved] = useState(false);
   const c = SC.bio;
 
@@ -485,15 +542,27 @@ function BioForm({ bio, onSave, readOnly }) {
     setSpecInput("");
   }
 
-  const lbl = { fontSize: 14, color: "#374151", marginBottom: 6, fontWeight: 600 };
-  const inputStyle = { width: "100%", boxSizing: "border-box", border: "1.5px solid " + P.border, borderRadius: 10, padding: "12px 14px", fontSize: 15, fontFamily: "inherit" };
+  function addSkill() {
+    const v = skillInput.trim();
+    if (!v) return;
+    setD({ ...d, technicalSkills: [...(d.technicalSkills || []), v] });
+    setSkillInput("");
+  }
+
+  const lbl = { fontSize: 16.5, color: "#4b5563", marginBottom: 5, fontWeight: 600 };
+  const inputStyle = { width: "100%", boxSizing: "border-box", border: "1.5px solid " + P.border, borderRadius: 9, padding: "9px 12px", fontSize: 18.5, fontFamily: "inherit" };
+  const row2 = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 };
+  const row3 = { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 14 };
 
   if (readOnly) {
     return (
       <Card style={{ borderTop: "4px solid " + c.main, padding: 20 }}>
         <Row label="Designation" value={bio.designation} />
         <Row label="Department" value={bio.department} />
+        <Row label="Employee / College ID" value={bio.employeeId} />
         <Row label="Email" value={bio.email} />
+        <Row label="ORCID iD" value={bio.orcidId ? <a href={"https://orcid.org/" + bio.orcidId} target="_blank" rel="noreferrer" style={{ color: "#0369a1" }}>{bio.orcidId}</a> : ""} />
+        <Row label="Google Scholar" value={bio.scholarLink ? <a href={bio.scholarLink} target="_blank" rel="noreferrer" style={{ color: "#0369a1" }}>View profile →</a> : ""} />
         <Row label="Date of joining" value={bio.doj} />
         <Row label="Total experience" value={bio.experienceYears ? bio.experienceYears + " years" : ""} />
         <Row label="About" value={bio.about} />
@@ -502,43 +571,74 @@ function BioForm({ bio, onSave, readOnly }) {
   }
 
   return (
-    <Card style={{ borderTop: "4px solid " + c.main, padding: 20 }}>
-      <div style={{ marginBottom: 16 }}>
-        <div style={lbl}>Designation</div>
-        <select value={d.designation} onChange={e => setD({ ...d, designation: e.target.value })} style={inputStyle}>
-          <option value="">— select —</option>
-          <option value="Professor">Professor</option>
-          <option value="Associate Professor">Associate Professor</option>
-          <option value="Assistant Professor">Assistant Professor</option>
-          <option value="Lab Assistant">Lab Assistant</option>
-        </select>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
+    <Card style={{ borderTop: "4px solid " + c.main, padding: "18px 20px" }}>
+      <div style={row2}>
+        <div>
+          <div style={lbl}>Designation</div>
+          <select value={d.designation} onChange={e => setD({ ...d, designation: e.target.value })} style={inputStyle}>
+            <option value="">— select —</option>
+            <option value="Professor">Professor</option>
+            <option value="Associate Professor">Associate Professor</option>
+            <option value="Assistant Professor">Assistant Professor</option>
+            <option value="Lab Assistant">Lab Assistant</option>
+          </select>
+        </div>
         <div>
           <div style={lbl}>Department</div>
           <input value={d.department} onChange={e => setD({ ...d, department: e.target.value })} placeholder="Mechanical Engineering" style={inputStyle} />
         </div>
-        <div>
-          <div style={lbl}>Total experience (years)</div>
-          <input type="number" value={d.experienceYears} onChange={e => setD({ ...d, experienceYears: e.target.value })} placeholder="12" style={inputStyle} />
-        </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
+      <div style={row3}>
+        <div>
+          <div style={lbl}>Employee / College ID</div>
+          <input value={d.employeeId} onChange={e => setD({ ...d, employeeId: e.target.value.trim() })} placeholder="e.g. RE0009" style={inputStyle} />
+        </div>
         <div>
           <div style={lbl}>Date of joining</div>
           <input type="date" value={d.doj} onChange={e => setD({ ...d, doj: e.target.value })} style={inputStyle} />
         </div>
         <div>
+          <div style={lbl}>Total experience (yrs)</div>
+          <input type="number" value={d.experienceYears} onChange={e => setD({ ...d, experienceYears: e.target.value })} placeholder="12" style={inputStyle} />
+        </div>
+      </div>
+      <div style={row3}>
+        <div>
           <div style={lbl}>Email</div>
           <input type="email" value={d.email} onChange={e => setD({ ...d, email: e.target.value })} placeholder="name@college.in" style={inputStyle} />
         </div>
+        <div>
+          <div style={lbl}>ORCID iD</div>
+          <input value={d.orcidId} onChange={e => setD({ ...d, orcidId: e.target.value.trim() })} placeholder="0000-0002-1825-0097" style={inputStyle} />
+        </div>
+        <div>
+          <div style={lbl}>Google Scholar link</div>
+          <input value={d.scholarLink} onChange={e => setD({ ...d, scholarLink: e.target.value.trim() })} placeholder="scholar.google.com/citations?user=…" style={inputStyle} />
+        </div>
       </div>
 
-      <div style={lbl}>Areas of specialization</div>
+      <div style={lbl}>Core / Technical skills</div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+        {(d.technicalSkills || []).map((s, i) => (
+          <span key={i} onClick={() => setD({ ...d, technicalSkills: d.technicalSkills.filter((_, j) => j !== i) })}
+            style={{ fontSize: 16, fontWeight: 600, background: c.light, color: c.dark, padding: "5px 12px", borderRadius: 20, cursor: "pointer" }}>
+            {s} ✕
+          </span>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+        <input value={skillInput} onChange={e => setSkillInput(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addSkill(); } }}
+          placeholder="e.g. AutoCAD, ANSYS, Six Sigma — press Enter or Add"
+          style={{ ...inputStyle, flex: 1 }} />
+        <button onClick={addSkill} style={{ background: c.main, color: "#fff", border: "none", borderRadius: 10, padding: "0 20px", fontWeight: 700, cursor: "pointer", fontSize: 17 }}>Add</button>
+      </div>
+
+      <div style={lbl}>Areas of interest</div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
         {(d.specializations || []).map((s, i) => (
           <span key={i} onClick={() => setD({ ...d, specializations: d.specializations.filter((_, j) => j !== i) })}
-            style={{ fontSize: 13, fontWeight: 600, background: c.light, color: c.dark, padding: "5px 12px", borderRadius: 20, cursor: "pointer" }}>
+            style={{ fontSize: 16, fontWeight: 600, background: c.light, color: c.dark, padding: "5px 12px", borderRadius: 20, cursor: "pointer" }}>
             {s} ✕
           </span>
         ))}
@@ -548,7 +648,7 @@ function BioForm({ bio, onSave, readOnly }) {
           onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addSpec(); } }}
           placeholder="e.g. Sustainable manufacturing — press Enter or Add"
           style={{ ...inputStyle, flex: 1 }} />
-        <button onClick={addSpec} style={{ background: c.main, color: "#fff", border: "none", borderRadius: 10, padding: "0 20px", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>Add</button>
+        <button onClick={addSpec} style={{ background: c.main, color: "#fff", border: "none", borderRadius: 10, padding: "0 20px", fontWeight: 700, cursor: "pointer", fontSize: 17 }}>Add</button>
       </div>
 
       <div style={lbl}>About me (2–4 sentences, appears at the top of your CV)</div>
@@ -556,10 +656,10 @@ function BioForm({ bio, onSave, readOnly }) {
         style={{ ...inputStyle, resize: "vertical", marginBottom: 20, lineHeight: 1.6 }} />
 
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-        <button onClick={handleSave} style={{ background: saved ? "#16a34a" : c.main, color: "#fff", border: "none", borderRadius: 10, padding: "13px 26px", fontWeight: 700, fontSize: 15, cursor: "pointer" }}>
+        <button onClick={handleSave} style={{ background: saved ? "#16a34a" : c.main, color: "#fff", border: "none", borderRadius: 10, padding: "13px 26px", fontWeight: 700, fontSize: 18, cursor: "pointer" }}>
           {saved ? "✅ Saved!" : "Save bio"}
         </button>
-        {saved && <span style={{ fontSize: 14, fontWeight: 600, color: "#16a34a" }}>Your bio has been saved successfully.</span>}
+        {saved && <span style={{ fontSize: 17, fontWeight: 600, color: "#16a34a" }}>Your bio has been saved successfully.</span>}
       </div>
     </Card>
   );
@@ -568,8 +668,8 @@ function BioForm({ bio, onSave, readOnly }) {
 function Row({ label, value }) {
   return (
     <div style={{ marginBottom: 12 }}>
-      <div style={{ fontSize: 12, color: P.gray, fontWeight: 600 }}>{label}</div>
-      <div style={{ fontSize: 15, marginTop: 2 }}>{value || "—"}</div>
+      <div style={{ fontSize: 15, color: P.gray, fontWeight: 600 }}>{label}</div>
+      <div style={{ fontSize: 18, marginTop: 2 }}>{value || "—"}</div>
     </div>
   );
 }
@@ -584,34 +684,34 @@ function SectionList({ section, entries, onAdd, onEdit, onDelete, onTemplate, on
     <div>
       {!readOnly && (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: c.dark }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: c.dark }}>
             {entries.length} {entries.length === 1 ? "entry" : "entries"}
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button onClick={onTemplate}
-              style={{ background: "#fff", color: c.main, border: "1.5px solid " + c.main, borderRadius: 10, padding: "10px 16px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" }}>
+              style={{ background: "#fff", color: c.main, border: "1.5px solid " + c.main, borderRadius: 10, padding: "10px 16px", fontWeight: 700, fontSize: 16.5, cursor: "pointer" }}>
               ⬇ Download template
             </button>
             <button onClick={() => bulkRef.current?.click()}
-              style={{ background: c.light, color: c.dark, border: "none", borderRadius: 10, padding: "10px 16px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" }}>
+              style={{ background: c.light, color: c.dark, border: "none", borderRadius: 10, padding: "10px 16px", fontWeight: 700, fontSize: 16.5, cursor: "pointer" }}>
               📤 Upload Excel
             </button>
             <input ref={bulkRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }}
               onChange={e => { onBulkFile(e.target.files[0]); e.target.value = ""; }} />
             <button onClick={onAdd}
-              style={{ background: c.main, color: "#fff", border: "none", borderRadius: 10, padding: "10px 18px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" }}>
+              style={{ background: c.main, color: "#fff", border: "none", borderRadius: 10, padding: "10px 18px", fontWeight: 700, fontSize: 16.5, cursor: "pointer" }}>
               ＋ Add
             </button>
           </div>
         </div>
       )}
       {bulkMsg && (
-        <div style={{ background: c.light, color: c.dark, borderRadius: 10, padding: "10px 14px", fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>
+        <div style={{ background: c.light, color: c.dark, borderRadius: 10, padding: "10px 14px", fontSize: 16.5, fontWeight: 600, marginBottom: 12 }}>
           {bulkMsg}
         </div>
       )}
       {sorted.length === 0 && (
-        <div style={{ textAlign: "center", color: P.gray, fontSize: 14, border: "2px dashed " + P.border, borderRadius: 12, padding: 30 }}>
+        <div style={{ textAlign: "center", color: P.gray, fontSize: 17, border: "2px dashed " + P.border, borderRadius: 12, padding: 30 }}>
           Nothing added yet{readOnly ? "" : " — use Add for one entry, or Upload Excel for many at once"}
         </div>
       )}
@@ -623,8 +723,8 @@ function SectionList({ section, entries, onAdd, onEdit, onDelete, onTemplate, on
             </div>
             {!readOnly && (
               <div style={{ display: "flex", gap: 12, flexShrink: 0 }}>
-                <span onClick={() => onEdit(e)} style={{ cursor: "pointer", fontSize: 18 }} title="Edit">✏️</span>
-                <span onClick={() => onDelete(e.id)} style={{ cursor: "pointer", fontSize: 18 }} title="Delete">🗑️</span>
+                <span onClick={() => onEdit(e)} style={{ cursor: "pointer", fontSize: 21 }} title="Edit">✏️</span>
+                <span onClick={() => onDelete(e.id)} style={{ cursor: "pointer", fontSize: 21 }} title="Delete">🗑️</span>
               </div>
             )}
           </div>
@@ -636,8 +736,8 @@ function SectionList({ section, entries, onAdd, onEdit, onDelete, onTemplate, on
 
 // ── How each entry type is displayed on its card ────────────────
 function EntryDisplay({ section, e, c }) {
-  const titleStyle = { fontWeight: 700, fontSize: 15.5, color: "#111827" };
-  const subStyle = { fontSize: 13, color: P.gray, marginTop: 4 };
+  const titleStyle = { fontWeight: 700, fontSize: 18.5, color: "#111827" };
+  const subStyle = { fontSize: 16, color: P.gray, marginTop: 4 };
   if (section === "qualifications") {
     return (
       <>
@@ -655,7 +755,7 @@ function EntryDisplay({ section, e, c }) {
         </div>
         <div style={subStyle}>{fmtMY(e.from)} – {e.current ? "Present" : fmtMY(e.to)}</div>
         {(e.responsibilities || []).length > 0 && (
-          <div style={{ fontSize: 13.5, color: "#374151", marginTop: 8, lineHeight: 1.8 }}>
+          <div style={{ fontSize: 16.5, color: "#374151", marginTop: 8, lineHeight: 1.8 }}>
             {e.responsibilities.map((r, i) => <div key={i}>• {r}</div>)}
           </div>
         )}
@@ -770,8 +870,8 @@ function EntryForm({ section, entry, onSave, onCancel }) {
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.6)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
       <div style={{ background: "#fff", borderRadius: 16, width: "100%", maxWidth: 640, maxHeight: "92vh", overflowY: "auto" }}>
         <div style={{ background: c.main, padding: "18px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", borderRadius: "16px 16px 0 0" }}>
-          <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>{c.icon} {entry ? "Edit" : "Add"} {titles[section]}</div>
-          <span onClick={onCancel} style={{ cursor: "pointer", fontSize: 20, color: "#fff" }}>✕</span>
+          <div style={{ fontWeight: 800, fontSize: 21, color: "#fff" }}>{c.icon} {entry ? "Edit" : "Add"} {titles[section]}</div>
+          <span onClick={onCancel} style={{ cursor: "pointer", fontSize: 23, color: "#fff" }}>✕</span>
         </div>
 
         <div style={{ padding: 24 }}>
@@ -798,7 +898,7 @@ function EntryForm({ section, entry, onSave, onCancel }) {
                 <Field label="From *" type="month" value={m(d.from)} onChange={v => set("from", v)} />
                 <Field label="To (leave blank if current)" type="month" value={m(d.to)} onChange={v => set("to", v)} />
               </div>
-              <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, marginBottom: 16, cursor: "pointer" }}>
+              <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 17, marginBottom: 16, cursor: "pointer" }}>
                 <input type="checkbox" checked={!!d.current} onChange={e => set("current", e.target.checked)} />
                 This is my current position
               </label>
@@ -830,10 +930,10 @@ function EntryForm({ section, entry, onSave, onCancel }) {
               <div style={lbl}>Authors in order (first author first)</div>
               {(d.authors || []).map((a, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, border: "1.5px solid " + P.border, borderRadius: 10, padding: "9px 13px", marginBottom: 7 }}>
-                  <span style={{ fontSize: 14, flex: 1 }}>{i + 1}. {a}</span>
-                  <span onClick={() => moveAuthor(i, -1)} style={{ cursor: "pointer", fontSize: 15 }}>↑</span>
-                  <span onClick={() => moveAuthor(i, 1)} style={{ cursor: "pointer", fontSize: 15 }}>↓</span>
-                  <span onClick={() => set("authors", d.authors.filter((_, j) => j !== i))} style={{ cursor: "pointer", fontSize: 15 }}>✕</span>
+                  <span style={{ fontSize: 17, flex: 1 }}>{i + 1}. {a}</span>
+                  <span onClick={() => moveAuthor(i, -1)} style={{ cursor: "pointer", fontSize: 18 }}>↑</span>
+                  <span onClick={() => moveAuthor(i, 1)} style={{ cursor: "pointer", fontSize: 18 }}>↓</span>
+                  <span onClick={() => set("authors", d.authors.filter((_, j) => j !== i))} style={{ cursor: "pointer", fontSize: 18 }}>✕</span>
                 </div>
               ))}
               <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
@@ -893,11 +993,11 @@ function EntryForm({ section, entry, onSave, onCancel }) {
             </>
           )}
 
-          {err && <div style={{ color: P.red, fontSize: 14, marginBottom: 14, fontWeight: 600 }}>{err}</div>}
+          {err && <div style={{ color: P.red, fontSize: 17, marginBottom: 14, fontWeight: 600 }}>{err}</div>}
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, borderTop: "1.5px solid " + P.border, paddingTop: 16 }}>
-            <button onClick={onCancel} style={{ background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 10, padding: "12px 22px", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>Cancel</button>
-            <button onClick={validateAndSave} style={{ background: c.main, color: "#fff", border: "none", borderRadius: 10, padding: "12px 26px", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>Save</button>
+            <button onClick={onCancel} style={{ background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 10, padding: "12px 22px", fontWeight: 700, fontSize: 17, cursor: "pointer" }}>Cancel</button>
+            <button onClick={validateAndSave} style={{ background: c.main, color: "#fff", border: "none", borderRadius: 10, padding: "12px 26px", fontWeight: 700, fontSize: 17, cursor: "pointer" }}>Save</button>
           </div>
         </div>
       </div>
