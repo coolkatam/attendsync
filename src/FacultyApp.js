@@ -11,6 +11,7 @@ import MentorPage from "./mentor/MentorPage";
 import InternalMarksPage from "./marks/InternalMarksPage";
 import FacultyProfilePage from "./profile/FacultyProfilePage";
 import HomeShell from "./components/HomeShell";
+import { IconAttendance, IconMarks, IconMentor, IconUserCircle } from "./components/Icons";
 
 export default function FacultyApp({ user, onLogout, hideShell = false, initialTab = "attendance" }) {
   const [sections, setSections]     = useState([]);
@@ -52,13 +53,12 @@ export default function FacultyApp({ user, onLogout, hideShell = false, initialT
         <HomeShell
           user={user}
           onLogout={onLogout}
-          theme="faculty"
           roleLabel={user.designation || "Faculty"}
           tabs={[
-            { id: "attendance", label: "My section attendance", icon: "📋", color: "teal" },
-            { id: "marks", label: "Internal marks", icon: "📝", color: "blue" },
-            { id: "mentor", label: "Mentor", icon: "🎓", color: "purple" },
-            { id: "profile", label: "My profile", icon: "👤", color: "pink" },
+            { id: "attendance", label: "My section attendance", icon: IconAttendance },
+            { id: "marks", label: "Internal marks", icon: IconMarks },
+            { id: "mentor", label: "Mentor", icon: IconMentor },
+            { id: "profile", label: "My profile", icon: IconUserCircle },
           ]}
           active={mainTab}
           onSelect={t => { setMainTab(t); setScreen("home"); }}

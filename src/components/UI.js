@@ -2,31 +2,37 @@
 
 import React from "react";
 
+// Professional palette: one restrained primary (deep blue), a muted
+// secondary accent, neutral grays, and semantic colors reserved for real
+// status (success/warning/danger) rather than decoration. Key names are
+// kept stable on purpose — dozens of call sites reference these — only the
+// values were refreshed.
 export const P = {
-  blue:"#1a56a0",  blueL:"#dbeafe",
-  teal:"#0e7490",  tealL:"#cffafe",
-  green:"#166534", greenL:"#dcfce7",
-  red:"#b91c1c",   redL:"#fee2e2",
-  amber:"#92400e", amberL:"#fef3c7",
-  gray:"#6b7280",  border:"#e5e7eb",
-  bg:"#f8fafc",    white:"#ffffff",
+  blue:"#2c5c94",  blueL:"#e6eef7",
+  teal:"#3f6b6f",  tealL:"#e7eeee",
+  green:"#1f7a4d", greenL:"#e5f4ea",
+  red:"#b3392f",   redL:"#fbe9e7",
+  amber:"#a15c07", amberL:"#faf0dd",
+  gray:"#5b6673",  border:"#dde2e8",
+  bg:"#f7f9fb",    white:"#ffffff",
+  navy:"#16324f",
 };
 
 export function Btn({ children, onClick, variant = "primary", small, full, disabled, style = {} }) {
   const variants = {
-    primary: { background: P.blue,  color: "#fff", border: "none" },
-    accent:  { background: P.teal,  color: "#fff", border: "none" },
-    success: { background: P.green, color: "#fff", border: "none" },
-    danger:  { background: P.red,   color: "#fff", border: "none" },
+    primary: { background: P.blue,  color: "#fff", border: "1px solid " + P.blue },
+    accent:  { background: P.teal,  color: "#fff", border: "1px solid " + P.teal },
+    success: { background: P.green, color: "#fff", border: "1px solid " + P.green },
+    danger:  { background: P.red,   color: "#fff", border: "1px solid " + P.red },
     outline: { background: "transparent", color: P.blue, border: "1.5px solid " + P.blue },
-    ghost:   { background: P.border, color: P.gray, border: "none" },
+    ghost:   { background: "transparent", color: P.gray, border: "1px solid " + P.border },
   };
   return (
     <button
       onClick={disabled ? undefined : onClick}
       style={{
         borderRadius: 8, cursor: disabled ? "not-allowed" : "pointer",
-        fontFamily: "inherit", fontWeight: 500,
+        fontFamily: "inherit", fontWeight: 600,
         fontSize: small ? 13 : 14,
         padding: small ? "7px 14px" : "10px 20px",
         width: full ? "100%" : undefined,
@@ -49,7 +55,7 @@ export function Card({ children, style = {}, onClick }) {
         background: P.white, border: "1px solid " + P.border,
         borderRadius: 12, padding: "14px 16px", marginBottom: 10,
         cursor: onClick ? "pointer" : "default",
-        boxShadow: onClick ? "0 1px 4px rgba(0,0,0,0.06)" : "none",
+        boxShadow: onClick ? "0 1px 3px rgba(15,37,64,0.07)" : "none",
         ...style,
       }}
     >

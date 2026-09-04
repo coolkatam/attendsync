@@ -18654,7 +18654,13 @@ service firebase.storage {
       "Bash(curl -s https://attendsync-66e55.web.app/)",
       "Bash(curl -s https://attendsync-66e55.web.app/static/js/main.df30782a.js)",
       "Bash(curl -sI https://attendsync-66e55.web.app/)",
-      "Bash(npx react-scripts *)"
+      "Bash(npx react-scripts *)",
+      "Bash(firebase functions:log --only verifyLogin -n 30)",
+      "Bash(curl -s -X POST https://emergencyclearallpins-smsamklr6a-uc.a.run.app -H \"Content-Type: application/json\" -d '{\"data\":{\"confirm\":\"CLEAR-ALL-PINS-2026-08-04\"}}')",
+      "Bash(firebase functions:delete emergencyClearAllPins --region us-central1 --force)",
+      "Bash(mkdir -p \"/c/Users/aruni/AppData/Local/Temp/claude/C--Users-aruni-attendsync/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/mech-ems-redesign\" && echo created)",
+      "Bash(node 'C:\\\\Users\\\\aruni\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\bundled-skills\\\\2.1.237\\\\230e594d8bbf672132bf9d6b0b8b8c2c\\\\design\\\\seed-canvas.mjs' --template 'C:\\\\Users\\\\aruni\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\bundled-skills\\\\2.1.237\\\\230e594d8bbf672132bf9d6b0b8b8c2c\\\\design\\\\payload.template.html' --out mech-ems-professional-redesign.html --title 'Mech EMS Professional Redesign' --artboard Main.dc.html --artboard Profile.dc.html --artboard Users.dc.html --artboard DesignSystem.dc.html --canvas canvas.json)",
+      "Bash(node \"C:\\\\Users\\\\aruni\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\bundled-skills\\\\2.1.237\\\\230e594d8bbf672132bf9d6b0b8b8c2c\\\\design\\\\seed-canvas.mjs\" --check mech-ems-professional-redesign.html)"
     ]
   }
 }
@@ -26491,13 +26497,17 @@ bݶ`r.7�a�,������Ǟ���j$7�L+�(�F�o��	ty@��
 
     <!-- PWA essential meta tags -->
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-    <meta name="theme-color" content="#1a56a0" />
+    <meta name="theme-color" content="#16324f" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Mech EMS" />
     <meta name="application-name" content="Mech EMS" />
-    <meta name="msapplication-TileColor" content="#1a56a0" />
+    <meta name="msapplication-TileColor" content="#16324f" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
 
     <!-- Description for search/sharing -->
     <meta name="description" content="Mech EMS – Education Management System for the Department of Mechanical Engineering" />
@@ -26522,13 +26532,13 @@ bݶ`r.7�a�,������Ǟ���j$7�L+�(�F�o��	ty@��
       /* Splash screen style while app loads */
       body {
         margin: 0;
-        background-color: #1a56a0;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background-color: #16324f;
+        font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       }
       #splash {
         position: fixed;
         top: 0; left: 0; right: 0; bottom: 0;
-        background: linear-gradient(135deg, #1a56a0, #0e7490);
+        background: #16324f;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -26570,7 +26580,9 @@ bݶ`r.7�a�,������Ǟ���j$7�L+�(�F�o��	ty@��
 
     <!-- Splash screen shown while React loads -->
     <div id="splash">
-      <div class="icon">🎓</div>
+      <div class="icon">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </div>
       <div class="title">Mech EMS</div>
       <div class="sub">Section Attendance Platform</div>
       <div class="dot-loader">
@@ -29383,6 +29395,7 @@ import HomeShell from "./components/HomeShell";
 import HoDStudentLookup from "./hod/HoDStudentLookup";
 import MentorPage from "./mentor/MentorPage";
 import { P, Btn, Card, Badge, Fld, Sel, TopBar, GPill, ARow, Spinner, PeriodPicker } from "./components/UI";
+import { IconAttendance, IconSections, IconMarks, IconMentor, IconSearch, IconUsers, IconTrash, IconUserCircle, IconIdCard, IconPhone } from "./components/Icons";
 import { today, calcPct, parseCSV, downloadTemplate, exportXLS, makeKey, parseKey, groupByDateBatched, rowColor, MASTER_ADMIN_PHONE, fmtDate, validateBatches, studentsInBatch, readStatus, batchSlotKey } from "./utils";
 
 // ── Invite link card — each admin's shareable link for their own faculty ──
@@ -29633,21 +29646,20 @@ export default function AdminApp({ user, onLogout }) {
       <HomeShell
         user={user}
         onLogout={onLogout}
-        theme={isMaster ? "master" : "admin"}
         roleLabel={isMaster ? "Master Admin" : "Class Coordinator"}
         masterStar={isMaster}
         tabs={[
-          { id: "myAttendance", label: "My section attendance", icon: "📋", color: isMaster ? "amber" : "blue" },
-          { id: "allSections", label: "All sections", icon: "🏫", color: "teal" },
-          { id: "marks", label: "Internal marks", icon: "📝", color: "blue" },
-          { id: "mentor", label: "Mentor", icon: "🎓", color: "purple" },
+          { id: "myAttendance", label: "My section attendance", icon: IconAttendance },
+          { id: "allSections", label: "All sections", icon: IconSections },
+          { id: "marks", label: "Internal marks", icon: IconMarks },
+          { id: "mentor", label: "Mentor", icon: IconMentor },
           ...(isMaster ? [
-            { id: "studentData", label: "Student data", icon: "🔍", color: "green" },
-            { id: "profiles", label: "Faculty profiles", icon: "🧑‍🏫", color: "coral" },
-            { id: "trash", label: "Trash", icon: "🗑️", color: "slate" },
+            { id: "studentData", label: "Student data", icon: IconSearch },
+            { id: "profiles", label: "Faculty profiles", icon: IconUsers },
+            { id: "trash", label: "Trash", icon: IconTrash },
           ] : []),
-          { id: "users", label: "Users", icon: "👥", color: "slate" },
-          { id: "profile", label: "My profile", icon: "👤", color: "pink" },
+          { id: "users", label: "Users", icon: IconUsers },
+          { id: "profile", label: "My profile", icon: IconUserCircle },
         ]}
         active={homeTab}
         onSelect={id => {
@@ -29691,14 +29703,14 @@ export default function AdminApp({ user, onLogout }) {
         <InviteLinkCard adminPhone={user.phone} />
 
         {/* Stats */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
-          <div style={{ background: P.blueL, borderRadius: 12, padding: "16px 14px" }}>
-            <div style={{ fontSize: 28, fontWeight: 700, color: P.blue }}>{sections.length}</div>
-            <div style={{ fontSize: 12, color: P.gray }}>Sections</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
+          <div style={{ background: "#fff", border: "1px solid " + P.border, borderTop: "3px solid " + P.blue, borderRadius: 12, padding: "16px 14px" }}>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 26, fontWeight: 600, color: "#1a2230" }}>{String(sections.length).padStart(2, "0")}</div>
+            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: P.gray, marginTop: 6 }}>Sections</div>
           </div>
-          <div style={{ background: P.greenL, borderRadius: 12, padding: "16px 14px" }}>
-            <div style={{ fontSize: 28, fontWeight: 700, color: P.green }}>{totalStudents}</div>
-            <div style={{ fontSize: 12, color: P.gray }}>Total students</div>
+          <div style={{ background: "#fff", border: "1px solid " + P.border, borderTop: "3px solid " + P.blue, borderRadius: 12, padding: "16px 14px" }}>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 26, fontWeight: 600, color: "#1a2230" }}>{totalStudents}</div>
+            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: P.gray, marginTop: 6 }}>Total Students</div>
           </div>
         </div>
 
@@ -30226,12 +30238,25 @@ export function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReje
   const [showRoster, setShowRoster] = useState(false);
   const [rosterMsg, setRosterMsg] = useState("");
   const [rosterCount, setRosterCount] = useState(null);
+  const [photos, setPhotos] = useState({}); // phone -> cache-busted photoURL
   const canManageRoster = isMaster || currentUser.role === "hod";
 
   useEffect(() => {
     if (!canManageRoster) return;
     getDocs(collection(db, "employeeRoster")).then(snap => setRosterCount(snap.size));
   }, [canManageRoster]);
+
+  useEffect(() => {
+    getDocs(collection(db, "facultyProfiles")).then(snap => {
+      const map = {};
+      snap.forEach(d => {
+        const raw = d.data()?.bio?.photoURL;
+        if (!raw) return;
+        map[d.id] = raw + (raw.includes("?") ? "&" : "?") + "cb=" + encodeURIComponent(d.data().updatedAt || "");
+      });
+      setPhotos(map);
+    });
+  }, []);
 
   function downloadRosterTemplate() {
     const headers = ["Employee ID", "Full Name", "Designation", "Department"];
@@ -30298,47 +30323,47 @@ export function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReje
       <TopBar title="User Management" subtitle={isMaster ? "Approve, promote and manage users" : "Approve and manage your faculty"} onBack={onBack} />
       <div style={{ padding: 16 }}>
 
-        {/* Filter tabs */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+        {/* Filter tabs — segmented control */}
+        <div style={{ display: "inline-flex", gap: 4, background: P.bg, padding: 4, borderRadius: 20, marginBottom: 16, flexWrap: "wrap" }}>
           {tabs.map(f => (
             <button key={f.id} onClick={() => setFilter(f.id)} style={{
-              padding: "6px 14px", borderRadius: 20, fontSize: 12,
+              padding: "7px 14px", borderRadius: 16, fontSize: 12,
               fontFamily: "inherit", fontWeight: 600, cursor: "pointer",
               border: "none",
-              background: filter === f.id ? P.blue : P.blueL,
-              color: filter === f.id ? "#fff" : P.blue,
+              background: filter === f.id ? P.navy : "transparent",
+              color: filter === f.id ? "#fff" : P.gray,
             }}>{f.label}</button>
           ))}
         </div>
 
         {/* ── Employee roster management (HoD / master admin only) ── */}
         {canManageRoster && (
-          <div style={{ background: "#fff", border: "1.5px solid " + P.border, borderRadius: 12, marginBottom: 16, overflow: "hidden" }}>
+          <div style={{ background: "#fff", border: "1px solid " + P.border, borderRadius: 12, marginBottom: 16, overflow: "hidden" }}>
             <div onClick={() => setShowRoster(!showRoster)}
-              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", cursor: "pointer", background: "#fef3c7" }}>
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 16px", cursor: "pointer" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 18 }}>🪪</span>
+                <IconIdCard size={17} color={P.gray} />
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: "#78350f" }}>Employee ID roster</div>
-                  <div style={{ fontSize: 12, color: "#92400e" }}>
+                  <div style={{ fontWeight: 600, fontSize: 13.5, color: "#1a2230" }}>Employee ID roster</div>
+                  <div style={{ fontSize: 11.5, color: P.gray }}>
                     {rosterCount === null ? "Loading…" : rosterCount + " employee IDs on file"} · used to verify new registrations
                   </div>
                 </div>
               </div>
-              <span style={{ fontSize: 13, color: "#92400e", fontWeight: 700 }}>{showRoster ? "▲ Hide" : "▼ Manage"}</span>
+              <span style={{ fontSize: 12.5, color: P.blue, fontWeight: 600 }}>{showRoster ? "Hide" : "Manage"}</span>
             </div>
             {showRoster && (
-              <div style={{ padding: 16 }}>
+              <div style={{ padding: 16, borderTop: "1px solid " + P.border }}>
                 <div style={{ fontSize: 13, color: P.gray, marginBottom: 12, lineHeight: 1.6 }}>
                   Upload every faculty member's Employee ID once. When someone registers, their typed Employee ID and name
                   are checked against this list in the background — the result (matched / name mismatch / not found) is
                   shown to whoever approves them, as an extra safeguard against impersonation.
                 </div>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
-                  <Btn small variant="outline" onClick={downloadRosterTemplate}>⬇ Download template</Btn>
+                  <Btn small variant="outline" onClick={downloadRosterTemplate}>Download template</Btn>
                   <label style={{ display: "inline-block" }}>
-                    <span style={{ background: "#fef3c7", color: "#78350f", borderRadius: 8, padding: "7px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "inline-block" }}>
-                      📤 Upload Excel
+                    <span style={{ background: P.bg, color: P.gray, border: "1px solid " + P.border, borderRadius: 8, padding: "7px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "inline-block" }}>
+                      Upload Excel
                     </span>
                     <input type="file" accept=".xlsx,.xls" style={{ display: "none" }}
                       onChange={e => { handleRosterFile(e.target.files[0]); e.target.value = ""; }} />
@@ -30356,76 +30381,90 @@ export function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReje
           <div style={{ color: P.gray, textAlign: "center", padding: "2rem" }}>No users found.</div>
         )}
 
-        {filtered.map(u => {
-          const isCurrentUser = u.id === currentUser.phone;
-          const isAdmin = u.role === "admin";
-          const isPending = u.status === "pending";
-          const isRejected = u.status === "rejected";
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", gap: 14 }}>
+          {filtered.map(u => {
+            const isCurrentUser = u.id === currentUser.phone;
+            const isAdmin = u.role === "admin";
+            const isPending = u.status === "pending";
+            const isRejected = u.status === "rejected";
+            const photoURL = photos[u.id];
+            const initials = (u.name || u.id || "?").split(" ").map(w => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
 
-          return (
-            <Card key={u.id}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
-                    <span style={{ fontWeight: 700, fontSize: 14 }}>{u.name || "—"}</span>
-                    {isAdmin && <Badge color="blue">Admin</Badge>}
-                    {isPending && <Badge color="amber">Pending</Badge>}
-                    {isRejected && <Badge color="red">Rejected</Badge>}
-                    {!isAdmin && !isPending && !isRejected && <Badge color="green">Faculty</Badge>}
+            return (
+              <div key={u.id} style={{
+                background: "#fff", border: "1.5px solid " + P.border, borderRadius: 14,
+                padding: "18px 14px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center",
+              }}>
+                <div style={{
+                  width: 64, height: 64, borderRadius: 14, overflow: "hidden", marginBottom: 10, flexShrink: 0,
+                  background: photoURL ? "transparent" : P.blueL,
+                  display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 800, color: P.blue,
+                }}>
+                  {photoURL ? <img src={photoURL} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : initials}
+                </div>
+
+                <div style={{ fontWeight: 700, fontSize: 14 }}>{u.name || "—"}</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center", margin: "6px 0" }}>
+                  {isAdmin && <Badge color="blue">Admin</Badge>}
+                  {isPending && <Badge color="amber">Pending</Badge>}
+                  {isRejected && <Badge color="red">Rejected</Badge>}
+                  {!isAdmin && !isPending && !isRejected && <Badge color="green">Faculty</Badge>}
+                </div>
+
+                <div style={{ fontSize: 12, color: P.gray }}>{u.designation}{u.designation && u.branch ? " · " : ""}{u.branch}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: P.gray, fontFamily: "'IBM Plex Mono', monospace" }}>
+                  <IconPhone size={11} color={P.gray} /> {u.phone}
+                </div>
+                {u.subjects && <div style={{ fontSize: 12, color: P.gray, marginTop: 2 }}>{u.subjects}</div>}
+                {u.status === "approved" && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: "50%", background: u.pin ? P.green : P.amber, flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, color: P.gray }}>{u.pin ? "PIN set" : "No PIN yet"}</span>
                   </div>
-                  <div style={{ fontSize: 12, color: P.gray }}>{u.designation} · {u.branch}</div>
-                  <div style={{ fontSize: 12, color: P.gray }}>📱 {u.phone}</div>
-                  {u.subjects && <div style={{ fontSize: 12, color: P.gray, marginTop: 2 }}>Subjects: {u.subjects}</div>}
-                  {u.status === "approved" && (
-                    <div style={{ marginTop: 4 }}>
-                      {u.pin ? <Badge color="green">🔒 PIN set</Badge> : <Badge color="amber">No PIN yet</Badge>}
-                    </div>
-                  )}
-                </div>
-              </div>
+                )}
 
-              {/* Action buttons */}
-              {!isCurrentUser && (
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {isPending && (
-                    <>
-                      <Btn small variant="success" onClick={() => onApprove(u.id)}>✓ Approve</Btn>
-                      <Btn small variant="danger"  onClick={() => onReject(u.id)}>✗ Reject</Btn>
-                    </>
-                  )}
-                  {isRejected && (
-                    <Btn small variant="outline" onClick={() => onApprove(u.id)}>Re-approve</Btn>
-                  )}
-                  {isMaster && !isPending && !isRejected && (
-                    isAdmin
-                      ? <Btn small variant="ghost" onClick={() => onMakeFaculty(u.id)}>↓ Demote to Faculty</Btn>
-                      : u.role === "hod"
-                      ? <Btn small variant="ghost" onClick={() => onMakeFaculty(u.id)}>↓ Remove HoD role</Btn>
-                      : <Btn small variant="accent" onClick={() => onMakeAdmin(u.id)}>↑ Make Admin</Btn>
-                  )}
-                  {isMaster && !isPending && !isRejected && u.role !== "hod" && (
-                    <Btn small variant="outline" onClick={() => onMakeHod(u.id)}>👑 Make HoD</Btn>
-                  )}
-                  {u.status === "approved" && u.pin && (
-                    <Btn small variant="ghost" onClick={() => { if (window.confirm("Reset PIN for " + u.name + "? They will be asked to set a new PIN on next login.")) onResetPin(u.id); }}>
-                      🔄 Reset PIN
-                    </Btn>
-                  )}
-                  {isMaster && (
-                    <button
-                      onClick={() => onDelete(u.id, u.name)}
-                      style={{ background: P.redL, border: "none", color: P.red, borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
-                      title="Delete user"
-                    >🗑 Delete</button>
-                  )}
-                </div>
-              )}
-              {isCurrentUser && (
-                <div style={{ fontSize: 12, color: P.gray, fontStyle: "italic" }}>This is you</div>
-              )}
-            </Card>
-          );
-        })}
+                {/* Action buttons */}
+                {!isCurrentUser ? (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center", marginTop: 12 }}>
+                    {isPending && (
+                      <>
+                        <Btn small variant="success" onClick={() => onApprove(u.id)}>Approve</Btn>
+                        <Btn small variant="danger"  onClick={() => onReject(u.id)}>Reject</Btn>
+                      </>
+                    )}
+                    {isRejected && (
+                      <Btn small variant="outline" onClick={() => onApprove(u.id)}>Re-approve</Btn>
+                    )}
+                    {isMaster && !isPending && !isRejected && (
+                      isAdmin
+                        ? <Btn small variant="ghost" onClick={() => onMakeFaculty(u.id)}>Demote to Faculty</Btn>
+                        : u.role === "hod"
+                        ? <Btn small variant="ghost" onClick={() => onMakeFaculty(u.id)}>Remove HoD role</Btn>
+                        : <Btn small variant="primary" onClick={() => onMakeAdmin(u.id)}>Make Admin</Btn>
+                    )}
+                    {isMaster && !isPending && !isRejected && u.role !== "hod" && (
+                      <Btn small variant="outline" onClick={() => onMakeHod(u.id)}>Make HoD</Btn>
+                    )}
+                    {u.status === "approved" && u.pin && (
+                      <Btn small variant="ghost" onClick={() => { if (window.confirm("Reset PIN for " + u.name + "? They will be asked to set a new PIN on next login.")) onResetPin(u.id); }}>
+                        Reset PIN
+                      </Btn>
+                    )}
+                    {isMaster && (
+                      <button
+                        onClick={() => onDelete(u.id, u.name)}
+                        style={{ background: "transparent", border: "none", color: P.red, borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "inherit" }}
+                        title="Delete user"
+                      >Delete</button>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, color: P.gray, fontStyle: "italic", marginTop: 12 }}>This is you</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -32058,6 +32097,7 @@ import MentorPage from "./mentor/MentorPage";
 import InternalMarksPage from "./marks/InternalMarksPage";
 import FacultyProfilePage from "./profile/FacultyProfilePage";
 import HomeShell from "./components/HomeShell";
+import { IconAttendance, IconMarks, IconMentor, IconUserCircle } from "./components/Icons";
 
 export default function FacultyApp({ user, onLogout, hideShell = false, initialTab = "attendance" }) {
   const [sections, setSections]     = useState([]);
@@ -32099,13 +32139,12 @@ export default function FacultyApp({ user, onLogout, hideShell = false, initialT
         <HomeShell
           user={user}
           onLogout={onLogout}
-          theme="faculty"
           roleLabel={user.designation || "Faculty"}
           tabs={[
-            { id: "attendance", label: "My section attendance", icon: "📋", color: "teal" },
-            { id: "marks", label: "Internal marks", icon: "📝", color: "blue" },
-            { id: "mentor", label: "Mentor", icon: "🎓", color: "purple" },
-            { id: "profile", label: "My profile", icon: "👤", color: "pink" },
+            { id: "attendance", label: "My section attendance", icon: IconAttendance },
+            { id: "marks", label: "Internal marks", icon: IconMarks },
+            { id: "mentor", label: "Mentor", icon: IconMentor },
+            { id: "profile", label: "My profile", icon: IconUserCircle },
           ]}
           active={mainTab}
           onSelect={t => { setMainTab(t); setScreen("home"); }}
@@ -32685,7 +32724,7 @@ export const storage = getStorage(app);
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+  font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -32693,7 +32732,7 @@ body {
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+  font-family: 'IBM Plex Mono', source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
 
@@ -32984,14 +33023,18 @@ import '@testing-library/jest-dom';
 // Used by both AdminApp.js and HoDApp.jsx so HoD's Users tab behaves
 // identically to the admin one, with no duplicated logic.
 
-import { doc, updateDoc, deleteDoc } from "firebase/firestore";
+import { doc, updateDoc, deleteDoc, deleteField } from "firebase/firestore";
 import { db } from "./firebase";
 
 export async function approveUser(phone) {
   await updateDoc(doc(db, "users", phone), { status: "approved" });
 }
 export async function resetPin(phone) {
-  await updateDoc(doc(db, "users", phone), { pin: "" });
+  // Must fully REMOVE the field, not set it to "" — the Firestore rule that
+  // lets a not-yet-logged-in user set their own new PIN only fires when the
+  // pin field is entirely absent (!('pin' in resource.data)). Leaving an
+  // empty-string pin behind blocks them from ever completing that flow.
+  await updateDoc(doc(db, "users", phone), { pin: deleteField() });
 }
 export async function rejectUser(phone) {
   await updateDoc(doc(db, "users", phone), { status: "rejected" });
@@ -33351,36 +33394,17 @@ export function exportXLS(section, sectionAtt) {
 
 // src/components/HomeShell.jsx
 // Shared dashboard shell used by Faculty, Admin/Coordinator, HoD and
-// Master Admin home pages: professional colored header with the user's
-// photo + name top-left, Logout top-right, and a centered row of big
-// colorful pill tabs below.
+// Master Admin home pages: one flat, consistent header (role is shown as
+// text, not a different color per role) with the user's photo + name
+// top-left, Logout top-right, and an underline-style tab row below.
 
 import React, { useState, useEffect } from "react";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
+import { P } from "./UI";
+import { IconStar, IconLogout } from "./Icons";
 
-// Per-role header themes (cool, professional palettes)
-export const SHELL_THEMES = {
-  faculty: { header: "linear-gradient(135deg,#3B8C82,#2F7268)", accent: "#0F6E56", nameText: "#ffffff", subText: "#D6F0EC", border: "#8FCFC5" },
-  admin:   { header: "linear-gradient(135deg,#4A72B8,#3B5D9C)", accent: "#185FA5", nameText: "#ffffff", subText: "#DCE7F7", border: "#9DB9E3" },
-  hod:     { header: "linear-gradient(135deg,#8266C4,#6C51AE)", accent: "#6D28D9", nameText: "#ffffff", subText: "#E6DFF7", border: "#C3B2E8" },
-  master:  { header: "linear-gradient(135deg,#38BDF8,#0EA5E9)", accent: "#0284C7", nameText: "#ffffff", subText: "#E0F5FF", border: "#BAE6FD" },
-};
-
-// Pill color sets — light bg + dark text when inactive, solid + white when active
-export const PILL_COLORS = {
-  teal:   { bg: "#ccfbf1", fg: "#134e4a", solid: "#0f766e" },
-  blue:   { bg: "#dbeafe", fg: "#1e3a8a", solid: "#1d4ed8" },
-  purple: { bg: "#ede9fe", fg: "#4c1d95", solid: "#6d28d9" },
-  amber:  { bg: "#fef3c7", fg: "#78350f", solid: "#b45309" },
-  pink:   { bg: "#fce7f3", fg: "#831843", solid: "#be185d" },
-  coral:  { bg: "#ffedd5", fg: "#7c2d12", solid: "#c2410c" },
-  green:  { bg: "#dcfce7", fg: "#14532d", solid: "#15803d" },
-  slate:  { bg: "#e2e8f0", fg: "#1e293b", solid: "#475569" },
-};
-
-export default function HomeShell({ user, onLogout, theme = "faculty", roleLabel, tabs, active, onSelect, masterStar }) {
-  const t = SHELL_THEMES[theme] || SHELL_THEMES.faculty;
+export default function HomeShell({ user, onLogout, roleLabel, tabs, active, onSelect, masterStar }) {
   const [photoURL, setPhotoURL] = useState("");
   const [imgFailed, setImgFailed] = useState(false);
 
@@ -33407,63 +33431,61 @@ export default function HomeShell({ user, onLogout, theme = "faculty", roleLabel
 
   return (
     <div>
-      {/* ── Header bar ── */}
-      <div style={{ background: t.header, padding: "18px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 30 }}>
+      {/* ── Header bar — one consistent navy, every role ── */}
+      <div style={{ background: P.navy, padding: "0 24px", height: 60, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 30 }}>
         <div
           onClick={() => onSelect("profile")}
           title="Go to My Profile"
-          style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0, cursor: "pointer" }}
+          style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0, cursor: "pointer" }}
         >
           <div style={{
-            width: 92, height: 92, borderRadius: 18, flexShrink: 0,
-            background: (photoURL && !imgFailed) ? "transparent" : t.accent,
-            border: "3px solid " + t.border, boxShadow: "0 3px 10px rgba(0,0,0,0.18)",
+            width: 36, height: 36, borderRadius: 9, flexShrink: 0,
+            background: (photoURL && !imgFailed) ? "transparent" : P.blue,
             display: "flex", alignItems: "center", justifyContent: "center",
-            color: t.nameText, fontWeight: 700, fontSize: 30, overflow: "hidden",
+            color: "#fff", fontWeight: 700, fontSize: 13, overflow: "hidden",
           }}>
             {photoURL && !imgFailed ? (
               <img
                 src={photoURL}
                 alt=""
-                onError={() => { console.error("HomeShell: profile photo failed to load:", photoURL); setImgFailed(true); }}
+                onError={() => setImgFailed(true)}
                 style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
               />
             ) : initials}
           </div>
           <div style={{ minWidth: 0 }}>
-            <div style={{ color: t.nameText, fontWeight: 700, fontSize: 19, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {user.name} {masterStar && <span title="Master Admin">⭐</span>}
+            <div style={{ color: "#fff", fontWeight: 600, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "flex", alignItems: "center", gap: 6 }}>
+              {user.name}
+              {masterStar && <IconStar size={12} filled color="#e8b23d" />}
             </div>
-            <div style={{ color: t.subText, fontSize: 13.5, fontWeight: 600 }}>{roleLabel}</div>
+            <div style={{ color: "rgba(255,255,255,0.68)", fontSize: 11.5 }}>{roleLabel}</div>
           </div>
         </div>
         <button onClick={onLogout}
-          style={{ background: "rgba(255,255,255,0.15)", color: t.nameText, border: "1.5px solid " + t.border, borderRadius: 9, padding: "8px 18px", cursor: "pointer", fontSize: 13.5, fontWeight: 700, fontFamily: "inherit", flexShrink: 0 }}>
+          style={{ display: "flex", alignItems: "center", gap: 7, background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.85)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 7, padding: "7px 14px", cursor: "pointer", fontSize: 12.5, fontWeight: 600, fontFamily: "inherit", flexShrink: 0 }}>
+          <IconLogout size={14} />
           Logout
         </button>
       </div>
 
-      {/* ── Centered colorful pill tabs ── */}
-      <div style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", padding: "16px 14px" }}>
-        <div style={{ display: "flex", justifyContent: "center", gap: 10, flexWrap: "wrap", maxWidth: 980, margin: "0 auto" }}>
+      {/* ── Underline tabs — single accent, neutral otherwise ── */}
+      <div style={{ background: "#fff", borderBottom: "1px solid " + P.border, padding: "0 20px" }}>
+        <div style={{ display: "flex", gap: 26, flexWrap: "wrap", maxWidth: 1100, margin: "0 auto" }}>
           {tabs.map(tab => {
-            const c = PILL_COLORS[tab.color] || PILL_COLORS.slate;
             const isActive = active === tab.id;
+            const Icon = typeof tab.icon === "function" ? tab.icon : null;
             return (
               <button key={tab.id} onClick={() => onSelect(tab.id)}
                 style={{
-                  display: "flex", alignItems: "center", gap: 8,
-                  background: isActive ? c.solid : c.bg,
-                  color: isActive ? "#fff" : c.fg,
-                  border: "none", borderRadius: 26, cursor: "pointer", fontFamily: "inherit",
-                  fontSize: 14.5, fontWeight: 700, padding: "12px 20px",
-                  boxShadow: isActive ? "0 4px 14px rgba(0,0,0,0.22)" : "none",
-                  transition: "transform .12s, box-shadow .12s",
+                  display: "flex", alignItems: "center", gap: 7,
+                  background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit",
+                  fontSize: 13.5, fontWeight: isActive ? 600 : 500,
+                  color: isActive ? P.blue : P.gray,
+                  padding: "12px 2px 10px", borderBottom: "2.5px solid " + (isActive ? P.blue : "transparent"),
                 }}
-                onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; }}
-                onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; }}
               >
-                <span style={{ fontSize: 16 }}>{tab.icon}</span> {tab.label}
+                {Icon ? <Icon size={16} /> : <span style={{ fontSize: 15 }}>{tab.icon}</span>}
+                {tab.label}
               </button>
             );
           })}
@@ -33477,37 +33499,98 @@ export default function HomeShell({ user, onLogout, theme = "faculty", roleLabel
 === END_FILE: .\src\components\HomeShell.jsx ===
 
 
+=== START_FILE: .\src\components\Icons.jsx ===
+
+// src/components/Icons.jsx
+// A small, consistent outline-icon set (24x24, stroke-based) used in place
+// of emoji across the app's navigation, stat cards and buttons. Every icon
+// takes the same {size, color, style} props so callers can drop any of
+// them in wherever an emoji string used to go.
+
+import React from "react";
+
+function Base({ size = 18, color = "currentColor", style, children }) {
+  return (
+    <svg
+      width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      style={{ flexShrink: 0, ...style }}
+    >
+      {children}
+    </svg>
+  );
+}
+
+export const IconSections = (p) => <Base {...p}><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></Base>;
+export const IconAttendance = (p) => <Base {...p}><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3V2a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/><polyline points="8.5 12.5 10.5 14.5 15 10"/></Base>;
+export const IconBuilding = (p) => <Base {...p}><rect x="4" y="2" width="16" height="20" rx="1"/><line x1="8" y1="6" x2="8" y2="6.01"/><line x1="12" y1="6" x2="12" y2="6.01"/><line x1="16" y1="6" x2="16" y2="6.01"/><line x1="8" y1="10" x2="8" y2="10.01"/><line x1="12" y1="10" x2="12" y2="10.01"/><line x1="16" y1="10" x2="16" y2="10.01"/><line x1="8" y1="14" x2="8" y2="14.01"/><line x1="12" y1="14" x2="12" y2="14.01"/><line x1="16" y1="14" x2="16" y2="14.01"/><line x1="10" y1="22" x2="10" y2="18"/><line x1="14" y1="22" x2="14" y2="18"/></Base>;
+export const IconMarks = (p) => <Base {...p}><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></Base>;
+export const IconMentor = (p) => <Base {...p}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></Base>;
+export const IconTrash = (p) => <Base {...p}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></Base>;
+export const IconUsers = (p) => <Base {...p}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></Base>;
+export const IconUserCircle = (p) => <Base {...p}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></Base>;
+export const IconDocument = (p) => <Base {...p}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></Base>;
+export const IconWorkshop = (p) => <Base {...p}><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></Base>;
+export const IconConference = (p) => <Base {...p}><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></Base>;
+export const IconProject = (p) => <Base {...p}><path d="M10 2v6.5L4.5 19a1 1 0 0 0 .9 1.5h13.2a1 1 0 0 0 .9-1.5L14 8.5V2"/><line x1="8.5" y1="2" x2="15.5" y2="2"/><line x1="7" y1="15" x2="17" y2="15"/></Base>;
+export const IconExperience = (p) => <Base {...p}><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></Base>;
+export const IconGraduation = (p) => <Base {...p}><path d="M22 10L12 5 2 10l10 5 10-5z"/><path d="M6 12v5c0 1.5 3 3 6 3s6-1.5 6-3v-5"/></Base>;
+export const IconStar = (p) => <Base {...p} fill={p.filled ? (p.color || "currentColor") : "none"}><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.7 6.9L12 17.3 5.7 20.8l1.7-6.9L2 9.2l7.1-.6z"/></Base>;
+export const IconLogout = (p) => <Base {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></Base>;
+export const IconPlus = (p) => <Base {...p} strokeWidth="2.25"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></Base>;
+export const IconChevronLeft = (p) => <Base {...p} strokeWidth="2.25"><polyline points="15 18 9 12 15 6"/></Base>;
+export const IconMail = (p) => <Base {...p}><rect x="2" y="4" width="20" height="16" rx="2"/><polyline points="22 6 12 13 2 6"/></Base>;
+export const IconPhone = (p) => <Base {...p}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></Base>;
+export const IconIdCard = (p) => <Base {...p}><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 2v4M17 2v4M3 10h18"/></Base>;
+export const IconCalendar = (p) => <Base {...p}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></Base>;
+export const IconResearch = (p) => <Base {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></Base>;
+export const IconSearch = (p) => <Base {...p}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></Base>;
+export const IconClock = (p) => <Base {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></Base>;
+export const IconDownload = (p) => <Base {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></Base>;
+export const IconCamera = (p) => <Base {...p}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></Base>;
+export const IconSync = (p) => <Base {...p}><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></Base>;
+
+
+=== END_FILE: .\src\components\Icons.jsx ===
+
+
 === START_FILE: .\src\components\UI.js ===
 
 // src/components/UI.js — shared UI components
 
 import React from "react";
 
+// Professional palette: one restrained primary (deep blue), a muted
+// secondary accent, neutral grays, and semantic colors reserved for real
+// status (success/warning/danger) rather than decoration. Key names are
+// kept stable on purpose — dozens of call sites reference these — only the
+// values were refreshed.
 export const P = {
-  blue:"#1a56a0",  blueL:"#dbeafe",
-  teal:"#0e7490",  tealL:"#cffafe",
-  green:"#166534", greenL:"#dcfce7",
-  red:"#b91c1c",   redL:"#fee2e2",
-  amber:"#92400e", amberL:"#fef3c7",
-  gray:"#6b7280",  border:"#e5e7eb",
-  bg:"#f8fafc",    white:"#ffffff",
+  blue:"#2c5c94",  blueL:"#e6eef7",
+  teal:"#3f6b6f",  tealL:"#e7eeee",
+  green:"#1f7a4d", greenL:"#e5f4ea",
+  red:"#b3392f",   redL:"#fbe9e7",
+  amber:"#a15c07", amberL:"#faf0dd",
+  gray:"#5b6673",  border:"#dde2e8",
+  bg:"#f7f9fb",    white:"#ffffff",
+  navy:"#16324f",
 };
 
 export function Btn({ children, onClick, variant = "primary", small, full, disabled, style = {} }) {
   const variants = {
-    primary: { background: P.blue,  color: "#fff", border: "none" },
-    accent:  { background: P.teal,  color: "#fff", border: "none" },
-    success: { background: P.green, color: "#fff", border: "none" },
-    danger:  { background: P.red,   color: "#fff", border: "none" },
+    primary: { background: P.blue,  color: "#fff", border: "1px solid " + P.blue },
+    accent:  { background: P.teal,  color: "#fff", border: "1px solid " + P.teal },
+    success: { background: P.green, color: "#fff", border: "1px solid " + P.green },
+    danger:  { background: P.red,   color: "#fff", border: "1px solid " + P.red },
     outline: { background: "transparent", color: P.blue, border: "1.5px solid " + P.blue },
-    ghost:   { background: P.border, color: P.gray, border: "none" },
+    ghost:   { background: "transparent", color: P.gray, border: "1px solid " + P.border },
   };
   return (
     <button
       onClick={disabled ? undefined : onClick}
       style={{
         borderRadius: 8, cursor: disabled ? "not-allowed" : "pointer",
-        fontFamily: "inherit", fontWeight: 500,
+        fontFamily: "inherit", fontWeight: 600,
         fontSize: small ? 13 : 14,
         padding: small ? "7px 14px" : "10px 20px",
         width: full ? "100%" : undefined,
@@ -33530,7 +33613,7 @@ export function Card({ children, style = {}, onClick }) {
         background: P.white, border: "1px solid " + P.border,
         borderRadius: 12, padding: "14px 16px", marginBottom: 10,
         cursor: onClick ? "pointer" : "default",
-        boxShadow: onClick ? "0 1px 4px rgba(0,0,0,0.06)" : "none",
+        boxShadow: onClick ? "0 1px 3px rgba(15,37,64,0.07)" : "none",
         ...style,
       }}
     >
@@ -33795,6 +33878,7 @@ import HomeShell from "../components/HomeShell";
 import { UsersScreen } from "../AdminApp";
 import { approveUser, rejectUser, makeAdmin, makeFaculty, makeHod, deleteUser, resetPin } from "../userActions";
 import { P } from "../components/UI";
+import { IconAttendance, IconSearch, IconUsers, IconUserCircle } from "../components/Icons";
 
 export default function HoDApp({ user, onLogout }) {
   const [tab, setTab] = useState("studentData");
@@ -33814,7 +33898,7 @@ export default function HoDApp({ user, onLogout }) {
       <div style={{ position: "relative" }}>
         <HoDStudentLookup user={user} onLogout={onLogout} />
         <button onClick={() => setTab("studentData")}
-          style={{ position: "fixed", bottom: 20, right: 20, zIndex: 1000, background: "#2E1065", color: "#fff", border: "none", borderRadius: 30, padding: "13px 22px", fontSize: 14, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 14px rgba(0,0,0,0.3)", fontFamily: "inherit" }}>
+          style={{ position: "fixed", bottom: 20, right: 20, zIndex: 1000, background: P.navy, color: "#fff", border: "none", borderRadius: 10, padding: "13px 22px", fontSize: 14, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 14px rgba(0,0,0,0.3)", fontFamily: "inherit" }}>
           ← Back to dashboard
         </button>
       </div>
@@ -33826,14 +33910,13 @@ export default function HoDApp({ user, onLogout }) {
       <HomeShell
         user={user}
         onLogout={onLogout}
-        theme="hod"
         roleLabel="Head of Department"
         tabs={[
-          { id: "myAttendance", label: "My section attendance", icon: "📋", color: "purple" },
-          { id: "studentData", label: "Student data", icon: "🔍", color: "green" },
-          { id: "profiles", label: "Faculty profiles", icon: "🧑‍🏫", color: "coral" },
-          { id: "users", label: "Users", icon: "👥", color: "slate" },
-          { id: "profile", label: "My profile", icon: "👤", color: "pink" },
+          { id: "myAttendance", label: "My section attendance", icon: IconAttendance },
+          { id: "studentData", label: "Student data", icon: IconSearch },
+          { id: "profiles", label: "Faculty profiles", icon: IconUsers },
+          { id: "users", label: "Users", icon: IconUsers },
+          { id: "profile", label: "My profile", icon: IconUserCircle },
         ]}
         active={tab}
         onSelect={setTab}
@@ -34499,7 +34582,7 @@ function CellInput({ value, onChange, readOnly, warn }) {
       onChange={e => onChange(e.target.value === "" ? "" : Number(e.target.value))}
       readOnly={readOnly}
       style={{
-        width: 36, height: 28, border: readOnly ? "1px solid #e0e0e0" : "1px solid #b0c4de",
+        width: 32, height: 30, border: readOnly ? "1px solid #e0e0e0" : "1px solid #b0c4de",
         borderRadius: 4, textAlign: "center", fontSize: 14, fontWeight: 600,
         background: readOnly ? "#f5f5f5" : warn ? "#fee2e2" : "#fff",
         color: readOnly ? "#888" : "#222",
@@ -34512,7 +34595,7 @@ function CellInput({ value, onChange, readOnly, warn }) {
 
 function AutoCell({ value }) {
   return (
-    <td style={{ padding: "3px 5px", textAlign: "center", fontWeight: 600, fontSize: 11, background: "#E6F1FB", color: "#185FA5", border: "0.5px solid #d0e4f8" }}>
+    <td style={{ padding: "3px 6px", textAlign: "center", fontWeight: 600, fontSize: 13, background: "#E6F1FB", color: "#185FA5", border: "0.5px solid #d0e4f8" }}>
       {value !== "" ? value : ""}
     </td>
   );
@@ -34520,7 +34603,7 @@ function AutoCell({ value }) {
 
 function GrandCell({ value }) {
   return (
-    <td style={{ padding: "3px 5px", textAlign: "center", fontWeight: 600, fontSize: 12, background: "#EEEDFE", color: "#26215C", border: "0.5px solid #c5c2f0" }}>
+    <td style={{ padding: "3px 6px", textAlign: "center", fontWeight: 600, fontSize: 14, background: "#EEEDFE", color: "#26215C", border: "0.5px solid #c5c2f0" }}>
       {value !== "" ? value : ""}
     </td>
   );
@@ -34529,33 +34612,34 @@ function GrandCell({ value }) {
 // ── Theory MID sheet ──────────────────────────────────────────────────────────
 function TheoryMidSheet({ students, midData, onChange, locked }) {
   const td = { border: "0.5px solid var(--border)", padding: 0, textAlign: "center" };
-  const th = (bg, color) => ({ padding: "4px 5px", textAlign: "center", fontWeight: 500, fontSize: 11, background: bg, color: color, border: "0.5px solid var(--border)", whiteSpace: "nowrap" });
+  const th = (bg, color, width) => ({ padding: "6px 4px", textAlign: "center", fontWeight: 600, fontSize: 12.5, background: bg, color: color, border: "0.5px solid var(--border)", whiteSpace: "nowrap", width });
 
   function get(roll, field) { return midData?.[roll]?.[field] ?? ""; }
   function set(roll, field, val) { onChange(roll, field, val); }
 
   return (
     <div style={{ overflowX: "auto" }}>
-      <table style={{ borderCollapse: "collapse", fontSize: 11, minWidth: 700 }}>
+      <table style={{ borderCollapse: "collapse", fontSize: 12.5, width: "100%", minWidth: 900 }}>
         <thead>
           <tr>
-            <th rowSpan={2} style={th("var(--surface-1)", "var(--text-muted)")}>Roll</th>
-            <th rowSpan={2} style={{ ...th("var(--surface-1)", "var(--text-muted)"), textAlign: "left", minWidth: 100 }}>Name</th>
+            <th rowSpan={2} style={th("var(--surface-1)", "var(--text-muted)", 56)}>Roll</th>
+            <th rowSpan={2} style={{ ...th("var(--surface-1)", "var(--text-muted)", 130), textAlign: "left" }}>Name</th>
             <th colSpan={6} style={th("#E1F5EE", "#085041")}>Part A (max 10)</th>
-            <th colSpan={19} style={th("#E6F1FB", "#0C447C")}>Part B — best of pairs → converted to 15</th>
-            <th rowSpan={2} style={th("#EEEDFE", "#534AB7")}>Total (25)</th>
+            <th colSpan={18} style={th("#E6F1FB", "#0C447C")}>Part B — best of pairs</th>
+            <th rowSpan={2} style={{ ...th("#FDE8D2", "#8A4A10", 56), lineHeight: 1.2 }}>Part B<br/>(30)</th>
+            <th rowSpan={2} style={{ ...th("#85B7EB","#042C53", 56), lineHeight: 1.2 }}>Cvt<br/>(15)</th>
+            <th rowSpan={2} style={{ ...th("#EEEDFE", "#534AB7", 56), lineHeight: 1.2 }}>Total<br/>(25)</th>
           </tr>
           <tr>
-            {["1A","1B","1C","1D","1E"].map(l => <th key={l} style={th("#E1F5EE","#0F6E56")}>{l}</th>)}
-            <th style={th("#9FE1CB","#085041")}>A</th>
+            {["1A","1B","1C","1D","1E"].map(l => <th key={l} style={th("#E1F5EE","#0F6E56", 34)}>{l}</th>)}
+            <th style={th("#9FE1CB","#085041", 34)}>A</th>
             {[2,3,4,5,6,7].map(n => (
               <>
-                <th key={`${n}a`} style={th("#E6F1FB","#185FA5")}>{n}A</th>
-                <th key={`${n}b`} style={th("#E6F1FB","#185FA5")}>{n}B</th>
-                <th key={`q${n}`} style={th("#B5D4F4","#0C447C")}>Q{n}</th>
+                <th key={`${n}a`} style={th("#E6F1FB","#185FA5", 34)}>{n}A</th>
+                <th key={`${n}b`} style={th("#E6F1FB","#185FA5", 34)}>{n}B</th>
+                <th key={`q${n}`} style={th("#B5D4F4","#0C447C", 38)}>Q{n}</th>
               </>
             ))}
-            <th style={th("#85B7EB","#042C53")}>Cvt</th>
           </tr>
         </thead>
         <tbody>
@@ -34563,12 +34647,13 @@ function TheoryMidSheet({ students, midData, onChange, locked }) {
             const m = midData?.[st.roll] || {};
             const pA = calcPartA(m);
             const qs = [2,3,4,5,6,7].map(n => calcQ(m[`b${n}a`], m[`b${n}b`]));
+            const pBraw = calcPartBRaw(m);
             const pBc = Math.round(calcPartBConv(m) * 10) / 10;
             const total = Math.round(pA + pBc);
             return (
               <tr key={st.roll} style={{ background: i % 2 === 0 ? "transparent" : "var(--surface-1)" }}>
-                <td style={{ ...td, padding: "3px 6px", fontSize: 10, whiteSpace: "nowrap" }}>{st.roll}</td>
-                <td style={{ ...td, padding: "3px 6px", textAlign: "left", whiteSpace: "nowrap" }}>{st.name || ""}</td>
+                <td style={{ ...td, padding: "5px 6px", fontSize: 12, whiteSpace: "nowrap" }}>{st.roll}</td>
+                <td style={{ ...td, padding: "5px 8px", textAlign: "left", whiteSpace: "nowrap", fontSize: 13.5 }}>{st.name || ""}</td>
                 {["a1","a2","a3","a4","a5"].map(f => (
                   <td key={f} style={td}>
                     <CellInput value={get(st.roll, f)} onChange={v => set(st.roll, f, v)} readOnly={locked} />
@@ -34582,6 +34667,9 @@ function TheoryMidSheet({ students, midData, onChange, locked }) {
                     <AutoCell key={`q${n}`} value={qs[qi] || ""} />
                   </>
                 ))}
+                <td style={{ padding: "3px 6px", textAlign: "center", fontWeight: 700, fontSize: 13, background: "#FDE8D2", color: "#8A4A10", border: "0.5px solid #f3d3a8" }}>
+                  {pBraw || ""}
+                </td>
                 <AutoCell value={pBc || ""} />
                 <GrandCell value={total || ""} />
               </tr>
@@ -34596,30 +34684,30 @@ function TheoryMidSheet({ students, midData, onChange, locked }) {
 // ── Drawing MID sheet ─────────────────────────────────────────────────────────
 function DrawingMidSheet({ students, midData, onChange, locked }) {
   const td = { border: "0.5px solid var(--border)", padding: 0, textAlign: "center" };
-  const th = (bg, color) => ({ padding: "4px 5px", textAlign: "center", fontWeight: 500, fontSize: 11, background: bg, color: color, border: "0.5px solid var(--border)", whiteSpace: "nowrap" });
+  const th = (bg, color, width) => ({ padding: "6px 6px", textAlign: "center", fontWeight: 600, fontSize: 13, background: bg, color: color, border: "0.5px solid var(--border)", whiteSpace: "nowrap", width });
 
   function get(roll, field) { return midData?.[roll]?.[field] ?? ""; }
   function set(roll, field, val) { onChange(roll, field, val); }
 
   return (
     <div style={{ overflowX: "auto" }}>
-      <table style={{ borderCollapse: "collapse", fontSize: 11, minWidth: 500 }}>
+      <table style={{ borderCollapse: "collapse", fontSize: 13, width: "100%", minWidth: 700 }}>
         <thead>
           <tr>
-            <th rowSpan={2} style={th("var(--surface-1)", "var(--text-muted)")}>Roll</th>
-            <th rowSpan={2} style={{ ...th("var(--surface-1)", "var(--text-muted)"), textAlign: "left", minWidth: 100 }}>Name</th>
+            <th rowSpan={2} style={th("var(--surface-1)", "var(--text-muted)", 70)}>Roll</th>
+            <th rowSpan={2} style={{ ...th("var(--surface-1)", "var(--text-muted)"), textAlign: "left" }}>Name</th>
             <th colSpan={13} style={th("#E6F1FB","#0C447C")}>Q1–Q6 · best of (Q1,Q2) + best of (Q3,Q4) + best of (Q5,Q6) → max 30 → converted to 15</th>
-            <th rowSpan={2} style={th("#EEEDFE","#534AB7")}>MID (15)</th>
+            <th rowSpan={2} style={th("#EEEDFE","#534AB7", 70)}>MID (15)</th>
           </tr>
           <tr>
             {[1,2,3,4,5,6].map(n => (
               <>
-                <th key={`${n}a`} style={th("#E6F1FB","#185FA5")}>{n}A</th>
-                <th key={`${n}b`} style={th("#E6F1FB","#185FA5")}>{n}B</th>
-                <th key={`q${n}`} style={th("#B5D4F4","#0C447C")}>Q{n}</th>
+                <th key={`${n}a`} style={th("#E6F1FB","#185FA5", 54)}>{n}A</th>
+                <th key={`${n}b`} style={th("#E6F1FB","#185FA5", 54)}>{n}B</th>
+                <th key={`q${n}`} style={th("#B5D4F4","#0C447C", 54)}>Q{n}</th>
               </>
             ))}
-            <th style={th("#85B7EB","#042C53")}>Cvt</th>
+            <th style={th("#85B7EB","#042C53", 60)}>Cvt</th>
           </tr>
         </thead>
         <tbody>
@@ -34629,8 +34717,8 @@ function DrawingMidSheet({ students, midData, onChange, locked }) {
             const conv = Math.round(calcDrawingMidConv(m) * 10) / 10;
             return (
               <tr key={st.roll} style={{ background: i % 2 === 0 ? "transparent" : "var(--surface-1)" }}>
-                <td style={{ ...td, padding: "3px 6px", fontSize: 10, whiteSpace: "nowrap" }}>{st.roll}</td>
-                <td style={{ ...td, padding: "3px 6px", textAlign: "left" }}>{st.name || ""}</td>
+                <td style={{ ...td, padding: "5px 6px", fontSize: 12, whiteSpace: "nowrap" }}>{st.roll}</td>
+                <td style={{ ...td, padding: "5px 8px", textAlign: "left", fontSize: 13.5 }}>{st.name || ""}</td>
                 {[1,2,3,4,5,6].map((n, qi) => (
                   <>
                     <td key={`${n}a`} style={td}><CellInput value={get(st.roll, `b${n}a`)} onChange={v => set(st.roll, `b${n}a`, v)} readOnly={locked} /></td>
@@ -34652,12 +34740,12 @@ function DrawingMidSheet({ students, midData, onChange, locked }) {
 // ── Lab sheet ─────────────────────────────────────────────────────────────────
 function LabSheet({ students, labData, onChange, locked }) {
   const td = { border: "0.5px solid var(--border)", padding: 0 };
-  const th = (bg, color) => ({ padding: "6px 10px", textAlign: "center", fontWeight: 500, fontSize: 12, background: bg, color: color, border: "0.5px solid var(--border)" });
+  const th = (bg, color) => ({ padding: "8px 12px", textAlign: "center", fontWeight: 600, fontSize: 14, background: bg, color: color, border: "0.5px solid var(--border)" });
   const fields = ["practical","script","viva","record"];
 
   return (
     <div style={{ overflowX: "auto" }}>
-      <table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%" }}>
+      <table style={{ borderCollapse: "collapse", fontSize: 14, width: "100%" }}>
         <thead>
           <tr>
             <th style={th("var(--surface-1)","var(--text-muted)")}>Roll No</th>
@@ -34673,17 +34761,17 @@ function LabSheet({ students, labData, onChange, locked }) {
             const over = total > LAB_MAX_TOTAL;
             return (
               <tr key={st.roll} style={{ background: i % 2 === 0 ? "transparent" : "var(--surface-1)" }}>
-                <td style={{ ...td, padding: "4px 8px", fontSize: 11 }}>{st.roll}</td>
-                <td style={{ ...td, padding: "4px 8px", textAlign: "left" }}>{st.name || ""}</td>
+                <td style={{ ...td, padding: "6px 10px", fontSize: 13 }}>{st.roll}</td>
+                <td style={{ ...td, padding: "6px 10px", textAlign: "left" }}>{st.name || ""}</td>
                 {fields.map(f => (
                   <td key={f} style={{ border: "0.5px solid var(--border)", padding: 4, textAlign: "center" }}>
                     <input type="number" min="0" className="marks-input" value={m[f] ?? ""} onChange={e => onChange(st.roll, f, e.target.value === "" ? "" : Number(e.target.value))} readOnly={locked}
-                      style={{ width: 60, height: 28, border: locked ? "1px solid #e0e0e0" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 14, fontWeight: 600, background: locked ? "#f5f5f5" : "#fff", padding: 2, boxSizing: "border-box" }} />
+                      style={{ width: 70, height: 34, border: locked ? "1px solid #e0e0e0" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 16, fontWeight: 600, background: locked ? "#f5f5f5" : "#fff", padding: 2, boxSizing: "border-box" }} />
                   </td>
                 ))}
-                <td style={{ padding: "4px 8px", textAlign: "center", fontWeight: 600, fontSize: 12, background: over ? "#fee2e2" : "#E1F5EE", color: over ? "#b91c1c" : "#0F6E56", border: "0.5px solid var(--border)" }}>
+                <td style={{ padding: "6px 10px", textAlign: "center", fontWeight: 600, fontSize: 14, background: over ? "#fee2e2" : "#E1F5EE", color: over ? "#b91c1c" : "#0F6E56", border: "0.5px solid var(--border)" }}>
                   {total || ""}
-                  {over && <span style={{ fontSize: 10, display: "block" }}>Max 40</span>}
+                  {over && <span style={{ fontSize: 11, display: "block" }}>Max 40</span>}
                 </td>
               </tr>
             );
@@ -34697,13 +34785,13 @@ function LabSheet({ students, labData, onChange, locked }) {
 // ── Assignment sheet ──────────────────────────────────────────────────────────
 function AssignmentSheet({ students, assignData, onChange, locked }) {
   const td = { border: "0.5px solid var(--border)", padding: 0 };
-  const th = (bg, color) => ({ padding: "6px 10px", textAlign: "center", fontWeight: 500, fontSize: 12, background: bg, color: color, border: "0.5px solid var(--border)" });
+  const th = (bg, color) => ({ padding: "8px 12px", textAlign: "center", fontWeight: 600, fontSize: 14, background: bg, color: color, border: "0.5px solid var(--border)" });
   return (
     <div style={{ overflowX: "auto" }}>
-      <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8, padding: "0 2px" }}>
+      <div style={{ fontSize: 13.5, color: "var(--text-muted)", marginBottom: 8, padding: "0 2px" }}>
         Enter marks for each assignment (max 5 each). If only one assignment is given, leave A2 blank for all students — the system will use A1 as full marks. If A2 is entered for any student, both columns are used and the average is taken for all students.
       </div>
-      <table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%" }}>
+      <table style={{ borderCollapse: "collapse", fontSize: 14, width: "100%" }}>
         <thead>
           <tr>
             <th style={th("var(--surface-1)","var(--text-muted)")}>Roll No</th>
@@ -34717,15 +34805,15 @@ function AssignmentSheet({ students, assignData, onChange, locked }) {
             const m = assignData?.[st.roll] || {};
             return (
               <tr key={st.roll} style={{ background: i % 2 === 0 ? "transparent" : "var(--surface-1)" }}>
-                <td style={{ ...td, padding: "4px 8px", fontSize: 11 }}>{st.roll}</td>
-                <td style={{ ...td, padding: "4px 8px", textAlign: "left" }}>{st.name || ""}</td>
+                <td style={{ ...td, padding: "6px 10px", fontSize: 13 }}>{st.roll}</td>
+                <td style={{ ...td, padding: "6px 10px", textAlign: "left" }}>{st.name || ""}</td>
                 <td style={{ border: "0.5px solid var(--border)", padding: 4, textAlign: "center" }}>
                   <input type="number" min="0" max="5" className="marks-input" value={m.a1 ?? ""} onChange={e => onChange(st.roll, "a1", e.target.value === "" ? "" : Number(e.target.value))} readOnly={locked}
-                    style={{ width: 80, height: 28, border: locked ? "1px solid #e0e0e0" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 14, fontWeight: 600, background: locked ? "#f5f5f5" : "#fff", padding: 2, boxSizing: "border-box" }} />
+                    style={{ width: 90, height: 34, border: locked ? "1px solid #e0e0e0" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 16, fontWeight: 600, background: locked ? "#f5f5f5" : "#fff", padding: 2, boxSizing: "border-box" }} />
                 </td>
                 <td style={{ border: "0.5px solid var(--border)", padding: 4, textAlign: "center" }}>
                   <input type="number" min="0" max="5" className="marks-input" value={m.a2 ?? ""} onChange={e => onChange(st.roll, "a2", e.target.value === "" ? "" : Number(e.target.value))} readOnly={locked}
-                    style={{ width: 80, height: 28, border: locked ? "1px solid #e0e0e0" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 14, fontWeight: 600, background: locked ? "#f5f5f5" : "#fff", padding: 2, boxSizing: "border-box" }} />
+                    style={{ width: 90, height: 34, border: locked ? "1px solid #e0e0e0" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 16, fontWeight: 600, background: locked ? "#f5f5f5" : "#fff", padding: 2, boxSizing: "border-box" }} />
                 </td>
               </tr>
             );
@@ -34739,11 +34827,11 @@ function AssignmentSheet({ students, assignData, onChange, locked }) {
 // ── Day-to-day sheet (Drawing only) ──────────────────────────────────────────
 function DayDaySheet({ students, ddData, onChange, locked }) {
   const td = { border: "0.5px solid var(--border)", padding: 0 };
-  const th = (bg, color) => ({ padding: "6px 10px", textAlign: "center", fontWeight: 500, fontSize: 12, background: bg, color, border: "0.5px solid var(--border)" });
+  const th = (bg, color) => ({ padding: "8px 12px", textAlign: "center", fontWeight: 600, fontSize: 14, background: bg, color, border: "0.5px solid var(--border)" });
   return (
     <div style={{ overflowX: "auto" }}>
-      <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8 }}>Day-to-day performance marks (max 15 per student)</div>
-      <table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%" }}>
+      <div style={{ fontSize: 13.5, color: "var(--text-muted)", marginBottom: 8 }}>Day-to-day performance marks (max 15 per student)</div>
+      <table style={{ borderCollapse: "collapse", fontSize: 14, width: "100%" }}>
         <thead>
           <tr>
             <th style={th("var(--surface-1)","var(--text-muted)")}>Roll No</th>
@@ -34754,11 +34842,11 @@ function DayDaySheet({ students, ddData, onChange, locked }) {
         <tbody>
           {students.map((st, i) => (
             <tr key={st.roll} style={{ background: i % 2 === 0 ? "transparent" : "var(--surface-1)" }}>
-              <td style={{ ...td, padding: "4px 8px", fontSize: 11 }}>{st.roll}</td>
-              <td style={{ ...td, padding: "4px 8px", textAlign: "left" }}>{st.name || ""}</td>
+              <td style={{ ...td, padding: "6px 10px", fontSize: 13 }}>{st.roll}</td>
+              <td style={{ ...td, padding: "6px 10px", textAlign: "left" }}>{st.name || ""}</td>
               <td style={{ border: "0.5px solid var(--border)", padding: 4, textAlign: "center" }}>
                 <input type="number" min="0" max="15" className="marks-input" value={ddData?.[st.roll] ?? ""} onChange={e => onChange(st.roll, e.target.value === "" ? "" : Number(e.target.value))} readOnly={locked}
-                  style={{ width: 80, height: 28, border: locked ? "1px solid #e0e0e0" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 14, fontWeight: 600, background: locked ? "#f5f5f5" : "#fff", padding: 2, boxSizing: "border-box" }} />
+                  style={{ width: 90, height: 34, border: locked ? "1px solid #e0e0e0" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 16, fontWeight: 600, background: locked ? "#f5f5f5" : "#fff", padding: 2, boxSizing: "border-box" }} />
               </td>
             </tr>
           ))}
@@ -34770,12 +34858,12 @@ function DayDaySheet({ students, ddData, onChange, locked }) {
 
 // ── Result sheet ──────────────────────────────────────────────────────────────
 function ResultSheet({ students, data, isLab, isDrawing }) {
-  const td = (bg, color, fw) => ({ padding: "6px 8px", textAlign: "center", fontSize: 12, background: bg || "#fff", color: color || "#222", fontWeight: fw || 400, border: "1px solid #c8c8c8" });
+  const td = (bg, color, fw) => ({ padding: "8px 10px", textAlign: "center", fontSize: 14, background: bg || "#fff", color: color || "#222", fontWeight: fw || 400, border: "1px solid #c8c8c8" });
 
   if (isLab) {
     const lab = data?.lab || {};
     return (
-      <table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%" }}>
+      <table style={{ borderCollapse: "collapse", fontSize: 14, width: "100%" }}>
         <thead>
           <tr>
             <th style={td("var(--surface-1)","var(--text-muted)",500)}>Roll No</th>
@@ -34812,7 +34900,7 @@ function ResultSheet({ students, data, isLab, isDrawing }) {
   const hasA2 = students.some(st => assign[st.roll]?.a2 !== undefined && assign[st.roll]?.a2 !== "");
 
   return (
-    <table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%" }}>
+    <table style={{ borderCollapse: "collapse", fontSize: 14, width: "100%" }}>
       <thead>
         <tr>
           <th style={td("var(--surface-1)","var(--text-muted)",500)}>Roll No</th>
@@ -34985,16 +35073,16 @@ function SubjectView({ section, subject, user, onBack }) {
   return (
     <div>
       <div style={{ background: BLUE, color: "#fff", padding: "12px 16px", display: "flex", alignItems: "center", gap: 12 }}>
-        <button onClick={onBack} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: 6, padding: "4px 10px", fontSize: 12, cursor: "pointer" }}>← Back</button>
+        <button onClick={onBack} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: 6, padding: "4px 10px", fontSize: 13.5, cursor: "pointer" }}>← Back</button>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>{subject.name}</div>
-          <div style={{ fontSize: 12, opacity: .8 }}>{section.name} · {isLab ? "Lab" : isDrawing ? "Drawing" : "Theory"} · {isLab ? 40 : 30} marks</div>
+          <div style={{ fontSize: 16, fontWeight: 600 }}>{subject.name}</div>
+          <div style={{ fontSize: 13.5, opacity: .8 }}>{section.name} · {isLab ? "Lab" : isDrawing ? "Drawing" : "Theory"} · {isLab ? 40 : 30} marks</div>
         </div>
-        <span style={{ fontSize: 11, background: statusStyle.bg, color: statusStyle.color, borderRadius: 20, padding: "3px 10px" }}>{status}</span>
-        {saving && <span style={{ fontSize: 11, opacity: .7 }}>Saving…</span>}
+        <span style={{ fontSize: 12.5, background: statusStyle.bg, color: statusStyle.color, borderRadius: 20, padding: "3px 10px" }}>{status}</span>
+        {saving && <span style={{ fontSize: 12.5, opacity: .7 }}>Saving…</span>}
         {!locked && (
           <button onClick={handleLock} disabled={locking}
-            style={{ fontSize: 12, background: "#fff", color: BLUE, border: "none", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontWeight: 600 }}>
+            style={{ fontSize: 13.5, background: "#fff", color: BLUE, border: "none", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontWeight: 600 }}>
             🔒 Lock marks
           </button>
         )}
@@ -35003,7 +35091,7 @@ function SubjectView({ section, subject, user, onBack }) {
       <div style={{ display: "flex", borderBottom: "1px solid var(--border)", background: "var(--surface-2)", paddingLeft: 8 }}>
         {tabs.map(t => (
           <button key={t} onClick={() => setTab(t)}
-            style={{ border: "none", background: "none", padding: "8px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", color: tab === t ? BLUE : "var(--text-muted)", borderBottom: tab === t ? `2px solid ${BLUE}` : "2px solid transparent", fontFamily: "inherit" }}>
+            style={{ border: "none", background: "none", padding: "9px 16px", fontSize: 13.5, fontWeight: 600, cursor: "pointer", color: tab === t ? BLUE : "var(--text-muted)", borderBottom: tab === t ? `2px solid ${BLUE}` : "2px solid transparent", fontFamily: "inherit" }}>
             {t}
           </button>
         ))}
@@ -35011,7 +35099,7 @@ function SubjectView({ section, subject, user, onBack }) {
 
       <div style={{ padding: 12 }}>
         {locked && tab !== "Result" && (
-          <div style={{ fontSize: 12, color: "#854F0B", background: "#FAEEDA", borderRadius: 8, padding: "7px 12px", marginBottom: 10 }}>
+          <div style={{ fontSize: 13.5, color: "#854F0B", background: "#FAEEDA", borderRadius: 8, padding: "7px 12px", marginBottom: 10 }}>
             🔒 Marks are locked. Contact your admin to unlock for editing.
           </div>
         )}
@@ -35061,23 +35149,23 @@ function SubjectList({ sections, user, onSelectSubject }) {
       <div style={{ textAlign: "center", padding: "3rem", color: "var(--text-muted)" }}>
         <div style={{ fontSize: 32, marginBottom: 12 }}>📝</div>
         <div style={{ fontWeight: 600, marginBottom: 6 }}>No subjects assigned</div>
-        <div style={{ fontSize: 13 }}>Ask your admin to assign subjects to you.</div>
+        <div style={{ fontSize: 14.5 }}>Ask your admin to assign subjects to you.</div>
       </div>
     );
   }
 
   return (
     <div style={{ padding: 16 }}>
-      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>My subjects — internal marks</div>
+      <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 12 }}>My subjects — internal marks</div>
       {mySubjects.map(({ section, subject }) => (
         <div key={section.id + subject.id}
           onClick={() => onSelectSubject(section, subject)}
           style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: "var(--surface-2)", border: "0.5px solid var(--border)", borderRadius: 10, marginBottom: 8, cursor: "pointer" }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>{subject.name}</div>
-            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{section.name}</div>
+            <div style={{ fontSize: 16, fontWeight: 600 }}>{subject.name}</div>
+            <div style={{ fontSize: 13.5, color: "var(--text-muted)" }}>{section.name}</div>
           </div>
-          <span style={{ fontSize: 11, background: isLabSubject(subject) ? "#EEEDFE" : isDrawingSubject(subject) ? "#FAEEDA" : "#E1F5EE", color: isLabSubject(subject) ? "#534AB7" : isDrawingSubject(subject) ? "#854F0B" : "#0F6E56", borderRadius: 20, padding: "3px 9px" }}>
+          <span style={{ fontSize: 12.5, background: isLabSubject(subject) ? "#EEEDFE" : isDrawingSubject(subject) ? "#FAEEDA" : "#E1F5EE", color: isLabSubject(subject) ? "#534AB7" : isDrawingSubject(subject) ? "#854F0B" : "#0F6E56", borderRadius: 20, padding: "3px 9px" }}>
             {isLabSubject(subject) ? "Lab" : isDrawingSubject(subject) ? "Drawing" : "Theory"}
           </span>
           <span style={{ color: BLUE, fontSize: 18 }}>›</span>
@@ -36429,15 +36517,16 @@ import { db, storage, functions } from "../firebase";
 import { P, Btn, Card, Badge, Fld, Sel, Spinner } from "../components/UI";
 import ResumeView from "./ResumeView";
 import { SC, fmtMY } from "./profileShared";
+import { IconUserCircle, IconGraduation, IconExperience, IconDocument, IconWorkshop, IconConference, IconProject, IconDownload, IconCamera, IconSync } from "../components/Icons";
 
 const TABS = [
-  ["bio", "Bio"],
-  ["qualifications", "Qualifications"],
-  ["experience", "Experience"],
-  ["publications", "Publications"],
-  ["workshops", "Workshops"],
-  ["conferences", "Conferences"],
-  ["projects", "Projects"],
+  ["bio", "Bio", IconUserCircle],
+  ["qualifications", "Qualifications", IconGraduation],
+  ["experience", "Experience", IconExperience],
+  ["publications", "Publications", IconDocument],
+  ["workshops", "Workshops", IconWorkshop],
+  ["conferences", "Conferences", IconConference],
+  ["projects", "Projects", IconProject],
 ];
 
 const EMPTY_PROFILE = {
@@ -36719,14 +36808,14 @@ export default function FacultyProfilePage({ user, viewPhone, readOnly = false }
   return (
     <div>
       {/* ── Profile header ── */}
-      <div style={{ background: "linear-gradient(135deg,#0f766e,#0369a1)", borderRadius: 16, padding: 20, marginBottom: 14, display: "flex", gap: 18, alignItems: "center", flexWrap: "wrap" }}>
+      <div style={{ background: "#fff", border: "1px solid " + P.border, borderRadius: 16, padding: 22, marginBottom: 14, display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
         <div style={{ position: "relative", flexShrink: 0 }}>
           <div
             onClick={() => !readOnly && fileInputRef.current?.click()}
             style={{
-              width: 100, height: 100, borderRadius: 16, background: displayPhotoURL ? "none" : "rgba(255,255,255,0.25)",
-              border: "3px solid #fff", display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 37, fontWeight: 800, color: "#fff", cursor: readOnly ? "default" : "pointer",
+              width: 92, height: 92, borderRadius: 14, background: displayPhotoURL ? "none" : P.blueL,
+              border: "1px solid " + P.border, display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 30, fontWeight: 700, color: P.blue, cursor: readOnly ? "default" : "pointer",
               backgroundImage: displayPhotoURL ? "url(" + displayPhotoURL + ")" : "none",
               backgroundSize: "cover", backgroundPosition: "center", overflow: "hidden",
             }}>
@@ -36734,78 +36823,76 @@ export default function FacultyProfilePage({ user, viewPhone, readOnly = false }
           </div>
           {!readOnly && (
             <div onClick={() => fileInputRef.current?.click()}
-              style={{ position: "absolute", bottom: 0, right: 0, width: 30, height: 30, borderRadius: "50%", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, cursor: "pointer", boxShadow: "0 2px 6px rgba(0,0,0,0.3)" }}>
-              📷
+              style={{ position: "absolute", bottom: -6, right: -6, width: 28, height: 28, borderRadius: "50%", background: P.navy, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 2px 6px rgba(15,37,64,0.3)" }}>
+              <IconCamera size={13} color="#fff" />
             </div>
           )}
           <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }}
             onChange={e => { handlePhotoSelect(e.target.files[0]); e.target.value = ""; }} />
         </div>
         <div style={{ flex: 1, minWidth: 200 }}>
-          <div style={{ fontWeight: 800, fontSize: 25, color: "#fff" }}>{personName || phone}</div>
-          <div style={{ fontSize: 18, color: "rgba(255,255,255,0.9)", marginTop: 2 }}>
+          <div style={{ fontWeight: 700, fontSize: 20, color: "#1a2230" }}>{personName || phone}</div>
+          <div style={{ fontSize: 13.5, color: P.gray, marginTop: 2 }}>
             {profile.bio.designation || "Designation not set"}
             {profile.bio.department ? " · " + profile.bio.department : ""}
             {profile.bio.experienceYears ? " · " + profile.bio.experienceYears + " yrs experience" : ""}
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
             {(profile.bio.specializations || []).map((s, i) => (
-              <span key={i} style={{ fontSize: 15, fontWeight: 600, background: "rgba(255,255,255,0.22)", color: "#fff", padding: "4px 12px", borderRadius: 20 }}>{s}</span>
+              <span key={i} style={{ fontSize: 11.5, fontWeight: 600, background: P.bg, color: P.gray, padding: "4px 11px", borderRadius: 20 }}>{s}</span>
             ))}
           </div>
         </div>
-        {saving && <div style={{ fontSize: 15, color: "#fff" }}>Saving…</div>}
+        {saving && <div style={{ fontSize: 12.5, color: P.gray }}>Saving…</div>}
       </div>
 
       {/* ── Action bar: sync + resume download ── */}
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 16 }}>
         {!readOnly && (
           <button onClick={syncFromOrcid} disabled={syncing}
-            style={{ background: "#4338ca", color: "#fff", border: "none", borderRadius: 10, padding: "10px 18px", fontWeight: 700, fontSize: 16.5, cursor: syncing ? "default" : "pointer", opacity: syncing ? 0.7 : 1 }}>
-            {syncing ? "🔄 Syncing…" : "🔄 Sync from ORCID"}
+            style={{ display: "flex", alignItems: "center", gap: 8, background: "transparent", color: P.blue, border: "1.5px solid " + P.blue, borderRadius: 8, padding: "9px 16px", fontWeight: 600, fontSize: 13.5, cursor: syncing ? "default" : "pointer", opacity: syncing ? 0.7 : 1, fontFamily: "inherit" }}>
+            <IconSync size={15} /> {syncing ? "Syncing…" : "Sync from ORCID"}
           </button>
         )}
         <button onClick={() => setShowResume(true)}
-          style={{ background: "#0f172a", color: "#fff", border: "none", borderRadius: 10, padding: "10px 18px", fontWeight: 700, fontSize: 16.5, cursor: "pointer" }}>
-          📄 Download Resume
+          style={{ display: "flex", alignItems: "center", gap: 8, background: P.navy, color: "#fff", border: "none", borderRadius: 8, padding: "9px 16px", fontWeight: 600, fontSize: 13.5, cursor: "pointer", fontFamily: "inherit" }}>
+          <IconDownload size={15} /> Download Resume
         </button>
         {syncMsg && (
-          <span style={{ fontSize: 16, fontWeight: 600, color: syncMsg.ok ? "#15803d" : "#dc2626" }}>{syncMsg.text}</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: syncMsg.ok ? P.green : P.red }}>{syncMsg.text}</span>
         )}
       </div>
 
       {/* ── Stat counters ── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 10, marginBottom: 16 }}>
         {[
-          ["Publications", counts.publications, SC.publications],
-          ["Workshops", counts.workshops, SC.workshops],
-          ["Conferences", counts.conferences, SC.conferences],
-          ["Projects", counts.projects, SC.projects],
-          ["Experience", counts.experience, SC.experience],
-        ].map(([label, n, c]) => (
-          <div key={label} style={{ background: c.light, borderRadius: 12, padding: "14px 12px", textAlign: "center" }}>
-            <div style={{ fontSize: 29, fontWeight: 800, color: c.dark }}>{n}</div>
-            <div style={{ fontSize: 15, fontWeight: 600, color: c.main, marginTop: 2 }}>{label}</div>
+          ["Publications", counts.publications],
+          ["Workshops", counts.workshops],
+          ["Conferences", counts.conferences],
+          ["Projects", counts.projects],
+          ["Experience", counts.experience],
+        ].map(([label, n]) => (
+          <div key={label} style={{ background: "#fff", border: "1px solid " + P.border, borderTop: "3px solid " + P.blue, borderRadius: 12, padding: "14px 12px", textAlign: "center" }}>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 24, fontWeight: 600, color: "#1a2230" }}>{n}</div>
+            <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: P.gray, marginTop: 6 }}>{label}</div>
           </div>
         ))}
       </div>
 
-      {/* ── Tabs — bold colored pills ── */}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-        {TABS.map(([t, label]) => {
-          const c = SC[t];
+      {/* ── Tabs — underline style ── */}
+      <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 16, borderBottom: "1px solid " + P.border }}>
+        {TABS.map(([t, label, Icon]) => {
           const active = tab === t;
           return (
             <button key={t} onClick={() => setTab(t)}
               style={{
-                display: "flex", alignItems: "center", gap: 6,
-                background: active ? c.main : c.light,
-                color: active ? "#fff" : c.dark,
-                border: "none", borderRadius: 24, cursor: "pointer", fontFamily: "inherit",
-                fontSize: 17, fontWeight: 700, padding: "9px 16px",
-                boxShadow: active ? "0 3px 10px rgba(0,0,0,0.18)" : "none",
+                display: "flex", alignItems: "center", gap: 7,
+                background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit",
+                fontSize: 13.5, fontWeight: active ? 600 : 500,
+                color: active ? P.blue : P.gray,
+                padding: "10px 2px", borderBottom: "2.5px solid " + (active ? P.blue : "transparent"),
               }}>
-              <span style={{ fontSize: 18 }}>{c.icon}</span> {label}
+              <Icon size={16} /> {label}
             </button>
           );
         })}

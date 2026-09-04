@@ -16,6 +16,7 @@ import HomeShell from "../components/HomeShell";
 import { UsersScreen } from "../AdminApp";
 import { approveUser, rejectUser, makeAdmin, makeFaculty, makeHod, deleteUser, resetPin } from "../userActions";
 import { P } from "../components/UI";
+import { IconAttendance, IconSearch, IconUsers, IconUserCircle } from "../components/Icons";
 
 export default function HoDApp({ user, onLogout }) {
   const [tab, setTab] = useState("studentData");
@@ -35,7 +36,7 @@ export default function HoDApp({ user, onLogout }) {
       <div style={{ position: "relative" }}>
         <HoDStudentLookup user={user} onLogout={onLogout} />
         <button onClick={() => setTab("studentData")}
-          style={{ position: "fixed", bottom: 20, right: 20, zIndex: 1000, background: "#2E1065", color: "#fff", border: "none", borderRadius: 30, padding: "13px 22px", fontSize: 14, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 14px rgba(0,0,0,0.3)", fontFamily: "inherit" }}>
+          style={{ position: "fixed", bottom: 20, right: 20, zIndex: 1000, background: P.navy, color: "#fff", border: "none", borderRadius: 10, padding: "13px 22px", fontSize: 14, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 14px rgba(0,0,0,0.3)", fontFamily: "inherit" }}>
           ← Back to dashboard
         </button>
       </div>
@@ -47,14 +48,13 @@ export default function HoDApp({ user, onLogout }) {
       <HomeShell
         user={user}
         onLogout={onLogout}
-        theme="hod"
         roleLabel="Head of Department"
         tabs={[
-          { id: "myAttendance", label: "My section attendance", icon: "📋", color: "purple" },
-          { id: "studentData", label: "Student data", icon: "🔍", color: "green" },
-          { id: "profiles", label: "Faculty profiles", icon: "🧑‍🏫", color: "coral" },
-          { id: "users", label: "Users", icon: "👥", color: "slate" },
-          { id: "profile", label: "My profile", icon: "👤", color: "pink" },
+          { id: "myAttendance", label: "My section attendance", icon: IconAttendance },
+          { id: "studentData", label: "Student data", icon: IconSearch },
+          { id: "profiles", label: "Faculty profiles", icon: IconUsers },
+          { id: "users", label: "Users", icon: IconUsers },
+          { id: "profile", label: "My profile", icon: IconUserCircle },
         ]}
         active={tab}
         onSelect={setTab}

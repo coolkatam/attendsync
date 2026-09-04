@@ -12,15 +12,16 @@ import { db, storage, functions } from "../firebase";
 import { P, Btn, Card, Badge, Fld, Sel, Spinner } from "../components/UI";
 import ResumeView from "./ResumeView";
 import { SC, fmtMY } from "./profileShared";
+import { IconUserCircle, IconGraduation, IconExperience, IconDocument, IconWorkshop, IconConference, IconProject, IconDownload, IconCamera, IconSync } from "../components/Icons";
 
 const TABS = [
-  ["bio", "Bio"],
-  ["qualifications", "Qualifications"],
-  ["experience", "Experience"],
-  ["publications", "Publications"],
-  ["workshops", "Workshops"],
-  ["conferences", "Conferences"],
-  ["projects", "Projects"],
+  ["bio", "Bio", IconUserCircle],
+  ["qualifications", "Qualifications", IconGraduation],
+  ["experience", "Experience", IconExperience],
+  ["publications", "Publications", IconDocument],
+  ["workshops", "Workshops", IconWorkshop],
+  ["conferences", "Conferences", IconConference],
+  ["projects", "Projects", IconProject],
 ];
 
 const EMPTY_PROFILE = {
@@ -302,14 +303,14 @@ export default function FacultyProfilePage({ user, viewPhone, readOnly = false }
   return (
     <div>
       {/* ── Profile header ── */}
-      <div style={{ background: "linear-gradient(135deg,#0f766e,#0369a1)", borderRadius: 16, padding: 20, marginBottom: 14, display: "flex", gap: 18, alignItems: "center", flexWrap: "wrap" }}>
+      <div style={{ background: "#fff", border: "1px solid " + P.border, borderRadius: 16, padding: 22, marginBottom: 14, display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
         <div style={{ position: "relative", flexShrink: 0 }}>
           <div
             onClick={() => !readOnly && fileInputRef.current?.click()}
             style={{
-              width: 100, height: 100, borderRadius: 16, background: displayPhotoURL ? "none" : "rgba(255,255,255,0.25)",
-              border: "3px solid #fff", display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 37, fontWeight: 800, color: "#fff", cursor: readOnly ? "default" : "pointer",
+              width: 92, height: 92, borderRadius: 14, background: displayPhotoURL ? "none" : P.blueL,
+              border: "1px solid " + P.border, display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 30, fontWeight: 700, color: P.blue, cursor: readOnly ? "default" : "pointer",
               backgroundImage: displayPhotoURL ? "url(" + displayPhotoURL + ")" : "none",
               backgroundSize: "cover", backgroundPosition: "center", overflow: "hidden",
             }}>
@@ -317,78 +318,76 @@ export default function FacultyProfilePage({ user, viewPhone, readOnly = false }
           </div>
           {!readOnly && (
             <div onClick={() => fileInputRef.current?.click()}
-              style={{ position: "absolute", bottom: 0, right: 0, width: 30, height: 30, borderRadius: "50%", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, cursor: "pointer", boxShadow: "0 2px 6px rgba(0,0,0,0.3)" }}>
-              📷
+              style={{ position: "absolute", bottom: -6, right: -6, width: 28, height: 28, borderRadius: "50%", background: P.navy, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 2px 6px rgba(15,37,64,0.3)" }}>
+              <IconCamera size={13} color="#fff" />
             </div>
           )}
           <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }}
             onChange={e => { handlePhotoSelect(e.target.files[0]); e.target.value = ""; }} />
         </div>
         <div style={{ flex: 1, minWidth: 200 }}>
-          <div style={{ fontWeight: 800, fontSize: 25, color: "#fff" }}>{personName || phone}</div>
-          <div style={{ fontSize: 18, color: "rgba(255,255,255,0.9)", marginTop: 2 }}>
+          <div style={{ fontWeight: 700, fontSize: 20, color: "#1a2230" }}>{personName || phone}</div>
+          <div style={{ fontSize: 13.5, color: P.gray, marginTop: 2 }}>
             {profile.bio.designation || "Designation not set"}
             {profile.bio.department ? " · " + profile.bio.department : ""}
             {profile.bio.experienceYears ? " · " + profile.bio.experienceYears + " yrs experience" : ""}
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
             {(profile.bio.specializations || []).map((s, i) => (
-              <span key={i} style={{ fontSize: 15, fontWeight: 600, background: "rgba(255,255,255,0.22)", color: "#fff", padding: "4px 12px", borderRadius: 20 }}>{s}</span>
+              <span key={i} style={{ fontSize: 11.5, fontWeight: 600, background: P.bg, color: P.gray, padding: "4px 11px", borderRadius: 20 }}>{s}</span>
             ))}
           </div>
         </div>
-        {saving && <div style={{ fontSize: 15, color: "#fff" }}>Saving…</div>}
+        {saving && <div style={{ fontSize: 12.5, color: P.gray }}>Saving…</div>}
       </div>
 
       {/* ── Action bar: sync + resume download ── */}
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 16 }}>
         {!readOnly && (
           <button onClick={syncFromOrcid} disabled={syncing}
-            style={{ background: "#4338ca", color: "#fff", border: "none", borderRadius: 10, padding: "10px 18px", fontWeight: 700, fontSize: 16.5, cursor: syncing ? "default" : "pointer", opacity: syncing ? 0.7 : 1 }}>
-            {syncing ? "🔄 Syncing…" : "🔄 Sync from ORCID"}
+            style={{ display: "flex", alignItems: "center", gap: 8, background: "transparent", color: P.blue, border: "1.5px solid " + P.blue, borderRadius: 8, padding: "9px 16px", fontWeight: 600, fontSize: 13.5, cursor: syncing ? "default" : "pointer", opacity: syncing ? 0.7 : 1, fontFamily: "inherit" }}>
+            <IconSync size={15} /> {syncing ? "Syncing…" : "Sync from ORCID"}
           </button>
         )}
         <button onClick={() => setShowResume(true)}
-          style={{ background: "#0f172a", color: "#fff", border: "none", borderRadius: 10, padding: "10px 18px", fontWeight: 700, fontSize: 16.5, cursor: "pointer" }}>
-          📄 Download Resume
+          style={{ display: "flex", alignItems: "center", gap: 8, background: P.navy, color: "#fff", border: "none", borderRadius: 8, padding: "9px 16px", fontWeight: 600, fontSize: 13.5, cursor: "pointer", fontFamily: "inherit" }}>
+          <IconDownload size={15} /> Download Resume
         </button>
         {syncMsg && (
-          <span style={{ fontSize: 16, fontWeight: 600, color: syncMsg.ok ? "#15803d" : "#dc2626" }}>{syncMsg.text}</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: syncMsg.ok ? P.green : P.red }}>{syncMsg.text}</span>
         )}
       </div>
 
       {/* ── Stat counters ── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 10, marginBottom: 16 }}>
         {[
-          ["Publications", counts.publications, SC.publications],
-          ["Workshops", counts.workshops, SC.workshops],
-          ["Conferences", counts.conferences, SC.conferences],
-          ["Projects", counts.projects, SC.projects],
-          ["Experience", counts.experience, SC.experience],
-        ].map(([label, n, c]) => (
-          <div key={label} style={{ background: c.light, borderRadius: 12, padding: "14px 12px", textAlign: "center" }}>
-            <div style={{ fontSize: 29, fontWeight: 800, color: c.dark }}>{n}</div>
-            <div style={{ fontSize: 15, fontWeight: 600, color: c.main, marginTop: 2 }}>{label}</div>
+          ["Publications", counts.publications],
+          ["Workshops", counts.workshops],
+          ["Conferences", counts.conferences],
+          ["Projects", counts.projects],
+          ["Experience", counts.experience],
+        ].map(([label, n]) => (
+          <div key={label} style={{ background: "#fff", border: "1px solid " + P.border, borderTop: "3px solid " + P.blue, borderRadius: 12, padding: "14px 12px", textAlign: "center" }}>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 24, fontWeight: 600, color: "#1a2230" }}>{n}</div>
+            <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: P.gray, marginTop: 6 }}>{label}</div>
           </div>
         ))}
       </div>
 
-      {/* ── Tabs — bold colored pills ── */}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-        {TABS.map(([t, label]) => {
-          const c = SC[t];
+      {/* ── Tabs — underline style ── */}
+      <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 16, borderBottom: "1px solid " + P.border }}>
+        {TABS.map(([t, label, Icon]) => {
           const active = tab === t;
           return (
             <button key={t} onClick={() => setTab(t)}
               style={{
-                display: "flex", alignItems: "center", gap: 6,
-                background: active ? c.main : c.light,
-                color: active ? "#fff" : c.dark,
-                border: "none", borderRadius: 24, cursor: "pointer", fontFamily: "inherit",
-                fontSize: 17, fontWeight: 700, padding: "9px 16px",
-                boxShadow: active ? "0 3px 10px rgba(0,0,0,0.18)" : "none",
+                display: "flex", alignItems: "center", gap: 7,
+                background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit",
+                fontSize: 13.5, fontWeight: active ? 600 : 500,
+                color: active ? P.blue : P.gray,
+                padding: "10px 2px", borderBottom: "2.5px solid " + (active ? P.blue : "transparent"),
               }}>
-              <span style={{ fontSize: 18 }}>{c.icon}</span> {label}
+              <Icon size={16} /> {label}
             </button>
           );
         })}

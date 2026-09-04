@@ -19,6 +19,7 @@ import HomeShell from "./components/HomeShell";
 import HoDStudentLookup from "./hod/HoDStudentLookup";
 import MentorPage from "./mentor/MentorPage";
 import { P, Btn, Card, Badge, Fld, Sel, TopBar, GPill, ARow, Spinner, PeriodPicker } from "./components/UI";
+import { IconAttendance, IconSections, IconMarks, IconMentor, IconSearch, IconUsers, IconTrash, IconUserCircle, IconIdCard, IconPhone } from "./components/Icons";
 import { today, calcPct, parseCSV, downloadTemplate, exportXLS, makeKey, parseKey, groupByDateBatched, rowColor, MASTER_ADMIN_PHONE, fmtDate, validateBatches, studentsInBatch, readStatus, batchSlotKey } from "./utils";
 
 // ── Invite link card — each admin's shareable link for their own faculty ──
@@ -269,21 +270,20 @@ export default function AdminApp({ user, onLogout }) {
       <HomeShell
         user={user}
         onLogout={onLogout}
-        theme={isMaster ? "master" : "admin"}
         roleLabel={isMaster ? "Master Admin" : "Class Coordinator"}
         masterStar={isMaster}
         tabs={[
-          { id: "myAttendance", label: "My section attendance", icon: "📋", color: isMaster ? "amber" : "blue" },
-          { id: "allSections", label: "All sections", icon: "🏫", color: "teal" },
-          { id: "marks", label: "Internal marks", icon: "📝", color: "blue" },
-          { id: "mentor", label: "Mentor", icon: "🎓", color: "purple" },
+          { id: "myAttendance", label: "My section attendance", icon: IconAttendance },
+          { id: "allSections", label: "All sections", icon: IconSections },
+          { id: "marks", label: "Internal marks", icon: IconMarks },
+          { id: "mentor", label: "Mentor", icon: IconMentor },
           ...(isMaster ? [
-            { id: "studentData", label: "Student data", icon: "🔍", color: "green" },
-            { id: "profiles", label: "Faculty profiles", icon: "🧑‍🏫", color: "coral" },
-            { id: "trash", label: "Trash", icon: "🗑️", color: "slate" },
+            { id: "studentData", label: "Student data", icon: IconSearch },
+            { id: "profiles", label: "Faculty profiles", icon: IconUsers },
+            { id: "trash", label: "Trash", icon: IconTrash },
           ] : []),
-          { id: "users", label: "Users", icon: "👥", color: "slate" },
-          { id: "profile", label: "My profile", icon: "👤", color: "pink" },
+          { id: "users", label: "Users", icon: IconUsers },
+          { id: "profile", label: "My profile", icon: IconUserCircle },
         ]}
         active={homeTab}
         onSelect={id => {
@@ -327,14 +327,14 @@ export default function AdminApp({ user, onLogout }) {
         <InviteLinkCard adminPhone={user.phone} />
 
         {/* Stats */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
-          <div style={{ background: P.blueL, borderRadius: 12, padding: "16px 14px" }}>
-            <div style={{ fontSize: 28, fontWeight: 700, color: P.blue }}>{sections.length}</div>
-            <div style={{ fontSize: 12, color: P.gray }}>Sections</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
+          <div style={{ background: "#fff", border: "1px solid " + P.border, borderTop: "3px solid " + P.blue, borderRadius: 12, padding: "16px 14px" }}>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 26, fontWeight: 600, color: "#1a2230" }}>{String(sections.length).padStart(2, "0")}</div>
+            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: P.gray, marginTop: 6 }}>Sections</div>
           </div>
-          <div style={{ background: P.greenL, borderRadius: 12, padding: "16px 14px" }}>
-            <div style={{ fontSize: 28, fontWeight: 700, color: P.green }}>{totalStudents}</div>
-            <div style={{ fontSize: 12, color: P.gray }}>Total students</div>
+          <div style={{ background: "#fff", border: "1px solid " + P.border, borderTop: "3px solid " + P.blue, borderRadius: 12, padding: "16px 14px" }}>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 26, fontWeight: 600, color: "#1a2230" }}>{totalStudents}</div>
+            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: P.gray, marginTop: 6 }}>Total Students</div>
           </div>
         </div>
 
@@ -862,12 +862,25 @@ export function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReje
   const [showRoster, setShowRoster] = useState(false);
   const [rosterMsg, setRosterMsg] = useState("");
   const [rosterCount, setRosterCount] = useState(null);
+  const [photos, setPhotos] = useState({}); // phone -> cache-busted photoURL
   const canManageRoster = isMaster || currentUser.role === "hod";
 
   useEffect(() => {
     if (!canManageRoster) return;
     getDocs(collection(db, "employeeRoster")).then(snap => setRosterCount(snap.size));
   }, [canManageRoster]);
+
+  useEffect(() => {
+    getDocs(collection(db, "facultyProfiles")).then(snap => {
+      const map = {};
+      snap.forEach(d => {
+        const raw = d.data()?.bio?.photoURL;
+        if (!raw) return;
+        map[d.id] = raw + (raw.includes("?") ? "&" : "?") + "cb=" + encodeURIComponent(d.data().updatedAt || "");
+      });
+      setPhotos(map);
+    });
+  }, []);
 
   function downloadRosterTemplate() {
     const headers = ["Employee ID", "Full Name", "Designation", "Department"];
@@ -934,47 +947,47 @@ export function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReje
       <TopBar title="User Management" subtitle={isMaster ? "Approve, promote and manage users" : "Approve and manage your faculty"} onBack={onBack} />
       <div style={{ padding: 16 }}>
 
-        {/* Filter tabs */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+        {/* Filter tabs — segmented control */}
+        <div style={{ display: "inline-flex", gap: 4, background: P.bg, padding: 4, borderRadius: 20, marginBottom: 16, flexWrap: "wrap" }}>
           {tabs.map(f => (
             <button key={f.id} onClick={() => setFilter(f.id)} style={{
-              padding: "6px 14px", borderRadius: 20, fontSize: 12,
+              padding: "7px 14px", borderRadius: 16, fontSize: 12,
               fontFamily: "inherit", fontWeight: 600, cursor: "pointer",
               border: "none",
-              background: filter === f.id ? P.blue : P.blueL,
-              color: filter === f.id ? "#fff" : P.blue,
+              background: filter === f.id ? P.navy : "transparent",
+              color: filter === f.id ? "#fff" : P.gray,
             }}>{f.label}</button>
           ))}
         </div>
 
         {/* ── Employee roster management (HoD / master admin only) ── */}
         {canManageRoster && (
-          <div style={{ background: "#fff", border: "1.5px solid " + P.border, borderRadius: 12, marginBottom: 16, overflow: "hidden" }}>
+          <div style={{ background: "#fff", border: "1px solid " + P.border, borderRadius: 12, marginBottom: 16, overflow: "hidden" }}>
             <div onClick={() => setShowRoster(!showRoster)}
-              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", cursor: "pointer", background: "#fef3c7" }}>
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 16px", cursor: "pointer" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 18 }}>🪪</span>
+                <IconIdCard size={17} color={P.gray} />
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: "#78350f" }}>Employee ID roster</div>
-                  <div style={{ fontSize: 12, color: "#92400e" }}>
+                  <div style={{ fontWeight: 600, fontSize: 13.5, color: "#1a2230" }}>Employee ID roster</div>
+                  <div style={{ fontSize: 11.5, color: P.gray }}>
                     {rosterCount === null ? "Loading…" : rosterCount + " employee IDs on file"} · used to verify new registrations
                   </div>
                 </div>
               </div>
-              <span style={{ fontSize: 13, color: "#92400e", fontWeight: 700 }}>{showRoster ? "▲ Hide" : "▼ Manage"}</span>
+              <span style={{ fontSize: 12.5, color: P.blue, fontWeight: 600 }}>{showRoster ? "Hide" : "Manage"}</span>
             </div>
             {showRoster && (
-              <div style={{ padding: 16 }}>
+              <div style={{ padding: 16, borderTop: "1px solid " + P.border }}>
                 <div style={{ fontSize: 13, color: P.gray, marginBottom: 12, lineHeight: 1.6 }}>
                   Upload every faculty member's Employee ID once. When someone registers, their typed Employee ID and name
                   are checked against this list in the background — the result (matched / name mismatch / not found) is
                   shown to whoever approves them, as an extra safeguard against impersonation.
                 </div>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
-                  <Btn small variant="outline" onClick={downloadRosterTemplate}>⬇ Download template</Btn>
+                  <Btn small variant="outline" onClick={downloadRosterTemplate}>Download template</Btn>
                   <label style={{ display: "inline-block" }}>
-                    <span style={{ background: "#fef3c7", color: "#78350f", borderRadius: 8, padding: "7px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "inline-block" }}>
-                      📤 Upload Excel
+                    <span style={{ background: P.bg, color: P.gray, border: "1px solid " + P.border, borderRadius: 8, padding: "7px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "inline-block" }}>
+                      Upload Excel
                     </span>
                     <input type="file" accept=".xlsx,.xls" style={{ display: "none" }}
                       onChange={e => { handleRosterFile(e.target.files[0]); e.target.value = ""; }} />
@@ -992,76 +1005,90 @@ export function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReje
           <div style={{ color: P.gray, textAlign: "center", padding: "2rem" }}>No users found.</div>
         )}
 
-        {filtered.map(u => {
-          const isCurrentUser = u.id === currentUser.phone;
-          const isAdmin = u.role === "admin";
-          const isPending = u.status === "pending";
-          const isRejected = u.status === "rejected";
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", gap: 14 }}>
+          {filtered.map(u => {
+            const isCurrentUser = u.id === currentUser.phone;
+            const isAdmin = u.role === "admin";
+            const isPending = u.status === "pending";
+            const isRejected = u.status === "rejected";
+            const photoURL = photos[u.id];
+            const initials = (u.name || u.id || "?").split(" ").map(w => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
 
-          return (
-            <Card key={u.id}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
-                    <span style={{ fontWeight: 700, fontSize: 14 }}>{u.name || "—"}</span>
-                    {isAdmin && <Badge color="blue">Admin</Badge>}
-                    {isPending && <Badge color="amber">Pending</Badge>}
-                    {isRejected && <Badge color="red">Rejected</Badge>}
-                    {!isAdmin && !isPending && !isRejected && <Badge color="green">Faculty</Badge>}
+            return (
+              <div key={u.id} style={{
+                background: "#fff", border: "1.5px solid " + P.border, borderRadius: 14,
+                padding: "18px 14px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center",
+              }}>
+                <div style={{
+                  width: 64, height: 64, borderRadius: 14, overflow: "hidden", marginBottom: 10, flexShrink: 0,
+                  background: photoURL ? "transparent" : P.blueL,
+                  display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 800, color: P.blue,
+                }}>
+                  {photoURL ? <img src={photoURL} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : initials}
+                </div>
+
+                <div style={{ fontWeight: 700, fontSize: 14 }}>{u.name || "—"}</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center", margin: "6px 0" }}>
+                  {isAdmin && <Badge color="blue">Admin</Badge>}
+                  {isPending && <Badge color="amber">Pending</Badge>}
+                  {isRejected && <Badge color="red">Rejected</Badge>}
+                  {!isAdmin && !isPending && !isRejected && <Badge color="green">Faculty</Badge>}
+                </div>
+
+                <div style={{ fontSize: 12, color: P.gray }}>{u.designation}{u.designation && u.branch ? " · " : ""}{u.branch}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: P.gray, fontFamily: "'IBM Plex Mono', monospace" }}>
+                  <IconPhone size={11} color={P.gray} /> {u.phone}
+                </div>
+                {u.subjects && <div style={{ fontSize: 12, color: P.gray, marginTop: 2 }}>{u.subjects}</div>}
+                {u.status === "approved" && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: "50%", background: u.pin ? P.green : P.amber, flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, color: P.gray }}>{u.pin ? "PIN set" : "No PIN yet"}</span>
                   </div>
-                  <div style={{ fontSize: 12, color: P.gray }}>{u.designation} · {u.branch}</div>
-                  <div style={{ fontSize: 12, color: P.gray }}>📱 {u.phone}</div>
-                  {u.subjects && <div style={{ fontSize: 12, color: P.gray, marginTop: 2 }}>Subjects: {u.subjects}</div>}
-                  {u.status === "approved" && (
-                    <div style={{ marginTop: 4 }}>
-                      {u.pin ? <Badge color="green">🔒 PIN set</Badge> : <Badge color="amber">No PIN yet</Badge>}
-                    </div>
-                  )}
-                </div>
-              </div>
+                )}
 
-              {/* Action buttons */}
-              {!isCurrentUser && (
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {isPending && (
-                    <>
-                      <Btn small variant="success" onClick={() => onApprove(u.id)}>✓ Approve</Btn>
-                      <Btn small variant="danger"  onClick={() => onReject(u.id)}>✗ Reject</Btn>
-                    </>
-                  )}
-                  {isRejected && (
-                    <Btn small variant="outline" onClick={() => onApprove(u.id)}>Re-approve</Btn>
-                  )}
-                  {isMaster && !isPending && !isRejected && (
-                    isAdmin
-                      ? <Btn small variant="ghost" onClick={() => onMakeFaculty(u.id)}>↓ Demote to Faculty</Btn>
-                      : u.role === "hod"
-                      ? <Btn small variant="ghost" onClick={() => onMakeFaculty(u.id)}>↓ Remove HoD role</Btn>
-                      : <Btn small variant="accent" onClick={() => onMakeAdmin(u.id)}>↑ Make Admin</Btn>
-                  )}
-                  {isMaster && !isPending && !isRejected && u.role !== "hod" && (
-                    <Btn small variant="outline" onClick={() => onMakeHod(u.id)}>👑 Make HoD</Btn>
-                  )}
-                  {u.status === "approved" && u.pin && (
-                    <Btn small variant="ghost" onClick={() => { if (window.confirm("Reset PIN for " + u.name + "? They will be asked to set a new PIN on next login.")) onResetPin(u.id); }}>
-                      🔄 Reset PIN
-                    </Btn>
-                  )}
-                  {isMaster && (
-                    <button
-                      onClick={() => onDelete(u.id, u.name)}
-                      style={{ background: P.redL, border: "none", color: P.red, borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
-                      title="Delete user"
-                    >🗑 Delete</button>
-                  )}
-                </div>
-              )}
-              {isCurrentUser && (
-                <div style={{ fontSize: 12, color: P.gray, fontStyle: "italic" }}>This is you</div>
-              )}
-            </Card>
-          );
-        })}
+                {/* Action buttons */}
+                {!isCurrentUser ? (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center", marginTop: 12 }}>
+                    {isPending && (
+                      <>
+                        <Btn small variant="success" onClick={() => onApprove(u.id)}>Approve</Btn>
+                        <Btn small variant="danger"  onClick={() => onReject(u.id)}>Reject</Btn>
+                      </>
+                    )}
+                    {isRejected && (
+                      <Btn small variant="outline" onClick={() => onApprove(u.id)}>Re-approve</Btn>
+                    )}
+                    {isMaster && !isPending && !isRejected && (
+                      isAdmin
+                        ? <Btn small variant="ghost" onClick={() => onMakeFaculty(u.id)}>Demote to Faculty</Btn>
+                        : u.role === "hod"
+                        ? <Btn small variant="ghost" onClick={() => onMakeFaculty(u.id)}>Remove HoD role</Btn>
+                        : <Btn small variant="primary" onClick={() => onMakeAdmin(u.id)}>Make Admin</Btn>
+                    )}
+                    {isMaster && !isPending && !isRejected && u.role !== "hod" && (
+                      <Btn small variant="outline" onClick={() => onMakeHod(u.id)}>Make HoD</Btn>
+                    )}
+                    {u.status === "approved" && u.pin && (
+                      <Btn small variant="ghost" onClick={() => { if (window.confirm("Reset PIN for " + u.name + "? They will be asked to set a new PIN on next login.")) onResetPin(u.id); }}>
+                        Reset PIN
+                      </Btn>
+                    )}
+                    {isMaster && (
+                      <button
+                        onClick={() => onDelete(u.id, u.name)}
+                        style={{ background: "transparent", border: "none", color: P.red, borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "inherit" }}
+                        title="Delete user"
+                      >Delete</button>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, color: P.gray, fontStyle: "italic", marginTop: 12 }}>This is you</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

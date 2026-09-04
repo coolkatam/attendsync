@@ -39,7 +39,7 @@ function CellInput({ value, onChange, readOnly, warn }) {
       onChange={e => onChange(e.target.value === "" ? "" : Number(e.target.value))}
       readOnly={readOnly}
       style={{
-        width: 36, height: 28, border: readOnly ? "1px solid #e0e0e0" : "1px solid #b0c4de",
+        width: 32, height: 30, border: readOnly ? "1px solid #e0e0e0" : "1px solid #b0c4de",
         borderRadius: 4, textAlign: "center", fontSize: 14, fontWeight: 600,
         background: readOnly ? "#f5f5f5" : warn ? "#fee2e2" : "#fff",
         color: readOnly ? "#888" : "#222",
@@ -52,7 +52,7 @@ function CellInput({ value, onChange, readOnly, warn }) {
 
 function AutoCell({ value }) {
   return (
-    <td style={{ padding: "3px 5px", textAlign: "center", fontWeight: 600, fontSize: 11, background: "#E6F1FB", color: "#185FA5", border: "0.5px solid #d0e4f8" }}>
+    <td style={{ padding: "3px 6px", textAlign: "center", fontWeight: 600, fontSize: 13, background: "#E6F1FB", color: "#185FA5", border: "0.5px solid #d0e4f8" }}>
       {value !== "" ? value : ""}
     </td>
   );
@@ -60,7 +60,7 @@ function AutoCell({ value }) {
 
 function GrandCell({ value }) {
   return (
-    <td style={{ padding: "3px 5px", textAlign: "center", fontWeight: 600, fontSize: 12, background: "#EEEDFE", color: "#26215C", border: "0.5px solid #c5c2f0" }}>
+    <td style={{ padding: "3px 6px", textAlign: "center", fontWeight: 600, fontSize: 14, background: "#EEEDFE", color: "#26215C", border: "0.5px solid #c5c2f0" }}>
       {value !== "" ? value : ""}
     </td>
   );
@@ -69,33 +69,34 @@ function GrandCell({ value }) {
 // ── Theory MID sheet ──────────────────────────────────────────────────────────
 function TheoryMidSheet({ students, midData, onChange, locked }) {
   const td = { border: "0.5px solid var(--border)", padding: 0, textAlign: "center" };
-  const th = (bg, color) => ({ padding: "4px 5px", textAlign: "center", fontWeight: 500, fontSize: 11, background: bg, color: color, border: "0.5px solid var(--border)", whiteSpace: "nowrap" });
+  const th = (bg, color, width) => ({ padding: "6px 4px", textAlign: "center", fontWeight: 600, fontSize: 12.5, background: bg, color: color, border: "0.5px solid var(--border)", whiteSpace: "nowrap", width });
 
   function get(roll, field) { return midData?.[roll]?.[field] ?? ""; }
   function set(roll, field, val) { onChange(roll, field, val); }
 
   return (
     <div style={{ overflowX: "auto" }}>
-      <table style={{ borderCollapse: "collapse", fontSize: 11, minWidth: 700 }}>
+      <table style={{ borderCollapse: "collapse", fontSize: 12.5, width: "100%", minWidth: 900 }}>
         <thead>
           <tr>
-            <th rowSpan={2} style={th("var(--surface-1)", "var(--text-muted)")}>Roll</th>
-            <th rowSpan={2} style={{ ...th("var(--surface-1)", "var(--text-muted)"), textAlign: "left", minWidth: 100 }}>Name</th>
+            <th rowSpan={2} style={th("var(--surface-1)", "var(--text-muted)", 56)}>Roll</th>
+            <th rowSpan={2} style={{ ...th("var(--surface-1)", "var(--text-muted)", 130), textAlign: "left" }}>Name</th>
             <th colSpan={6} style={th("#E1F5EE", "#085041")}>Part A (max 10)</th>
-            <th colSpan={19} style={th("#E6F1FB", "#0C447C")}>Part B — best of pairs → converted to 15</th>
-            <th rowSpan={2} style={th("#EEEDFE", "#534AB7")}>Total (25)</th>
+            <th colSpan={18} style={th("#E6F1FB", "#0C447C")}>Part B — best of pairs</th>
+            <th rowSpan={2} style={{ ...th("#FDE8D2", "#8A4A10", 56), lineHeight: 1.2 }}>Part B<br/>(30)</th>
+            <th rowSpan={2} style={{ ...th("#85B7EB","#042C53", 56), lineHeight: 1.2 }}>Cvt<br/>(15)</th>
+            <th rowSpan={2} style={{ ...th("#EEEDFE", "#534AB7", 56), lineHeight: 1.2 }}>Total<br/>(25)</th>
           </tr>
           <tr>
-            {["1A","1B","1C","1D","1E"].map(l => <th key={l} style={th("#E1F5EE","#0F6E56")}>{l}</th>)}
-            <th style={th("#9FE1CB","#085041")}>A</th>
+            {["1A","1B","1C","1D","1E"].map(l => <th key={l} style={th("#E1F5EE","#0F6E56", 34)}>{l}</th>)}
+            <th style={th("#9FE1CB","#085041", 34)}>A</th>
             {[2,3,4,5,6,7].map(n => (
               <>
-                <th key={`${n}a`} style={th("#E6F1FB","#185FA5")}>{n}A</th>
-                <th key={`${n}b`} style={th("#E6F1FB","#185FA5")}>{n}B</th>
-                <th key={`q${n}`} style={th("#B5D4F4","#0C447C")}>Q{n}</th>
+                <th key={`${n}a`} style={th("#E6F1FB","#185FA5", 34)}>{n}A</th>
+                <th key={`${n}b`} style={th("#E6F1FB","#185FA5", 34)}>{n}B</th>
+                <th key={`q${n}`} style={th("#B5D4F4","#0C447C", 38)}>Q{n}</th>
               </>
             ))}
-            <th style={th("#85B7EB","#042C53")}>Cvt</th>
           </tr>
         </thead>
         <tbody>
@@ -103,12 +104,13 @@ function TheoryMidSheet({ students, midData, onChange, locked }) {
             const m = midData?.[st.roll] || {};
             const pA = calcPartA(m);
             const qs = [2,3,4,5,6,7].map(n => calcQ(m[`b${n}a`], m[`b${n}b`]));
+            const pBraw = calcPartBRaw(m);
             const pBc = Math.round(calcPartBConv(m) * 10) / 10;
             const total = Math.round(pA + pBc);
             return (
               <tr key={st.roll} style={{ background: i % 2 === 0 ? "transparent" : "var(--surface-1)" }}>
-                <td style={{ ...td, padding: "3px 6px", fontSize: 10, whiteSpace: "nowrap" }}>{st.roll}</td>
-                <td style={{ ...td, padding: "3px 6px", textAlign: "left", whiteSpace: "nowrap" }}>{st.name || ""}</td>
+                <td style={{ ...td, padding: "5px 6px", fontSize: 12, whiteSpace: "nowrap" }}>{st.roll}</td>
+                <td style={{ ...td, padding: "5px 8px", textAlign: "left", whiteSpace: "nowrap", fontSize: 13.5 }}>{st.name || ""}</td>
                 {["a1","a2","a3","a4","a5"].map(f => (
                   <td key={f} style={td}>
                     <CellInput value={get(st.roll, f)} onChange={v => set(st.roll, f, v)} readOnly={locked} />
@@ -122,6 +124,9 @@ function TheoryMidSheet({ students, midData, onChange, locked }) {
                     <AutoCell key={`q${n}`} value={qs[qi] || ""} />
                   </>
                 ))}
+                <td style={{ padding: "3px 6px", textAlign: "center", fontWeight: 700, fontSize: 13, background: "#FDE8D2", color: "#8A4A10", border: "0.5px solid #f3d3a8" }}>
+                  {pBraw || ""}
+                </td>
                 <AutoCell value={pBc || ""} />
                 <GrandCell value={total || ""} />
               </tr>
@@ -136,30 +141,30 @@ function TheoryMidSheet({ students, midData, onChange, locked }) {
 // ── Drawing MID sheet ─────────────────────────────────────────────────────────
 function DrawingMidSheet({ students, midData, onChange, locked }) {
   const td = { border: "0.5px solid var(--border)", padding: 0, textAlign: "center" };
-  const th = (bg, color) => ({ padding: "4px 5px", textAlign: "center", fontWeight: 500, fontSize: 11, background: bg, color: color, border: "0.5px solid var(--border)", whiteSpace: "nowrap" });
+  const th = (bg, color, width) => ({ padding: "6px 6px", textAlign: "center", fontWeight: 600, fontSize: 13, background: bg, color: color, border: "0.5px solid var(--border)", whiteSpace: "nowrap", width });
 
   function get(roll, field) { return midData?.[roll]?.[field] ?? ""; }
   function set(roll, field, val) { onChange(roll, field, val); }
 
   return (
     <div style={{ overflowX: "auto" }}>
-      <table style={{ borderCollapse: "collapse", fontSize: 11, minWidth: 500 }}>
+      <table style={{ borderCollapse: "collapse", fontSize: 13, width: "100%", minWidth: 700 }}>
         <thead>
           <tr>
-            <th rowSpan={2} style={th("var(--surface-1)", "var(--text-muted)")}>Roll</th>
-            <th rowSpan={2} style={{ ...th("var(--surface-1)", "var(--text-muted)"), textAlign: "left", minWidth: 100 }}>Name</th>
+            <th rowSpan={2} style={th("var(--surface-1)", "var(--text-muted)", 70)}>Roll</th>
+            <th rowSpan={2} style={{ ...th("var(--surface-1)", "var(--text-muted)"), textAlign: "left" }}>Name</th>
             <th colSpan={13} style={th("#E6F1FB","#0C447C")}>Q1–Q6 · best of (Q1,Q2) + best of (Q3,Q4) + best of (Q5,Q6) → max 30 → converted to 15</th>
-            <th rowSpan={2} style={th("#EEEDFE","#534AB7")}>MID (15)</th>
+            <th rowSpan={2} style={th("#EEEDFE","#534AB7", 70)}>MID (15)</th>
           </tr>
           <tr>
             {[1,2,3,4,5,6].map(n => (
               <>
-                <th key={`${n}a`} style={th("#E6F1FB","#185FA5")}>{n}A</th>
-                <th key={`${n}b`} style={th("#E6F1FB","#185FA5")}>{n}B</th>
-                <th key={`q${n}`} style={th("#B5D4F4","#0C447C")}>Q{n}</th>
+                <th key={`${n}a`} style={th("#E6F1FB","#185FA5", 54)}>{n}A</th>
+                <th key={`${n}b`} style={th("#E6F1FB","#185FA5", 54)}>{n}B</th>
+                <th key={`q${n}`} style={th("#B5D4F4","#0C447C", 54)}>Q{n}</th>
               </>
             ))}
-            <th style={th("#85B7EB","#042C53")}>Cvt</th>
+            <th style={th("#85B7EB","#042C53", 60)}>Cvt</th>
           </tr>
         </thead>
         <tbody>
@@ -169,8 +174,8 @@ function DrawingMidSheet({ students, midData, onChange, locked }) {
             const conv = Math.round(calcDrawingMidConv(m) * 10) / 10;
             return (
               <tr key={st.roll} style={{ background: i % 2 === 0 ? "transparent" : "var(--surface-1)" }}>
-                <td style={{ ...td, padding: "3px 6px", fontSize: 10, whiteSpace: "nowrap" }}>{st.roll}</td>
-                <td style={{ ...td, padding: "3px 6px", textAlign: "left" }}>{st.name || ""}</td>
+                <td style={{ ...td, padding: "5px 6px", fontSize: 12, whiteSpace: "nowrap" }}>{st.roll}</td>
+                <td style={{ ...td, padding: "5px 8px", textAlign: "left", fontSize: 13.5 }}>{st.name || ""}</td>
                 {[1,2,3,4,5,6].map((n, qi) => (
                   <>
                     <td key={`${n}a`} style={td}><CellInput value={get(st.roll, `b${n}a`)} onChange={v => set(st.roll, `b${n}a`, v)} readOnly={locked} /></td>
@@ -192,12 +197,12 @@ function DrawingMidSheet({ students, midData, onChange, locked }) {
 // ── Lab sheet ─────────────────────────────────────────────────────────────────
 function LabSheet({ students, labData, onChange, locked }) {
   const td = { border: "0.5px solid var(--border)", padding: 0 };
-  const th = (bg, color) => ({ padding: "6px 10px", textAlign: "center", fontWeight: 500, fontSize: 12, background: bg, color: color, border: "0.5px solid var(--border)" });
+  const th = (bg, color) => ({ padding: "8px 12px", textAlign: "center", fontWeight: 600, fontSize: 14, background: bg, color: color, border: "0.5px solid var(--border)" });
   const fields = ["practical","script","viva","record"];
 
   return (
     <div style={{ overflowX: "auto" }}>
-      <table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%" }}>
+      <table style={{ borderCollapse: "collapse", fontSize: 14, width: "100%" }}>
         <thead>
           <tr>
             <th style={th("var(--surface-1)","var(--text-muted)")}>Roll No</th>
@@ -213,17 +218,17 @@ function LabSheet({ students, labData, onChange, locked }) {
             const over = total > LAB_MAX_TOTAL;
             return (
               <tr key={st.roll} style={{ background: i % 2 === 0 ? "transparent" : "var(--surface-1)" }}>
-                <td style={{ ...td, padding: "4px 8px", fontSize: 11 }}>{st.roll}</td>
-                <td style={{ ...td, padding: "4px 8px", textAlign: "left" }}>{st.name || ""}</td>
+                <td style={{ ...td, padding: "6px 10px", fontSize: 13 }}>{st.roll}</td>
+                <td style={{ ...td, padding: "6px 10px", textAlign: "left" }}>{st.name || ""}</td>
                 {fields.map(f => (
                   <td key={f} style={{ border: "0.5px solid var(--border)", padding: 4, textAlign: "center" }}>
                     <input type="number" min="0" className="marks-input" value={m[f] ?? ""} onChange={e => onChange(st.roll, f, e.target.value === "" ? "" : Number(e.target.value))} readOnly={locked}
-                      style={{ width: 60, height: 28, border: locked ? "1px solid #e0e0e0" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 14, fontWeight: 600, background: locked ? "#f5f5f5" : "#fff", padding: 2, boxSizing: "border-box" }} />
+                      style={{ width: 70, height: 34, border: locked ? "1px solid #e0e0e0" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 16, fontWeight: 600, background: locked ? "#f5f5f5" : "#fff", padding: 2, boxSizing: "border-box" }} />
                   </td>
                 ))}
-                <td style={{ padding: "4px 8px", textAlign: "center", fontWeight: 600, fontSize: 12, background: over ? "#fee2e2" : "#E1F5EE", color: over ? "#b91c1c" : "#0F6E56", border: "0.5px solid var(--border)" }}>
+                <td style={{ padding: "6px 10px", textAlign: "center", fontWeight: 600, fontSize: 14, background: over ? "#fee2e2" : "#E1F5EE", color: over ? "#b91c1c" : "#0F6E56", border: "0.5px solid var(--border)" }}>
                   {total || ""}
-                  {over && <span style={{ fontSize: 10, display: "block" }}>Max 40</span>}
+                  {over && <span style={{ fontSize: 11, display: "block" }}>Max 40</span>}
                 </td>
               </tr>
             );
@@ -237,13 +242,13 @@ function LabSheet({ students, labData, onChange, locked }) {
 // ── Assignment sheet ──────────────────────────────────────────────────────────
 function AssignmentSheet({ students, assignData, onChange, locked }) {
   const td = { border: "0.5px solid var(--border)", padding: 0 };
-  const th = (bg, color) => ({ padding: "6px 10px", textAlign: "center", fontWeight: 500, fontSize: 12, background: bg, color: color, border: "0.5px solid var(--border)" });
+  const th = (bg, color) => ({ padding: "8px 12px", textAlign: "center", fontWeight: 600, fontSize: 14, background: bg, color: color, border: "0.5px solid var(--border)" });
   return (
     <div style={{ overflowX: "auto" }}>
-      <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8, padding: "0 2px" }}>
+      <div style={{ fontSize: 13.5, color: "var(--text-muted)", marginBottom: 8, padding: "0 2px" }}>
         Enter marks for each assignment (max 5 each). If only one assignment is given, leave A2 blank for all students — the system will use A1 as full marks. If A2 is entered for any student, both columns are used and the average is taken for all students.
       </div>
-      <table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%" }}>
+      <table style={{ borderCollapse: "collapse", fontSize: 14, width: "100%" }}>
         <thead>
           <tr>
             <th style={th("var(--surface-1)","var(--text-muted)")}>Roll No</th>
@@ -257,15 +262,15 @@ function AssignmentSheet({ students, assignData, onChange, locked }) {
             const m = assignData?.[st.roll] || {};
             return (
               <tr key={st.roll} style={{ background: i % 2 === 0 ? "transparent" : "var(--surface-1)" }}>
-                <td style={{ ...td, padding: "4px 8px", fontSize: 11 }}>{st.roll}</td>
-                <td style={{ ...td, padding: "4px 8px", textAlign: "left" }}>{st.name || ""}</td>
+                <td style={{ ...td, padding: "6px 10px", fontSize: 13 }}>{st.roll}</td>
+                <td style={{ ...td, padding: "6px 10px", textAlign: "left" }}>{st.name || ""}</td>
                 <td style={{ border: "0.5px solid var(--border)", padding: 4, textAlign: "center" }}>
                   <input type="number" min="0" max="5" className="marks-input" value={m.a1 ?? ""} onChange={e => onChange(st.roll, "a1", e.target.value === "" ? "" : Number(e.target.value))} readOnly={locked}
-                    style={{ width: 80, height: 28, border: locked ? "1px solid #e0e0e0" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 14, fontWeight: 600, background: locked ? "#f5f5f5" : "#fff", padding: 2, boxSizing: "border-box" }} />
+                    style={{ width: 90, height: 34, border: locked ? "1px solid #e0e0e0" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 16, fontWeight: 600, background: locked ? "#f5f5f5" : "#fff", padding: 2, boxSizing: "border-box" }} />
                 </td>
                 <td style={{ border: "0.5px solid var(--border)", padding: 4, textAlign: "center" }}>
                   <input type="number" min="0" max="5" className="marks-input" value={m.a2 ?? ""} onChange={e => onChange(st.roll, "a2", e.target.value === "" ? "" : Number(e.target.value))} readOnly={locked}
-                    style={{ width: 80, height: 28, border: locked ? "1px solid #e0e0e0" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 14, fontWeight: 600, background: locked ? "#f5f5f5" : "#fff", padding: 2, boxSizing: "border-box" }} />
+                    style={{ width: 90, height: 34, border: locked ? "1px solid #e0e0e0" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 16, fontWeight: 600, background: locked ? "#f5f5f5" : "#fff", padding: 2, boxSizing: "border-box" }} />
                 </td>
               </tr>
             );
@@ -279,11 +284,11 @@ function AssignmentSheet({ students, assignData, onChange, locked }) {
 // ── Day-to-day sheet (Drawing only) ──────────────────────────────────────────
 function DayDaySheet({ students, ddData, onChange, locked }) {
   const td = { border: "0.5px solid var(--border)", padding: 0 };
-  const th = (bg, color) => ({ padding: "6px 10px", textAlign: "center", fontWeight: 500, fontSize: 12, background: bg, color, border: "0.5px solid var(--border)" });
+  const th = (bg, color) => ({ padding: "8px 12px", textAlign: "center", fontWeight: 600, fontSize: 14, background: bg, color, border: "0.5px solid var(--border)" });
   return (
     <div style={{ overflowX: "auto" }}>
-      <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8 }}>Day-to-day performance marks (max 15 per student)</div>
-      <table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%" }}>
+      <div style={{ fontSize: 13.5, color: "var(--text-muted)", marginBottom: 8 }}>Day-to-day performance marks (max 15 per student)</div>
+      <table style={{ borderCollapse: "collapse", fontSize: 14, width: "100%" }}>
         <thead>
           <tr>
             <th style={th("var(--surface-1)","var(--text-muted)")}>Roll No</th>
@@ -294,11 +299,11 @@ function DayDaySheet({ students, ddData, onChange, locked }) {
         <tbody>
           {students.map((st, i) => (
             <tr key={st.roll} style={{ background: i % 2 === 0 ? "transparent" : "var(--surface-1)" }}>
-              <td style={{ ...td, padding: "4px 8px", fontSize: 11 }}>{st.roll}</td>
-              <td style={{ ...td, padding: "4px 8px", textAlign: "left" }}>{st.name || ""}</td>
+              <td style={{ ...td, padding: "6px 10px", fontSize: 13 }}>{st.roll}</td>
+              <td style={{ ...td, padding: "6px 10px", textAlign: "left" }}>{st.name || ""}</td>
               <td style={{ border: "0.5px solid var(--border)", padding: 4, textAlign: "center" }}>
                 <input type="number" min="0" max="15" className="marks-input" value={ddData?.[st.roll] ?? ""} onChange={e => onChange(st.roll, e.target.value === "" ? "" : Number(e.target.value))} readOnly={locked}
-                  style={{ width: 80, height: 28, border: locked ? "1px solid #e0e0e0" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 14, fontWeight: 600, background: locked ? "#f5f5f5" : "#fff", padding: 2, boxSizing: "border-box" }} />
+                  style={{ width: 90, height: 34, border: locked ? "1px solid #e0e0e0" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 16, fontWeight: 600, background: locked ? "#f5f5f5" : "#fff", padding: 2, boxSizing: "border-box" }} />
               </td>
             </tr>
           ))}
@@ -310,12 +315,12 @@ function DayDaySheet({ students, ddData, onChange, locked }) {
 
 // ── Result sheet ──────────────────────────────────────────────────────────────
 function ResultSheet({ students, data, isLab, isDrawing }) {
-  const td = (bg, color, fw) => ({ padding: "6px 8px", textAlign: "center", fontSize: 12, background: bg || "#fff", color: color || "#222", fontWeight: fw || 400, border: "1px solid #c8c8c8" });
+  const td = (bg, color, fw) => ({ padding: "8px 10px", textAlign: "center", fontSize: 14, background: bg || "#fff", color: color || "#222", fontWeight: fw || 400, border: "1px solid #c8c8c8" });
 
   if (isLab) {
     const lab = data?.lab || {};
     return (
-      <table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%" }}>
+      <table style={{ borderCollapse: "collapse", fontSize: 14, width: "100%" }}>
         <thead>
           <tr>
             <th style={td("var(--surface-1)","var(--text-muted)",500)}>Roll No</th>
@@ -352,7 +357,7 @@ function ResultSheet({ students, data, isLab, isDrawing }) {
   const hasA2 = students.some(st => assign[st.roll]?.a2 !== undefined && assign[st.roll]?.a2 !== "");
 
   return (
-    <table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%" }}>
+    <table style={{ borderCollapse: "collapse", fontSize: 14, width: "100%" }}>
       <thead>
         <tr>
           <th style={td("var(--surface-1)","var(--text-muted)",500)}>Roll No</th>
@@ -525,16 +530,16 @@ function SubjectView({ section, subject, user, onBack }) {
   return (
     <div>
       <div style={{ background: BLUE, color: "#fff", padding: "12px 16px", display: "flex", alignItems: "center", gap: 12 }}>
-        <button onClick={onBack} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: 6, padding: "4px 10px", fontSize: 12, cursor: "pointer" }}>← Back</button>
+        <button onClick={onBack} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: 6, padding: "4px 10px", fontSize: 13.5, cursor: "pointer" }}>← Back</button>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>{subject.name}</div>
-          <div style={{ fontSize: 12, opacity: .8 }}>{section.name} · {isLab ? "Lab" : isDrawing ? "Drawing" : "Theory"} · {isLab ? 40 : 30} marks</div>
+          <div style={{ fontSize: 16, fontWeight: 600 }}>{subject.name}</div>
+          <div style={{ fontSize: 13.5, opacity: .8 }}>{section.name} · {isLab ? "Lab" : isDrawing ? "Drawing" : "Theory"} · {isLab ? 40 : 30} marks</div>
         </div>
-        <span style={{ fontSize: 11, background: statusStyle.bg, color: statusStyle.color, borderRadius: 20, padding: "3px 10px" }}>{status}</span>
-        {saving && <span style={{ fontSize: 11, opacity: .7 }}>Saving…</span>}
+        <span style={{ fontSize: 12.5, background: statusStyle.bg, color: statusStyle.color, borderRadius: 20, padding: "3px 10px" }}>{status}</span>
+        {saving && <span style={{ fontSize: 12.5, opacity: .7 }}>Saving…</span>}
         {!locked && (
           <button onClick={handleLock} disabled={locking}
-            style={{ fontSize: 12, background: "#fff", color: BLUE, border: "none", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontWeight: 600 }}>
+            style={{ fontSize: 13.5, background: "#fff", color: BLUE, border: "none", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontWeight: 600 }}>
             🔒 Lock marks
           </button>
         )}
@@ -543,7 +548,7 @@ function SubjectView({ section, subject, user, onBack }) {
       <div style={{ display: "flex", borderBottom: "1px solid var(--border)", background: "var(--surface-2)", paddingLeft: 8 }}>
         {tabs.map(t => (
           <button key={t} onClick={() => setTab(t)}
-            style={{ border: "none", background: "none", padding: "8px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", color: tab === t ? BLUE : "var(--text-muted)", borderBottom: tab === t ? `2px solid ${BLUE}` : "2px solid transparent", fontFamily: "inherit" }}>
+            style={{ border: "none", background: "none", padding: "9px 16px", fontSize: 13.5, fontWeight: 600, cursor: "pointer", color: tab === t ? BLUE : "var(--text-muted)", borderBottom: tab === t ? `2px solid ${BLUE}` : "2px solid transparent", fontFamily: "inherit" }}>
             {t}
           </button>
         ))}
@@ -551,7 +556,7 @@ function SubjectView({ section, subject, user, onBack }) {
 
       <div style={{ padding: 12 }}>
         {locked && tab !== "Result" && (
-          <div style={{ fontSize: 12, color: "#854F0B", background: "#FAEEDA", borderRadius: 8, padding: "7px 12px", marginBottom: 10 }}>
+          <div style={{ fontSize: 13.5, color: "#854F0B", background: "#FAEEDA", borderRadius: 8, padding: "7px 12px", marginBottom: 10 }}>
             🔒 Marks are locked. Contact your admin to unlock for editing.
           </div>
         )}
@@ -601,23 +606,23 @@ function SubjectList({ sections, user, onSelectSubject }) {
       <div style={{ textAlign: "center", padding: "3rem", color: "var(--text-muted)" }}>
         <div style={{ fontSize: 32, marginBottom: 12 }}>📝</div>
         <div style={{ fontWeight: 600, marginBottom: 6 }}>No subjects assigned</div>
-        <div style={{ fontSize: 13 }}>Ask your admin to assign subjects to you.</div>
+        <div style={{ fontSize: 14.5 }}>Ask your admin to assign subjects to you.</div>
       </div>
     );
   }
 
   return (
     <div style={{ padding: 16 }}>
-      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>My subjects — internal marks</div>
+      <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 12 }}>My subjects — internal marks</div>
       {mySubjects.map(({ section, subject }) => (
         <div key={section.id + subject.id}
           onClick={() => onSelectSubject(section, subject)}
           style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: "var(--surface-2)", border: "0.5px solid var(--border)", borderRadius: 10, marginBottom: 8, cursor: "pointer" }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>{subject.name}</div>
-            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{section.name}</div>
+            <div style={{ fontSize: 16, fontWeight: 600 }}>{subject.name}</div>
+            <div style={{ fontSize: 13.5, color: "var(--text-muted)" }}>{section.name}</div>
           </div>
-          <span style={{ fontSize: 11, background: isLabSubject(subject) ? "#EEEDFE" : isDrawingSubject(subject) ? "#FAEEDA" : "#E1F5EE", color: isLabSubject(subject) ? "#534AB7" : isDrawingSubject(subject) ? "#854F0B" : "#0F6E56", borderRadius: 20, padding: "3px 9px" }}>
+          <span style={{ fontSize: 12.5, background: isLabSubject(subject) ? "#EEEDFE" : isDrawingSubject(subject) ? "#FAEEDA" : "#E1F5EE", color: isLabSubject(subject) ? "#534AB7" : isDrawingSubject(subject) ? "#854F0B" : "#0F6E56", borderRadius: 20, padding: "3px 9px" }}>
             {isLabSubject(subject) ? "Lab" : isDrawingSubject(subject) ? "Drawing" : "Theory"}
           </span>
           <span style={{ color: BLUE, fontSize: 18 }}>›</span>
