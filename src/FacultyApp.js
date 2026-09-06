@@ -10,7 +10,7 @@ import { today, calcPct, makeKey, parseKey, groupByDateBatched, rowColor, fmtDat
 import MentorPage from "./mentor/MentorPage";
 import InternalMarksPage from "./marks/InternalMarksPage";
 import FacultyProfilePage from "./profile/FacultyProfilePage";
-import HomeShell from "./components/HomeShell";
+import HomeHub from "./components/HomeHub";
 import { IconAttendance, IconMarks, IconMentor, IconUserCircle } from "./components/Icons";
 
 export default function FacultyApp({ user, onLogout, hideShell = false, initialTab = "attendance" }) {
@@ -19,7 +19,7 @@ export default function FacultyApp({ user, onLogout, hideShell = false, initialT
   const [screen,   setScreen]       = useState("home");
   const [ctx,      setCtx]          = useState(null);
   const [presetPeriod, setPresetPeriod] = useState(null);
-  const [mainTab, setMainTab]       = useState(initialTab); // attendance | mentor | marks
+  const [mainTab, setMainTab]       = useState(hideShell ? initialTab : null); // null = show the home hub
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "sections"), snap => {
@@ -47,22 +47,39 @@ export default function FacultyApp({ user, onLogout, hideShell = false, initialT
     return <SubjectReport user={user} ctx={ctx} onBack={() => setScreen("home")} />;
   }
 
+  if (!hideShell && !mainTab) {
+    return (
+      <HomeHub
+        user={user}
+        onLogout={onLogout}
+        roleLabel={user.designation || "Faculty"}
+        greeting={"Welcome, " + user.name}
+        onSelect={id => { setMainTab(id); setScreen("home"); }}
+        groups={[{
+          label: "My own duties",
+          tiles: [
+            { id: "profile", title: "My Profile", desc: "Your bio, qualifications, publications and downloadable resume.", icon: IconUserCircle, color: "blue" },
+            { id: "attendance", title: "My Section Attendance", desc: "Mark and review attendance for the subjects you teach.", icon: IconAttendance, color: "teal" },
+            { id: "marks", title: "My Subject Internal Marks", desc: "Enter marks for the subjects you teach.", icon: IconMarks, color: "indigo" },
+            { id: "mentor", title: "Mentor", desc: "Track your mentee students' progress and add comments.", icon: IconMentor, color: "violet" },
+          ],
+        }]}
+      />
+    );
+  }
+
+  const mainTabTitle = {
+    attendance: "My Section Attendance",
+    marks: "My Subject Internal Marks",
+    mentor: "Mentor",
+    profile: "My Profile",
+  }[mainTab] || "";
+
   return (
     <div style={{ background: P.bg, minHeight: "100vh" }}>
       {!hideShell && (
-        <HomeShell
-          user={user}
-          onLogout={onLogout}
-          roleLabel={user.designation || "Faculty"}
-          tabs={[
-            { id: "attendance", label: "My section attendance", icon: IconAttendance },
-            { id: "marks", label: "Internal marks", icon: IconMarks },
-            { id: "mentor", label: "Mentor", icon: IconMentor },
-            { id: "profile", label: "My profile", icon: IconUserCircle },
-          ]}
-          active={mainTab}
-          onSelect={t => { setMainTab(t); setScreen("home"); }}
-        />
+        <TopBar title={mainTabTitle} subtitle={user.name}
+          right={<button onClick={() => setMainTab(null)} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>← Back</button>} />
       )}
 
       {mainTab === "mentor" ? (

@@ -12,8 +12,9 @@ import {
   calcFinalInternal, calcAssignment, calcLabTotal,
   calcDrawingMidConv, calcDrawingMidRaw,
   validateTheory, validateLab,
+  validateTheoryMid, validateDrawingMid, validateAssignmentEntry, validateDayDayEntry,
   isLabSubject, isDrawingSubject,
-  THEORY_MAX_TOTAL, LAB_MAX_TOTAL, DRAWING_MAX_TOTAL,
+  THEORY_MAX_TOTAL, LAB_MAX_TOTAL, DRAWING_MAX_TOTAL, THEORY_MAX_ASSIGNMENT, DRAWING_MAX_DAYDAY,
 } from "./marksCalc";
 
 const BLUE = "#1a56a0";
@@ -38,11 +39,12 @@ function CellInput({ value, onChange, readOnly, warn }) {
       value={value === undefined || value === null ? "" : value}
       onChange={e => onChange(e.target.value === "" ? "" : Number(e.target.value))}
       readOnly={readOnly}
+      title={warn ? "Exceeds the allowed maximum for this field" : undefined}
       style={{
-        width: 32, height: 30, border: readOnly ? "1px solid #e0e0e0" : "1px solid #b0c4de",
+        width: 32, height: 30, border: readOnly ? "1px solid #e0e0e0" : warn ? "2px solid #dc2626" : "1px solid #b0c4de",
         borderRadius: 4, textAlign: "center", fontSize: 14, fontWeight: 600,
         background: readOnly ? "#f5f5f5" : warn ? "#fee2e2" : "#fff",
-        color: readOnly ? "#888" : "#222",
+        color: readOnly ? "#888" : warn ? "#991b1b" : "#222",
         cursor: readOnly ? "default" : "text",
         padding: 2, boxSizing: "border-box",
       }}
@@ -50,7 +52,17 @@ function CellInput({ value, onChange, readOnly, warn }) {
   );
 }
 
-function AutoCell({ value }) {
+// A computed cell — shows its value normally, or a red "!" instead of the
+// number whenever the entries it depends on are invalid, so a wrong total
+// can never look like a trustworthy one.
+function AutoCell({ value, error }) {
+  if (error) {
+    return (
+      <td title="Invalid entry above — this figure can't be trusted until it's fixed" style={{ padding: "3px 6px", textAlign: "center", fontWeight: 700, fontSize: 13, background: "#fee2e2", color: "#991b1b", border: "0.5px solid #f3b4b0" }}>
+        !
+      </td>
+    );
+  }
   return (
     <td style={{ padding: "3px 6px", textAlign: "center", fontWeight: 600, fontSize: 13, background: "#E6F1FB", color: "#185FA5", border: "0.5px solid #d0e4f8" }}>
       {value !== "" ? value : ""}
@@ -58,7 +70,14 @@ function AutoCell({ value }) {
   );
 }
 
-function GrandCell({ value }) {
+function GrandCell({ value, error }) {
+  if (error) {
+    return (
+      <td title="Invalid entry above — this figure can't be trusted until it's fixed" style={{ padding: "3px 6px", textAlign: "center", fontWeight: 700, fontSize: 14, background: "#fee2e2", color: "#991b1b", border: "0.5px solid #f3b4b0" }}>
+        !
+      </td>
+    );
+  }
   return (
     <td style={{ padding: "3px 6px", textAlign: "center", fontWeight: 600, fontSize: 14, background: "#EEEDFE", color: "#26215C", border: "0.5px solid #c5c2f0" }}>
       {value !== "" ? value : ""}
@@ -107,28 +126,33 @@ function TheoryMidSheet({ students, midData, onChange, locked }) {
             const pBraw = calcPartBRaw(m);
             const pBc = Math.round(calcPartBConv(m) * 10) / 10;
             const total = Math.round(pA + pBc);
+            const { partA: partAErrors, pairs: pairErrors, hasError: rowError } = validateTheoryMid(m);
             return (
               <tr key={st.roll} style={{ background: i % 2 === 0 ? "transparent" : "var(--surface-1)" }}>
                 <td style={{ ...td, padding: "5px 6px", fontSize: 12, whiteSpace: "nowrap" }}>{st.roll}</td>
                 <td style={{ ...td, padding: "5px 8px", textAlign: "left", whiteSpace: "nowrap", fontSize: 13.5 }}>{st.name || ""}</td>
                 {["a1","a2","a3","a4","a5"].map(f => (
                   <td key={f} style={td}>
-                    <CellInput value={get(st.roll, f)} onChange={v => set(st.roll, f, v)} readOnly={locked} />
+                    <CellInput value={get(st.roll, f)} onChange={v => set(st.roll, f, v)} readOnly={locked} warn={partAErrors[f]} />
                   </td>
                 ))}
-                <AutoCell value={pA || ""} />
+                <AutoCell value={pA || ""} error={Object.keys(partAErrors).length > 0} />
                 {[2,3,4,5,6,7].map((n, qi) => (
                   <>
-                    <td key={`${n}a`} style={td}><CellInput value={get(st.roll, `b${n}a`)} onChange={v => set(st.roll, `b${n}a`, v)} readOnly={locked} /></td>
-                    <td key={`${n}b`} style={td}><CellInput value={get(st.roll, `b${n}b`)} onChange={v => set(st.roll, `b${n}b`, v)} readOnly={locked} /></td>
-                    <AutoCell key={`q${n}`} value={qs[qi] || ""} />
+                    <td key={`${n}a`} style={td}><CellInput value={get(st.roll, `b${n}a`)} onChange={v => set(st.roll, `b${n}a`, v)} readOnly={locked} warn={pairErrors[n]} /></td>
+                    <td key={`${n}b`} style={td}><CellInput value={get(st.roll, `b${n}b`)} onChange={v => set(st.roll, `b${n}b`, v)} readOnly={locked} warn={pairErrors[n]} /></td>
+                    <AutoCell key={`q${n}`} value={qs[qi] || ""} error={pairErrors[n]} />
                   </>
                 ))}
-                <td style={{ padding: "3px 6px", textAlign: "center", fontWeight: 700, fontSize: 13, background: "#FDE8D2", color: "#8A4A10", border: "0.5px solid #f3d3a8" }}>
-                  {pBraw || ""}
-                </td>
-                <AutoCell value={pBc || ""} />
-                <GrandCell value={total || ""} />
+                {rowError ? (
+                  <td title="Invalid entry above — this figure can't be trusted until it's fixed" style={{ padding: "3px 6px", textAlign: "center", fontWeight: 700, fontSize: 13, background: "#fee2e2", color: "#991b1b", border: "0.5px solid #f3b4b0" }}>!</td>
+                ) : (
+                  <td style={{ padding: "3px 6px", textAlign: "center", fontWeight: 700, fontSize: 13, background: "#FDE8D2", color: "#8A4A10", border: "0.5px solid #f3d3a8" }}>
+                    {pBraw || ""}
+                  </td>
+                )}
+                <AutoCell value={pBc || ""} error={rowError} />
+                <GrandCell value={total || ""} error={rowError} />
               </tr>
             );
           })}
@@ -172,19 +196,20 @@ function DrawingMidSheet({ students, midData, onChange, locked }) {
             const m = midData?.[st.roll] || {};
             const qs = [1,2,3,4,5,6].map(n => calcQ(m[`b${n}a`], m[`b${n}b`]));
             const conv = Math.round(calcDrawingMidConv(m) * 10) / 10;
+            const { pairs: pairErrors, hasError: rowError } = validateDrawingMid(m);
             return (
               <tr key={st.roll} style={{ background: i % 2 === 0 ? "transparent" : "var(--surface-1)" }}>
                 <td style={{ ...td, padding: "5px 6px", fontSize: 12, whiteSpace: "nowrap" }}>{st.roll}</td>
                 <td style={{ ...td, padding: "5px 8px", textAlign: "left", fontSize: 13.5 }}>{st.name || ""}</td>
                 {[1,2,3,4,5,6].map((n, qi) => (
                   <>
-                    <td key={`${n}a`} style={td}><CellInput value={get(st.roll, `b${n}a`)} onChange={v => set(st.roll, `b${n}a`, v)} readOnly={locked} /></td>
-                    <td key={`${n}b`} style={td}><CellInput value={get(st.roll, `b${n}b`)} onChange={v => set(st.roll, `b${n}b`, v)} readOnly={locked} /></td>
-                    <AutoCell key={`q${n}`} value={qs[qi] || ""} />
+                    <td key={`${n}a`} style={td}><CellInput value={get(st.roll, `b${n}a`)} onChange={v => set(st.roll, `b${n}a`, v)} readOnly={locked} warn={pairErrors[n]} /></td>
+                    <td key={`${n}b`} style={td}><CellInput value={get(st.roll, `b${n}b`)} onChange={v => set(st.roll, `b${n}b`, v)} readOnly={locked} warn={pairErrors[n]} /></td>
+                    <AutoCell key={`q${n}`} value={qs[qi] || ""} error={pairErrors[n]} />
                   </>
                 ))}
-                <AutoCell value={conv || ""} />
-                <GrandCell value={Math.round(conv) || ""} />
+                <AutoCell value={conv || ""} error={rowError} />
+                <GrandCell value={Math.round(conv) || ""} error={rowError} />
               </tr>
             );
           })}
@@ -260,17 +285,20 @@ function AssignmentSheet({ students, assignData, onChange, locked }) {
         <tbody>
           {students.map((st, i) => {
             const m = assignData?.[st.roll] || {};
+            const { errs } = validateAssignmentEntry(m);
             return (
               <tr key={st.roll} style={{ background: i % 2 === 0 ? "transparent" : "var(--surface-1)" }}>
                 <td style={{ ...td, padding: "6px 10px", fontSize: 13 }}>{st.roll}</td>
                 <td style={{ ...td, padding: "6px 10px", textAlign: "left" }}>{st.name || ""}</td>
                 <td style={{ border: "0.5px solid var(--border)", padding: 4, textAlign: "center" }}>
-                  <input type="number" min="0" max="5" className="marks-input" value={m.a1 ?? ""} onChange={e => onChange(st.roll, "a1", e.target.value === "" ? "" : Number(e.target.value))} readOnly={locked}
-                    style={{ width: 90, height: 34, border: locked ? "1px solid #e0e0e0" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 16, fontWeight: 600, background: locked ? "#f5f5f5" : "#fff", padding: 2, boxSizing: "border-box" }} />
+                  <input type="number" min="0" max={THEORY_MAX_ASSIGNMENT} className="marks-input" value={m.a1 ?? ""} onChange={e => onChange(st.roll, "a1", e.target.value === "" ? "" : Number(e.target.value))} readOnly={locked}
+                    title={errs.a1 ? "Exceeds the allowed maximum for this field" : undefined}
+                    style={{ width: 90, height: 34, border: locked ? "1px solid #e0e0e0" : errs.a1 ? "2px solid #dc2626" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 16, fontWeight: 600, background: locked ? "#f5f5f5" : errs.a1 ? "#fee2e2" : "#fff", color: errs.a1 ? "#991b1b" : "#222", padding: 2, boxSizing: "border-box" }} />
                 </td>
                 <td style={{ border: "0.5px solid var(--border)", padding: 4, textAlign: "center" }}>
-                  <input type="number" min="0" max="5" className="marks-input" value={m.a2 ?? ""} onChange={e => onChange(st.roll, "a2", e.target.value === "" ? "" : Number(e.target.value))} readOnly={locked}
-                    style={{ width: 90, height: 34, border: locked ? "1px solid #e0e0e0" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 16, fontWeight: 600, background: locked ? "#f5f5f5" : "#fff", padding: 2, boxSizing: "border-box" }} />
+                  <input type="number" min="0" max={THEORY_MAX_ASSIGNMENT} className="marks-input" value={m.a2 ?? ""} onChange={e => onChange(st.roll, "a2", e.target.value === "" ? "" : Number(e.target.value))} readOnly={locked}
+                    title={errs.a2 ? "Exceeds the allowed maximum for this field" : undefined}
+                    style={{ width: 90, height: 34, border: locked ? "1px solid #e0e0e0" : errs.a2 ? "2px solid #dc2626" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 16, fontWeight: 600, background: locked ? "#f5f5f5" : errs.a2 ? "#fee2e2" : "#fff", color: errs.a2 ? "#991b1b" : "#222", padding: 2, boxSizing: "border-box" }} />
                 </td>
               </tr>
             );
@@ -297,16 +325,20 @@ function DayDaySheet({ students, ddData, onChange, locked }) {
           </tr>
         </thead>
         <tbody>
-          {students.map((st, i) => (
-            <tr key={st.roll} style={{ background: i % 2 === 0 ? "transparent" : "var(--surface-1)" }}>
-              <td style={{ ...td, padding: "6px 10px", fontSize: 13 }}>{st.roll}</td>
-              <td style={{ ...td, padding: "6px 10px", textAlign: "left" }}>{st.name || ""}</td>
-              <td style={{ border: "0.5px solid var(--border)", padding: 4, textAlign: "center" }}>
-                <input type="number" min="0" max="15" className="marks-input" value={ddData?.[st.roll] ?? ""} onChange={e => onChange(st.roll, e.target.value === "" ? "" : Number(e.target.value))} readOnly={locked}
-                  style={{ width: 90, height: 34, border: locked ? "1px solid #e0e0e0" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 16, fontWeight: 600, background: locked ? "#f5f5f5" : "#fff", padding: 2, boxSizing: "border-box" }} />
-              </td>
-            </tr>
-          ))}
+          {students.map((st, i) => {
+            const { hasError } = validateDayDayEntry(ddData?.[st.roll]);
+            return (
+              <tr key={st.roll} style={{ background: i % 2 === 0 ? "transparent" : "var(--surface-1)" }}>
+                <td style={{ ...td, padding: "6px 10px", fontSize: 13 }}>{st.roll}</td>
+                <td style={{ ...td, padding: "6px 10px", textAlign: "left" }}>{st.name || ""}</td>
+                <td style={{ border: "0.5px solid var(--border)", padding: 4, textAlign: "center" }}>
+                  <input type="number" min="0" max={DRAWING_MAX_DAYDAY} className="marks-input" value={ddData?.[st.roll] ?? ""} onChange={e => onChange(st.roll, e.target.value === "" ? "" : Number(e.target.value))} readOnly={locked}
+                    title={hasError ? "Exceeds the allowed maximum for this field" : undefined}
+                    style={{ width: 90, height: 34, border: locked ? "1px solid #e0e0e0" : hasError ? "2px solid #dc2626" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 16, fontWeight: 600, background: locked ? "#f5f5f5" : hasError ? "#fee2e2" : "#fff", color: hasError ? "#991b1b" : "#222", padding: 2, boxSizing: "border-box" }} />
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -435,10 +467,15 @@ function ResultSheet({ students, data, isLab, isDrawing }) {
 }
 
 // ── Subject entry view ────────────────────────────────────────────────────────
-function SubjectView({ section, subject, user, onBack }) {
+// kind: "merit" (a subject this person teaches, under the merit/new section)
+//    or "original" (a subject they've been separately assigned to VALUE, under
+//    a roll-number-ordered original section) — two completely independent
+//    rosters and mark sets, stored under separate Firestore collections.
+function SubjectView({ section, subject, user, onBack, kind = "merit" }) {
   const students = section.students || [];
   const isLab = isLabSubject(subject);
   const isDrawing = isDrawingSubject(subject);
+  const marksCollection = kind === "original" ? "internalMarksOriginal" : "internalMarks";
 
   const tabs = isLab
     ? ["Lab Internal", "Result"]
@@ -452,16 +489,36 @@ function SubjectView({ section, subject, user, onBack }) {
   const [saving, setSaving] = useState(false);
   const [locking, setLocking] = useState(false);
 
-  const marksRef = doc(db, "internalMarks", section.id, "subjects", subject.id);
+  const marksRef = doc(db, marksCollection, section.id, "subjects", subject.id);
 
   useEffect(() => {
+    setData({});
+    setStatus("Not Started");
     const unsub = onSnapshot(marksRef, snap => {
       if (snap.exists()) { setData(snap.data()); setStatus(snap.data().status || "Not Started"); }
     });
     return unsub;
-  }, [section.id, subject.id]);
+  }, [section.id, subject.id, marksCollection]);
 
   const locked = status === "Locked";
+
+  // Count every invalid entry across the whole subject (not just the tab
+  // currently open) — Lock marks finalizes everything, so it needs to know
+  // about problems on tabs the faculty isn't looking at right now.
+  let invalidCount = 0;
+  if (!isLab) {
+    students.forEach(st => {
+      if (isDrawing) {
+        if (validateDrawingMid(data.mid1?.[st.roll]).hasError) invalidCount++;
+        if (validateDrawingMid(data.mid2?.[st.roll]).hasError) invalidCount++;
+        if (validateDayDayEntry(data.dayday?.[st.roll]).hasError) invalidCount++;
+      } else {
+        if (validateTheoryMid(data.mid1?.[st.roll]).hasError) invalidCount++;
+        if (validateTheoryMid(data.mid2?.[st.roll]).hasError) invalidCount++;
+        if (validateAssignmentEntry(data.assignment?.[st.roll]).hasError) invalidCount++;
+      }
+    });
+  }
 
   // Autosave helper — debounced write
   const autoSave = useCallback(async (updater) => {
@@ -515,6 +572,10 @@ function SubjectView({ section, subject, user, onBack }) {
   }
 
   async function handleLock() {
+    if (invalidCount > 0) {
+      alert("Can't lock marks — " + invalidCount + " invalid entr" + (invalidCount === 1 ? "y" : "ies") + " still need to be fixed (shown in red). Check every tab, not just the one you're on.");
+      return;
+    }
     if (!window.confirm("Lock marks? Faculty will not be able to edit after locking. Admin can unlock if needed.")) return;
     setLocking(true);
     try {
@@ -535,11 +596,20 @@ function SubjectView({ section, subject, user, onBack }) {
           <div style={{ fontSize: 16, fontWeight: 600 }}>{subject.name}</div>
           <div style={{ fontSize: 13.5, opacity: .8 }}>{section.name} · {isLab ? "Lab" : isDrawing ? "Drawing" : "Theory"} · {isLab ? 40 : 30} marks</div>
         </div>
+        <span style={{ fontSize: 12.5, fontWeight: 600, background: kind === "original" ? "#FAEEDA" : "rgba(255,255,255,0.18)", color: kind === "original" ? "#854F0B" : "#fff", borderRadius: 20, padding: "3px 10px" }}>
+          {kind === "original" ? "Paper valuation" : "My taught section"}
+        </span>
         <span style={{ fontSize: 12.5, background: statusStyle.bg, color: statusStyle.color, borderRadius: 20, padding: "3px 10px" }}>{status}</span>
         {saving && <span style={{ fontSize: 12.5, opacity: .7 }}>Saving…</span>}
+        {invalidCount > 0 && (
+          <span title="Fix every red cell before locking" style={{ fontSize: 12.5, fontWeight: 700, background: "#fee2e2", color: "#991b1b", borderRadius: 20, padding: "3px 10px" }}>
+            ⚠ {invalidCount} invalid {invalidCount === 1 ? "entry" : "entries"}
+          </span>
+        )}
         {!locked && (
-          <button onClick={handleLock} disabled={locking}
-            style={{ fontSize: 13.5, background: "#fff", color: BLUE, border: "none", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontWeight: 600 }}>
+          <button onClick={handleLock} disabled={locking || invalidCount > 0}
+            title={invalidCount > 0 ? "Fix all invalid entries before locking" : undefined}
+            style={{ fontSize: 13.5, background: invalidCount > 0 ? "rgba(255,255,255,0.4)" : "#fff", color: BLUE, border: "none", borderRadius: 6, padding: "5px 12px", cursor: invalidCount > 0 ? "not-allowed" : "pointer", fontWeight: 600, opacity: invalidCount > 0 ? 0.7 : 1 }}>
             🔒 Lock marks
           </button>
         )}
@@ -591,7 +661,29 @@ function SubjectView({ section, subject, user, onBack }) {
 }
 
 // ── Subject list (home screen) ────────────────────────────────────────────────
-function SubjectList({ sections, user, onSelectSubject }) {
+// Two independent pathways, shown as two separate groups: subjects this
+// person actually teaches (merit/new section roster), and subjects they've
+// been separately assigned to VALUE for an original (roll-number) section.
+// Same person can have both, unrelated to each other.
+function SubjectRow({ section, subject, onClick, tagLabel, tagBg, tagColor }) {
+  return (
+    <div
+      onClick={onClick}
+      style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: "var(--surface-2)", border: "0.5px solid var(--border)", borderRadius: 10, marginBottom: 8, cursor: "pointer" }}>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 16, fontWeight: 600 }}>{subject.name}</div>
+        <div style={{ fontSize: 13.5, color: "var(--text-muted)" }}>{section.name}</div>
+      </div>
+      <span style={{ fontSize: 11.5, fontWeight: 600, background: tagBg, color: tagColor, borderRadius: 20, padding: "3px 9px" }}>{tagLabel}</span>
+      <span style={{ fontSize: 12.5, background: isLabSubject(subject) ? "#EEEDFE" : isDrawingSubject(subject) ? "#FAEEDA" : "#E1F5EE", color: isLabSubject(subject) ? "#534AB7" : isDrawingSubject(subject) ? "#854F0B" : "#0F6E56", borderRadius: 20, padding: "3px 9px" }}>
+        {isLabSubject(subject) ? "Lab" : isDrawingSubject(subject) ? "Drawing" : "Theory"}
+      </span>
+      <span style={{ color: BLUE, fontSize: 18 }}>›</span>
+    </div>
+  );
+}
+
+function SubjectList({ sections, originalSections, user, onSelectSubject }) {
   const mySubjects = [];
   sections.forEach(sec => {
     (sec.subjects || []).forEach(sub => {
@@ -601,7 +693,16 @@ function SubjectList({ sections, user, onSelectSubject }) {
     });
   });
 
-  if (mySubjects.length === 0) {
+  const myValuations = [];
+  (originalSections || []).forEach(sec => {
+    (sec.subjects || []).forEach(sub => {
+      if (sub.valuatorPhone === user.phone) {
+        myValuations.push({ section: sec, subject: sub });
+      }
+    });
+  });
+
+  if (mySubjects.length === 0 && myValuations.length === 0) {
     return (
       <div style={{ textAlign: "center", padding: "3rem", color: "var(--text-muted)" }}>
         <div style={{ fontSize: 32, marginBottom: 12 }}>📝</div>
@@ -613,21 +714,26 @@ function SubjectList({ sections, user, onSelectSubject }) {
 
   return (
     <div style={{ padding: 16 }}>
-      <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 12 }}>My subjects — internal marks</div>
-      {mySubjects.map(({ section, subject }) => (
-        <div key={section.id + subject.id}
-          onClick={() => onSelectSubject(section, subject)}
-          style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: "var(--surface-2)", border: "0.5px solid var(--border)", borderRadius: 10, marginBottom: 8, cursor: "pointer" }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 16, fontWeight: 600 }}>{subject.name}</div>
-            <div style={{ fontSize: 13.5, color: "var(--text-muted)" }}>{section.name}</div>
-          </div>
-          <span style={{ fontSize: 12.5, background: isLabSubject(subject) ? "#EEEDFE" : isDrawingSubject(subject) ? "#FAEEDA" : "#E1F5EE", color: isLabSubject(subject) ? "#534AB7" : isDrawingSubject(subject) ? "#854F0B" : "#0F6E56", borderRadius: 20, padding: "3px 9px" }}>
-            {isLabSubject(subject) ? "Lab" : isDrawingSubject(subject) ? "Drawing" : "Theory"}
-          </span>
-          <span style={{ color: BLUE, fontSize: 18 }}>›</span>
-        </div>
-      ))}
+      {mySubjects.length > 0 && (
+        <>
+          <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 12 }}>My taught subjects</div>
+          {mySubjects.map(({ section, subject }) => (
+            <SubjectRow key={"m-" + section.id + subject.id} section={section} subject={subject}
+              onClick={() => onSelectSubject(section, subject, "merit")}
+              tagLabel="Teaching" tagBg="#E1F5EE" tagColor="#0F6E56" />
+          ))}
+        </>
+      )}
+      {myValuations.length > 0 && (
+        <>
+          <div style={{ fontWeight: 600, fontSize: 16, margin: mySubjects.length > 0 ? "22px 0 12px" : "0 0 12px" }}>Assigned to me for paper valuation</div>
+          {myValuations.map(({ section, subject }) => (
+            <SubjectRow key={"v-" + section.id + subject.id} section={section} subject={subject}
+              onClick={() => onSelectSubject(section, subject, "original")}
+              tagLabel="Valuation" tagBg="#FAEEDA" tagColor="#854F0B" />
+          ))}
+        </>
+      )}
     </div>
   );
 }
@@ -635,12 +741,21 @@ function SubjectList({ sections, user, onSelectSubject }) {
 // ── Main export ───────────────────────────────────────────────────────────────
 export default function InternalMarksPage({ user }) {
   const [sections, setSections] = useState([]);
-  const [selected, setSelected] = useState(null); // { section, subject }
+  const [originalSections, setOriginalSections] = useState([]);
+  const [selected, setSelected] = useState(null); // { section, subject, kind }
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "sections"), snap => {
       const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setSections(all.filter(sec => !sec.deleted && sec.subjects?.some(s => s.facultyPhone === user.phone)));
+    });
+    return unsub;
+  }, [user.phone]);
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "originalSections"), snap => {
+      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setOriginalSections(all.filter(sec => !sec.deleted && sec.subjects?.some(s => s.valuatorPhone === user.phone)));
     });
     return unsub;
   }, [user.phone]);
@@ -652,6 +767,7 @@ export default function InternalMarksPage({ user }) {
         <SubjectView
           section={selected.section}
           subject={selected.subject}
+          kind={selected.kind}
           user={user}
           onBack={() => setSelected(null)}
         />
@@ -662,7 +778,8 @@ export default function InternalMarksPage({ user }) {
   return (
     <>
       <NoSpinnerStyle />
-      <SubjectList sections={sections} user={user} onSelectSubject={(sec, sub) => setSelected({ section: sec, subject: sub })} />
+      <SubjectList sections={sections} originalSections={originalSections} user={user}
+        onSelectSubject={(sec, sub, kind) => setSelected({ section: sec, subject: sub, kind })} />
     </>
   );
 }

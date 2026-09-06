@@ -114,3 +114,63 @@ export function isLabSubject(sub) {
 export function isDrawingSubject(sub) {
   return sub?.type === 'Drawing';
 }
+
+// ── Real-time entry validation ──────────────────────────────────────────────
+// Every field is checked against its OWN actual maximum (not one blanket
+// cap) so a wrong entry is flagged the moment it's made, instead of being
+// silently rolled up into a total that still looks like a normal number.
+
+export const PART_A_QUESTION_MAX = 2;   // each of 1A..1E
+export const PART_B_QUESTION_MAX = 10;  // each question n = best/sum of (nA, nB)
+
+// Which of a1..a5 are individually over their own max (2 each)
+export function partAFieldErrors(marks) {
+  const errs = {};
+  ['a1', 'a2', 'a3', 'a4', 'a5'].forEach(k => {
+    const v = Number(marks?.[k]) || 0;
+    if (v < 0 || v > PART_A_QUESTION_MAX) errs[k] = true;
+  });
+  return errs;
+}
+
+// Is question n (its pair nA+nB) over its own max (10)?
+export function pairHasError(marks, n) {
+  const a = Number(marks?.[`b${n}a`]) || 0;
+  const b = Number(marks?.[`b${n}b`]) || 0;
+  return a < 0 || b < 0 || a > PART_B_QUESTION_MAX || b > PART_B_QUESTION_MAX || (a + b) > PART_B_QUESTION_MAX;
+}
+
+// Theory MID-1/MID-2 sheet: Part A (a1-a5) + Part B pairs (Q2-Q7)
+export function validateTheoryMid(marks) {
+  const partA = partAFieldErrors(marks);
+  const pairs = {};
+  [2, 3, 4, 5, 6, 7].forEach(n => { pairs[n] = pairHasError(marks, n); });
+  const hasError = Object.keys(partA).length > 0 || Object.values(pairs).some(Boolean);
+  return { partA, pairs, hasError };
+}
+
+// Drawing MID-1/MID-2 sheet: pairs Q1-Q6
+export function validateDrawingMid(marks) {
+  const pairs = {};
+  [1, 2, 3, 4, 5, 6].forEach(n => { pairs[n] = pairHasError(marks, n); });
+  const hasError = Object.values(pairs).some(Boolean);
+  return { pairs, hasError };
+}
+
+// Assignment sheet: a1/a2 each capped at THEORY_MAX_ASSIGNMENT (5)
+export function validateAssignmentEntry(marks) {
+  const errs = {};
+  const a1 = Number(marks?.a1) || 0;
+  if (a1 < 0 || a1 > THEORY_MAX_ASSIGNMENT) errs.a1 = true;
+  if (marks?.a2 !== undefined && marks?.a2 !== "") {
+    const a2 = Number(marks.a2) || 0;
+    if (a2 < 0 || a2 > THEORY_MAX_ASSIGNMENT) errs.a2 = true;
+  }
+  return { errs, hasError: Object.keys(errs).length > 0 };
+}
+
+// Day-to-day sheet: single value capped at DRAWING_MAX_DAYDAY (15)
+export function validateDayDayEntry(value) {
+  const v = Number(value) || 0;
+  return { hasError: v < 0 || v > DRAWING_MAX_DAYDAY };
+}

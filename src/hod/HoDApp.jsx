@@ -12,14 +12,15 @@ import FacultyApp from "../FacultyApp";
 import HoDStudentLookup from "./HoDStudentLookup";
 import FacultyProfilePage from "../profile/FacultyProfilePage";
 import FacultyProfilesDirectory from "../profile/FacultyProfilesDirectory";
-import HomeShell from "../components/HomeShell";
+import HomeHub from "../components/HomeHub";
+import OriginalSectionsScreen from "../originalSections/OriginalSectionsScreen";
 import { UsersScreen } from "../AdminApp";
 import { approveUser, rejectUser, makeAdmin, makeFaculty, makeHod, deleteUser, resetPin } from "../userActions";
-import { P } from "../components/UI";
-import { IconAttendance, IconSearch, IconUsers, IconUserCircle } from "../components/Icons";
+import { P, TopBar } from "../components/UI";
+import { IconAttendance, IconSearch, IconUsers, IconUserCircle, IconMarks } from "../components/Icons";
 
 export default function HoDApp({ user, onLogout }) {
-  const [tab, setTab] = useState("studentData");
+  const [tab, setTab] = useState(null); // null = show the home hub
   const [allUsers, setAllUsers] = useState([]);
 
   useEffect(() => {
@@ -43,22 +44,54 @@ export default function HoDApp({ user, onLogout }) {
     );
   }
 
-  return (
-    <div style={{ background: P.bg, minHeight: "100vh" }}>
-      <HomeShell
+  if (!tab) {
+    return (
+      <HomeHub
         user={user}
         onLogout={onLogout}
         roleLabel="Head of Department"
-        tabs={[
-          { id: "myAttendance", label: "My section attendance", icon: IconAttendance },
-          { id: "studentData", label: "Student data", icon: IconSearch },
-          { id: "profiles", label: "Faculty profiles", icon: IconUsers },
-          { id: "users", label: "Users", icon: IconUsers },
-          { id: "profile", label: "My profile", icon: IconUserCircle },
-        ]}
-        active={tab}
+        greeting={"Welcome, " + user.name}
         onSelect={setTab}
+        groups={[
+          {
+            label: "My own duties",
+            tiles: [
+              { id: "profile", title: "My Profile", desc: "Your bio, qualifications, publications and downloadable resume.", icon: IconUserCircle, color: "blue" },
+              { id: "myAttendance", title: "My Section Attendance", desc: "Mark and review attendance for the subjects you personally teach.", icon: IconAttendance, color: "teal" },
+            ],
+          },
+          {
+            label: "Department oversight",
+            tiles: [
+              { id: "studentData", title: "Student Data", desc: "Look up any student's SGPA, CGPA, backlogs and attendance trend.", icon: IconSearch, color: "green" },
+              { id: "allSectionsMarks", title: "All Sections Internal Marks", desc: "Monitor every original section's marks — see who's locked, drafted or not started.", icon: IconMarks, color: "amber" },
+              { id: "profiles", title: "Faculty Profiles", desc: "Directory of every faculty member's bio, publications and research.", icon: IconUsers, color: "rose" },
+              { id: "users", title: "Users", desc: "Approve registrations, promote faculty, manage the employee ID roster.", icon: IconUsers, color: "slate" },
+            ],
+          },
+        ]}
       />
+    );
+  }
+
+  if (tab === "allSectionsMarks") {
+    return <OriginalSectionsScreen user={user} onBack={() => setTab(null)} />;
+  }
+
+  const tabTitle = {
+    myAttendance: "My Section Attendance",
+    studentData: "Student Data",
+    profiles: "Faculty Profiles",
+    users: "Users",
+    profile: "My Profile",
+  }[tab] || "";
+
+  return (
+    <div style={{ background: P.bg, minHeight: "100vh" }}>
+      {tab !== "users" && (
+        <TopBar title={tabTitle} subtitle={user.name}
+          right={<button onClick={() => setTab(null)} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>← Back</button>} />
+      )}
 
       {tab === "myAttendance" && (
         <FacultyApp user={user} onLogout={onLogout} hideShell initialTab="attendance" />
@@ -99,7 +132,7 @@ export default function HoDApp({ user, onLogout }) {
           onMakeHod={makeHod}
           onDelete={deleteUser}
           onResetPin={resetPin}
-          onBack={() => setTab("studentData")}
+          onBack={() => setTab(null)}
         />
       )}
 

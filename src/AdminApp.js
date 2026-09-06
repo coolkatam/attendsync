@@ -15,7 +15,8 @@ import MarksAdminTab from "./marks/MarksAdminTab";
 import InternalMarksPage from "./marks/InternalMarksPage";
 import FacultyProfilePage from "./profile/FacultyProfilePage";
 import FacultyProfilesDirectory from "./profile/FacultyProfilesDirectory";
-import HomeShell from "./components/HomeShell";
+import HomeHub from "./components/HomeHub";
+import OriginalSectionsScreen from "./originalSections/OriginalSectionsScreen";
 import HoDStudentLookup from "./hod/HoDStudentLookup";
 import MentorPage from "./mentor/MentorPage";
 import { P, Btn, Card, Badge, Fld, Sel, TopBar, GPill, ARow, Spinner, PeriodPicker } from "./components/UI";
@@ -57,7 +58,7 @@ function InviteLinkCard({ adminPhone }) {
 
 export default function AdminApp({ user, onLogout }) {
   const [screen,   setScreen]   = useState("home");
-  const [homeTab,  setHomeTab]  = useState("allSections");
+  const [homeTab,  setHomeTab]  = useState(null); // null = show the home hub
   const [secId,    setSecId]    = useState(null);
   const [sections, setSections] = useState([]);
   const [trashedSections, setTrashedSections] = useState([]);
@@ -234,6 +235,9 @@ export default function AdminApp({ user, onLogout }) {
       </div>
     );
   }
+  if (screen === "allSectionsMarks") {
+    return <OriginalSectionsScreen user={user} onBack={() => setScreen("home")} />;
+  }
   if (screen === "users") {
     const usersToShow = allUsers; // approval rights are shared across HoD, admins, and master admin
     return (
@@ -265,41 +269,69 @@ export default function AdminApp({ user, onLogout }) {
 
   const totalStudents = sections.reduce((a, s) => a + (s.students?.length || 0), 0);
 
-  return (
-    <div style={{ background: P.bg, minHeight: "100vh" }}>
-      <HomeShell
+  if (!homeTab) {
+    return (
+      <HomeHub
         user={user}
         onLogout={onLogout}
         roleLabel={isMaster ? "Master Admin" : "Class Coordinator"}
         masterStar={isMaster}
-        tabs={[
-          { id: "myAttendance", label: "My section attendance", icon: IconAttendance },
-          { id: "allSections", label: "All sections", icon: IconSections },
-          { id: "marks", label: "Internal marks", icon: IconMarks },
-          { id: "mentor", label: "Mentor", icon: IconMentor },
-          ...(isMaster ? [
-            { id: "studentData", label: "Student data", icon: IconSearch },
-            { id: "profiles", label: "Faculty profiles", icon: IconUsers },
-            { id: "trash", label: "Trash", icon: IconTrash },
-          ] : []),
-          { id: "users", label: "Users", icon: IconUsers },
-          { id: "profile", label: "My profile", icon: IconUserCircle },
-        ]}
-        active={homeTab}
+        greeting={"Welcome, " + user.name}
         onSelect={id => {
-          if (id === "marks") setScreen("myMarks");
-          else if (id === "mentor") setScreen("myMentor");
+          if (id === "myMarks") setScreen("myMarks");
+          else if (id === "myMentor") setScreen("myMentor");
           else if (id === "users") setScreen("users");
-          else if (id === "profile") setScreen("myProfile");
+          else if (id === "myProfile") setScreen("myProfile");
           else if (id === "studentData") setScreen("studentData");
+          else if (id === "allSectionsMarks") setScreen("allSectionsMarks");
           else setHomeTab(id);
         }}
+        groups={[
+          {
+            label: "My own duties",
+            tiles: [
+              { id: "myProfile", title: "My Profile", desc: "Your bio, qualifications, publications and downloadable resume.", icon: IconUserCircle, color: "blue" },
+              { id: "myAttendance", title: "My Section Attendance", desc: "Mark and review attendance for the subjects you personally teach.", icon: IconAttendance, color: "teal" },
+              { id: "myMarks", title: "My Subject Internal Marks", desc: "Enter marks for the subjects you teach.", icon: IconMarks, color: "indigo" },
+              { id: "myMentor", title: "Mentor", desc: "Track your mentee students' progress and add comments.", icon: IconMentor, color: "violet" },
+            ],
+          },
+          {
+            label: "Coordinator duties — across everyone",
+            tiles: [
+              { id: "allSections", title: "All Sections", desc: "Rosters, subjects and attendance for every section you administer.", icon: IconSections, color: "teal" },
+              { id: "allSectionsMarks", title: "All Sections Internal Marks", desc: "Monitor every original section's marks — see who's locked, drafted or not started.", icon: IconMarks, color: "amber" },
+              { id: "users", title: "Users", desc: "Approve registrations, promote faculty, manage the employee ID roster.", icon: IconUsers, color: "slate" },
+            ],
+          },
+          ...(isMaster ? [{
+            label: "Master Admin only",
+            tiles: [
+              { id: "studentData", title: "Student Data", desc: "Look up any student's SGPA, CGPA, backlogs and attendance trend.", icon: IconSearch, color: "green" },
+              { id: "profiles", title: "Faculty Profiles", desc: "Directory of every faculty member's bio, publications and research.", icon: IconUsers, color: "rose" },
+              { id: "trash", title: "Trash", desc: "Restore or permanently remove sections that were deleted.", icon: IconTrash, color: "slate" },
+            ],
+          }] : []),
+        ]}
       />
+    );
+  }
+
+  const homeTabTitle = {
+    myAttendance: "My Section Attendance",
+    allSections: "All Sections",
+    profiles: "Faculty Profiles",
+    trash: "Trash",
+  }[homeTab] || "";
+
+  return (
+    <div style={{ background: P.bg, minHeight: "100vh" }}>
+      <TopBar title={homeTabTitle} subtitle={user.name}
+        right={<button onClick={() => setHomeTab(null)} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>← Back</button>} />
       <div style={{ padding: "16px 16px 80px", maxWidth: 1100, margin: "0 auto" }}>
 
         {homeTab === "myAttendance" && (
           <>
-            <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 14 }}>📋 My section attendance</div>
             {mySubjectsAsTeacher.length === 0 && (
               <div style={{ textAlign: "center", color: P.gray, border: "2px dashed " + P.border, borderRadius: 12, padding: 30, fontSize: 14 }}>
                 No subjects are assigned to you for marking attendance.
@@ -394,7 +426,6 @@ export default function AdminApp({ user, onLogout }) {
 
         {homeTab === "trash" && isMaster && (
           <>
-            <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 6 }}>🗑️ Trash</div>
             <div style={{ fontSize: 13, color: P.gray, marginBottom: 16 }}>
               Deleted sections land here first — nothing is destroyed until you permanently delete it.
             </div>

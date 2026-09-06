@@ -89,6 +89,16 @@ service cloud.firestore {
       allow delete: if isMasterAdmin();
     }
 
+    // ── ORIGINAL SECTIONS (roll-number-ordered exam sections, e.g.
+    //    III-A/III-B/III-C — used only for paper valuation, entirely
+    //    separate from the merit-based teaching "sections" above) ──
+    match /originalSections/{sectionId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin();
+      allow update: if isAdmin() && (isMasterAdmin() || !touchesDeleteFields());
+      allow delete: if isMasterAdmin();
+    }
+
     // ── STUDENTS (academic records — sensitive) ──────────
     match /students/{studentId} {
       allow read: if isSignedIn();
@@ -123,6 +133,24 @@ service cloud.firestore {
     // teacherPhone assignment and the actual marks data, so a faculty
     // member may update it only while leaving teacherPhone unchanged.
     match /internalMarks/{sectionId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+
+      match /subjects/{subjectId} {
+        allow read: if isSignedIn();
+        allow write: if isAdmin() ||
+          (isSignedIn() &&
+           resource.data.teacherPhone == request.auth.uid &&
+           request.resource.data.teacherPhone == resource.data.teacherPhone);
+      }
+    }
+
+    // ── INTERNAL MARKS — ORIGINAL SECTIONS (paper valuation) ──
+    // Same shape/rules as INTERNAL MARKS above, rooted under the original
+    // (roll-number) section instead of the teaching section, so a faculty
+    // member's valuation assignment is completely independent of what they
+    // teach — a subject's teacherPhone here is really the valuatorPhone.
+    match /internalMarksOriginal/{sectionId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
 
