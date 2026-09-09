@@ -4,7 +4,7 @@
 // Tabs per subject: MID-1 | MID-2 | Assignment | Result  (Theory/Drawing)
 //                  Lab Internal | Result                  (Lab)
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { collection, doc, getDoc, onSnapshot, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import {
@@ -698,16 +698,16 @@ function SubjectRow({ section, subject, onClick, tagLabel, tagBg, tagColor }) {
   return (
     <div
       onClick={onClick}
-      style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: "var(--surface-2)", border: "0.5px solid var(--border)", borderRadius: 10, marginBottom: 8, cursor: "pointer" }}>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 16, fontWeight: 600 }}>{subject.name}</div>
-        <div style={{ fontSize: 13.5, color: "var(--text-muted)" }}>{section.name}</div>
+      style={{ display: "flex", alignItems: "center", gap: 20, padding: "20px 26px", background: "var(--surface-2)", border: "0.5px solid var(--border)", borderRadius: 12, marginBottom: 10, cursor: "pointer" }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 20, fontWeight: 700 }}>{subject.name}</div>
+        <div style={{ fontSize: 16, color: "var(--text-muted)", marginTop: 3 }}>{section.name}</div>
       </div>
-      <span style={{ fontSize: 11.5, fontWeight: 600, background: tagBg, color: tagColor, borderRadius: 20, padding: "3px 9px" }}>{tagLabel}</span>
-      <span style={{ fontSize: 12.5, background: isLabSubject(subject) ? "#EEEDFE" : isDrawingSubject(subject) ? "#FAEEDA" : "#E1F5EE", color: isLabSubject(subject) ? "#534AB7" : isDrawingSubject(subject) ? "#854F0B" : "#0F6E56", borderRadius: 20, padding: "3px 9px" }}>
+      <span style={{ fontSize: 14, fontWeight: 600, background: tagBg, color: tagColor, borderRadius: 20, padding: "6px 16px", flexShrink: 0 }}>{tagLabel}</span>
+      <span style={{ fontSize: 14, fontWeight: 600, background: isLabSubject(subject) ? "#EEEDFE" : isDrawingSubject(subject) ? "#FAEEDA" : "#E1F5EE", color: isLabSubject(subject) ? "#534AB7" : isDrawingSubject(subject) ? "#854F0B" : "#0F6E56", borderRadius: 20, padding: "6px 16px", flexShrink: 0 }}>
         {isLabSubject(subject) ? "Lab" : isDrawingSubject(subject) ? "Drawing" : "Theory"}
       </span>
-      <span style={{ color: BLUE, fontSize: 18 }}>›</span>
+      <span style={{ color: BLUE, fontSize: 24, flexShrink: 0 }}>›</span>
     </div>
   );
 }
@@ -731,6 +731,21 @@ function SubjectList({ sections, originalSections, user, onSelectSubject }) {
     });
   });
 
+  // Paper valuation is the time-sensitive one, so it leads — teaching starts
+  // collapsed only when there's something more urgent above it to see first.
+  // Sections/originalSections arrive asynchronously (Firestore listeners),
+  // so the very first render always sees empty arrays — this only applies
+  // the default once real data has actually loaded, instead of locking in
+  // "collapsed" or "open" based on that empty first render.
+  const [teachingOpen, setTeachingOpen] = useState(true);
+  const defaultAppliedRef = useRef(false);
+  useEffect(() => {
+    if (defaultAppliedRef.current) return;
+    if (mySubjects.length === 0 && myValuations.length === 0) return;
+    defaultAppliedRef.current = true;
+    setTeachingOpen(myValuations.length === 0);
+  }, [mySubjects.length, myValuations.length]);
+
   if (mySubjects.length === 0 && myValuations.length === 0) {
     return (
       <div style={{ textAlign: "center", padding: "3rem", color: "var(--text-muted)" }}>
@@ -742,26 +757,31 @@ function SubjectList({ sections, originalSections, user, onSelectSubject }) {
   }
 
   return (
-    <div style={{ padding: 16 }}>
-      {mySubjects.length > 0 && (
-        <>
-          <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 12 }}>My taught subjects</div>
-          {mySubjects.map(({ section, subject }) => (
-            <SubjectRow key={"m-" + section.id + subject.id} section={section} subject={subject}
-              onClick={() => onSelectSubject(section, subject, "merit")}
-              tagLabel="Teaching" tagBg="#E1F5EE" tagColor="#0F6E56" />
-          ))}
-        </>
-      )}
+    <div style={{ padding: "24px 28px", maxWidth: 980, margin: "0 auto" }}>
       {myValuations.length > 0 && (
         <>
-          <div style={{ fontWeight: 600, fontSize: 16, margin: mySubjects.length > 0 ? "22px 0 12px" : "0 0 12px" }}>Assigned to me for paper valuation</div>
+          <div style={{ fontWeight: 700, fontSize: 20, marginBottom: 16 }}>Subjects and Sections Assigned for Paper Valuation</div>
           {myValuations.map(({ section, subject }) => (
             <SubjectRow key={"v-" + section.id + subject.id} section={section} subject={subject}
               onClick={() => onSelectSubject(section, subject, "original")}
               tagLabel="Valuation" tagBg="#FAEEDA" tagColor="#854F0B" />
           ))}
         </>
+      )}
+      {mySubjects.length > 0 && (
+        <div style={{ marginTop: myValuations.length > 0 ? 30 : 0 }}>
+          <button onClick={() => setTeachingOpen(o => !o)}
+            style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", border: "none", background: "none", cursor: "pointer", padding: 0, marginBottom: teachingOpen ? 16 : 0, fontFamily: "inherit" }}>
+            <span style={{ fontWeight: 700, fontSize: 20 }}>Subjects and Sections Assigned for Teaching</span>
+            <span style={{ fontSize: 15, color: "var(--text-muted)", fontWeight: 500 }}>({mySubjects.length})</span>
+            <span style={{ marginLeft: "auto", fontSize: 14.5, color: BLUE, fontWeight: 600 }}>{teachingOpen ? "Hide ▲" : "Show ▼"}</span>
+          </button>
+          {teachingOpen && mySubjects.map(({ section, subject }) => (
+            <SubjectRow key={"m-" + section.id + subject.id} section={section} subject={subject}
+              onClick={() => onSelectSubject(section, subject, "merit")}
+              tagLabel="Teaching" tagBg="#E1F5EE" tagColor="#0F6E56" />
+          ))}
+        </div>
       )}
     </div>
   );
