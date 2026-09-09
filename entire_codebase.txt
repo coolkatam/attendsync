@@ -35256,6 +35256,15 @@ function SubjectView({ section, subject, user, onBack, kind = "merit" }) {
 
   const locked = status === "Locked";
 
+  // A merit/teaching section's roster is pooled from multiple original
+  // (roll-number) sections — so being the subject's TEACHER never grants
+  // marks-entry rights on its own any more. Only an explicit paper-valuation
+  // assignment (kind === "original") can enter or edit marks; teaching stays
+  // view-only, so a teacher can still see how their class is doing without
+  // being able to touch marks for students outside their valuation scope.
+  const noValuationRights = kind === "merit";
+  const readOnly = locked || noValuationRights;
+
   // Count every invalid entry across the whole subject (not just the tab
   // currently open) — Lock marks finalizes everything, so it needs to know
   // about problems on tabs the faculty isn't looking at right now.
@@ -35355,12 +35364,12 @@ function SubjectView({ section, subject, user, onBack, kind = "merit" }) {
         </span>
         <span style={{ fontSize: 12.5, background: statusStyle.bg, color: statusStyle.color, borderRadius: 20, padding: "3px 10px" }}>{status}</span>
         {saving && <span style={{ fontSize: 12.5, opacity: .7 }}>Saving…</span>}
-        {invalidCount > 0 && (
+        {!noValuationRights && invalidCount > 0 && (
           <span title="Fix every red cell before locking" style={{ fontSize: 12.5, fontWeight: 700, background: "#fee2e2", color: "#991b1b", borderRadius: 20, padding: "3px 10px" }}>
             ⚠ {invalidCount} invalid {invalidCount === 1 ? "entry" : "entries"}
           </span>
         )}
-        {!locked && (
+        {!noValuationRights && !locked && (
           <button onClick={handleLock} disabled={locking || invalidCount > 0}
             title={invalidCount > 0 ? "Fix all invalid entries before locking" : undefined}
             style={{ fontSize: 13.5, background: invalidCount > 0 ? "rgba(255,255,255,0.4)" : "#fff", color: BLUE, border: "none", borderRadius: 6, padding: "5px 12px", cursor: invalidCount > 0 ? "not-allowed" : "pointer", fontWeight: 600, opacity: invalidCount > 0 ? 0.7 : 1 }}>
@@ -35379,32 +35388,37 @@ function SubjectView({ section, subject, user, onBack, kind = "merit" }) {
       </div>
 
       <div style={{ padding: 12 }}>
-        {locked && tab !== "Result" && (
+        {noValuationRights && tab !== "Result" && (
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: "#854F0B", background: "#FAEEDA", border: "1px solid #f0d9ae", borderRadius: 8, padding: "10px 14px", marginBottom: 10 }}>
+            👁 View only — you're not assigned to value this section's papers. Contact your Class Coordinator/Admin to be assigned before you can enter or edit marks.
+          </div>
+        )}
+        {!noValuationRights && locked && tab !== "Result" && (
           <div style={{ fontSize: 13.5, color: "#854F0B", background: "#FAEEDA", borderRadius: 8, padding: "7px 12px", marginBottom: 10 }}>
             🔒 Marks are locked. Contact your admin to unlock for editing.
           </div>
         )}
 
         {isLab && tab === "Lab Internal" && (
-          <LabSheet students={students} labData={data.lab} onChange={handleLabChange} locked={locked} />
+          <LabSheet students={students} labData={data.lab} onChange={handleLabChange} locked={readOnly} />
         )}
         {!isLab && !isDrawing && tab === "MID-1" && (
-          <TheoryMidSheet students={students} midData={data.mid1} onChange={(r,f,v) => handleMidChange("mid1",r,f,v)} locked={locked} />
+          <TheoryMidSheet students={students} midData={data.mid1} onChange={(r,f,v) => handleMidChange("mid1",r,f,v)} locked={readOnly} />
         )}
         {!isLab && !isDrawing && tab === "MID-2" && (
-          <TheoryMidSheet students={students} midData={data.mid2} onChange={(r,f,v) => handleMidChange("mid2",r,f,v)} locked={locked} />
+          <TheoryMidSheet students={students} midData={data.mid2} onChange={(r,f,v) => handleMidChange("mid2",r,f,v)} locked={readOnly} />
         )}
         {!isLab && !isDrawing && tab === "Assignment" && (
-          <AssignmentSheet students={students} assignData={data.assignment} onChange={handleAssignChange} locked={locked} />
+          <AssignmentSheet students={students} assignData={data.assignment} onChange={handleAssignChange} locked={readOnly} />
         )}
         {isDrawing && tab === "MID-1" && (
-          <DrawingMidSheet students={students} midData={data.mid1} onChange={(r,f,v) => handleMidChange("mid1",r,f,v)} locked={locked} />
+          <DrawingMidSheet students={students} midData={data.mid1} onChange={(r,f,v) => handleMidChange("mid1",r,f,v)} locked={readOnly} />
         )}
         {isDrawing && tab === "MID-2" && (
-          <DrawingMidSheet students={students} midData={data.mid2} onChange={(r,f,v) => handleMidChange("mid2",r,f,v)} locked={locked} />
+          <DrawingMidSheet students={students} midData={data.mid2} onChange={(r,f,v) => handleMidChange("mid2",r,f,v)} locked={readOnly} />
         )}
         {isDrawing && tab === "Day-to-day" && (
-          <DayDaySheet students={students} ddData={data.dayday} onChange={handleDayDayChange} locked={locked} />
+          <DayDaySheet students={students} ddData={data.dayday} onChange={handleDayDayChange} locked={readOnly} />
         )}
         {tab === "Result" && (
           <ResultSheet students={students} data={data} isLab={isLab} isDrawing={isDrawing} />
