@@ -31,6 +31,34 @@ function NoSpinnerStyle() {
 }
 
 // ── Tiny helpers ──────────────────────────────────────────────────────────────
+// Spreadsheet-style arrow-key navigation across every marks grid: Up/Down
+// moves to the same field one student up/down, Left/Right moves to the
+// previous/next field in the same student's row. Tab keeps working exactly
+// as the browser already handles it — this only adds the arrow keys.
+function handleGridKeyDown(e) {
+  const key = e.key;
+  if (key !== "ArrowUp" && key !== "ArrowDown" && key !== "ArrowLeft" && key !== "ArrowRight") return;
+  const input = e.target;
+  const row = input.closest("tr");
+  if (!row) return;
+  const rowInputs = Array.from(row.querySelectorAll("input"));
+  const colIdx = rowInputs.indexOf(input);
+
+  if (key === "ArrowLeft" || key === "ArrowRight") {
+    e.preventDefault();
+    const target = rowInputs[colIdx + (key === "ArrowLeft" ? -1 : 1)];
+    if (target) target.focus();
+    return;
+  }
+
+  const targetRow = key === "ArrowUp" ? row.previousElementSibling : row.nextElementSibling;
+  if (!targetRow) return;
+  e.preventDefault();
+  const targetInputs = Array.from(targetRow.querySelectorAll("input"));
+  const target = targetInputs[colIdx] || targetInputs[targetInputs.length - 1];
+  if (target) target.focus();
+}
+
 function CellInput({ value, onChange, readOnly, warn }) {
   return (
     <input
@@ -38,6 +66,7 @@ function CellInput({ value, onChange, readOnly, warn }) {
       className="marks-input"
       value={value === undefined || value === null ? "" : value}
       onChange={e => onChange(e.target.value === "" ? "" : Number(e.target.value))}
+      onKeyDown={handleGridKeyDown}
       readOnly={readOnly}
       title={warn ? "Exceeds the allowed maximum for this field" : undefined}
       style={{
@@ -247,7 +276,7 @@ function LabSheet({ students, labData, onChange, locked }) {
                 <td style={{ ...td, padding: "6px 10px", textAlign: "left" }}>{st.name || ""}</td>
                 {fields.map(f => (
                   <td key={f} style={{ border: "0.5px solid var(--border)", padding: 4, textAlign: "center" }}>
-                    <input type="number" min="0" className="marks-input" value={m[f] ?? ""} onChange={e => onChange(st.roll, f, e.target.value === "" ? "" : Number(e.target.value))} readOnly={locked}
+                    <input type="number" min="0" className="marks-input" value={m[f] ?? ""} onChange={e => onChange(st.roll, f, e.target.value === "" ? "" : Number(e.target.value))} onKeyDown={handleGridKeyDown} readOnly={locked}
                       style={{ width: 70, height: 34, border: locked ? "1px solid #e0e0e0" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 16, fontWeight: 600, background: locked ? "#f5f5f5" : "#fff", padding: 2, boxSizing: "border-box" }} />
                   </td>
                 ))}
@@ -291,12 +320,12 @@ function AssignmentSheet({ students, assignData, onChange, locked }) {
                 <td style={{ ...td, padding: "6px 10px", fontSize: 13 }}>{st.roll}</td>
                 <td style={{ ...td, padding: "6px 10px", textAlign: "left" }}>{st.name || ""}</td>
                 <td style={{ border: "0.5px solid var(--border)", padding: 4, textAlign: "center" }}>
-                  <input type="number" min="0" max={THEORY_MAX_ASSIGNMENT} className="marks-input" value={m.a1 ?? ""} onChange={e => onChange(st.roll, "a1", e.target.value === "" ? "" : Number(e.target.value))} readOnly={locked}
+                  <input type="number" min="0" max={THEORY_MAX_ASSIGNMENT} className="marks-input" value={m.a1 ?? ""} onChange={e => onChange(st.roll, "a1", e.target.value === "" ? "" : Number(e.target.value))} onKeyDown={handleGridKeyDown} readOnly={locked}
                     title={errs.a1 ? "Exceeds the allowed maximum for this field" : undefined}
                     style={{ width: 90, height: 34, border: locked ? "1px solid #e0e0e0" : errs.a1 ? "2px solid #dc2626" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 16, fontWeight: 600, background: locked ? "#f5f5f5" : errs.a1 ? "#fee2e2" : "#fff", color: errs.a1 ? "#991b1b" : "#222", padding: 2, boxSizing: "border-box" }} />
                 </td>
                 <td style={{ border: "0.5px solid var(--border)", padding: 4, textAlign: "center" }}>
-                  <input type="number" min="0" max={THEORY_MAX_ASSIGNMENT} className="marks-input" value={m.a2 ?? ""} onChange={e => onChange(st.roll, "a2", e.target.value === "" ? "" : Number(e.target.value))} readOnly={locked}
+                  <input type="number" min="0" max={THEORY_MAX_ASSIGNMENT} className="marks-input" value={m.a2 ?? ""} onChange={e => onChange(st.roll, "a2", e.target.value === "" ? "" : Number(e.target.value))} onKeyDown={handleGridKeyDown} readOnly={locked}
                     title={errs.a2 ? "Exceeds the allowed maximum for this field" : undefined}
                     style={{ width: 90, height: 34, border: locked ? "1px solid #e0e0e0" : errs.a2 ? "2px solid #dc2626" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 16, fontWeight: 600, background: locked ? "#f5f5f5" : errs.a2 ? "#fee2e2" : "#fff", color: errs.a2 ? "#991b1b" : "#222", padding: 2, boxSizing: "border-box" }} />
                 </td>
@@ -332,7 +361,7 @@ function DayDaySheet({ students, ddData, onChange, locked }) {
                 <td style={{ ...td, padding: "6px 10px", fontSize: 13 }}>{st.roll}</td>
                 <td style={{ ...td, padding: "6px 10px", textAlign: "left" }}>{st.name || ""}</td>
                 <td style={{ border: "0.5px solid var(--border)", padding: 4, textAlign: "center" }}>
-                  <input type="number" min="0" max={DRAWING_MAX_DAYDAY} className="marks-input" value={ddData?.[st.roll] ?? ""} onChange={e => onChange(st.roll, e.target.value === "" ? "" : Number(e.target.value))} readOnly={locked}
+                  <input type="number" min="0" max={DRAWING_MAX_DAYDAY} className="marks-input" value={ddData?.[st.roll] ?? ""} onChange={e => onChange(st.roll, e.target.value === "" ? "" : Number(e.target.value))} onKeyDown={handleGridKeyDown} readOnly={locked}
                     title={hasError ? "Exceeds the allowed maximum for this field" : undefined}
                     style={{ width: 90, height: 34, border: locked ? "1px solid #e0e0e0" : hasError ? "2px solid #dc2626" : "1px solid #b0c4de", borderRadius: 4, textAlign: "center", fontSize: 16, fontWeight: 600, background: locked ? "#f5f5f5" : hasError ? "#fee2e2" : "#fff", color: hasError ? "#991b1b" : "#222", padding: 2, boxSizing: "border-box" }} />
                 </td>

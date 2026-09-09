@@ -17,6 +17,7 @@ import FacultyProfilePage from "./profile/FacultyProfilePage";
 import FacultyProfilesDirectory from "./profile/FacultyProfilesDirectory";
 import HomeHub from "./components/HomeHub";
 import OriginalSectionsScreen from "./originalSections/OriginalSectionsScreen";
+import SectionsSetupWizard from "./sections/SectionsSetupWizard";
 import HoDStudentLookup from "./hod/HoDStudentLookup";
 import MentorPage from "./mentor/MentorPage";
 import { P, Btn, Card, Badge, Fld, Sel, TopBar, GPill, ARow, Spinner, PeriodPicker } from "./components/UI";
@@ -188,7 +189,7 @@ export default function AdminApp({ user, onLogout }) {
   }
 
   if (screen === "new") {
-    return <NewSectionForm user={user} onBack={() => setScreen("home")} />;
+    return <SectionsSetupWizard user={user} onBack={() => setScreen("home")} />;
   }
   if (screen === "studentData") {
     return (
@@ -393,7 +394,7 @@ export default function AdminApp({ user, onLogout }) {
         {/* Sections */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <div style={{ fontWeight: 600, fontSize: 15 }}>{isMaster ? "All sections (every admin)" : "My sections"}</div>
-          <Btn small onClick={() => setScreen("new")}>+ New section</Btn>
+          <Btn small onClick={() => setScreen("new")}>+ Sections & Subjects</Btn>
         </div>
         {sections.length === 0 && <div style={{ color: P.gray, textAlign: "center", padding: "2rem" }}>No sections yet.</div>}
         {sections.map(sec => (
@@ -1125,61 +1126,6 @@ export function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReje
   );
 }
 
-// ── New section form ───────────────────────────────────────
-function NewSectionForm({ user, onBack }) {
-  const [name,     setName]     = useState("");
-  const [periodsPerDay, setPeriodsPerDay] = useState("7");
-  const [subText,  setSubText]  = useState("");
-  const [students, setStudents] = useState([]);
-  const [msg,      setMsg]      = useState(null);
-  const [saving,   setSaving]   = useState(false);
-  const fileRef = useRef();
-
-  async function save() {
-    if (!name.trim()) { setMsg({ ok: false, text: "Section name required" }); return; }
-    const ppd = parseInt(periodsPerDay, 10);
-    if (!ppd || ppd < 1 || ppd > 12) { setMsg({ ok: false, text: "Periods per day must be between 1 and 12" }); return; }
-    setSaving(true);
-    const id   = "sec-" + Date.now();
-    const subs = subText.split("\n").filter(Boolean).map((s, i) => ({
-      id: "sub-" + Date.now() + i, name: s.trim(), facultyPhone: "",
-    }));
-    await setDoc(doc(db, "sections", id), {
-      name: name.trim(), adminPhone: user.phone, students, subjects: subs, periodsPerDay: ppd,
-    });
-    setSaving(false);
-    onBack();
-  }
-
-  return (
-    <div style={{ background: P.bg, minHeight: "100vh" }}>
-      <TopBar title="New section" onBack={onBack} />
-      <div style={{ padding: 16 }}>
-        {msg && <div style={{ background: msg.ok ? P.greenL : P.redL, color: msg.ok ? P.green : P.red, fontSize: 13, padding: "10px 12px", borderRadius: 8, marginBottom: 12 }}>{msg.text}</div>}
-        <Fld label="Section name" value={name} onChange={setName} placeholder="e.g. Mech A – I Year" />
-        <Fld label="Periods per day" value={periodsPerDay} onChange={setPeriodsPerDay} placeholder="e.g. 7" type="number" />
-        <div style={{ fontSize: 12, color: P.gray, fontWeight: 500, marginBottom: 4 }}>Subjects (one per line)</div>
-        <textarea value={subText} onChange={e => setSubText(e.target.value)} rows={4}
-          placeholder={"Engineering Mechanics\nThermodynamics"}
-          style={{ width: "100%", boxSizing: "border-box", border: "1px solid " + P.border, borderRadius: 8, padding: "9px 12px", fontSize: 14, fontFamily: "inherit", marginBottom: 16 }} />
-        <Btn variant="outline" small onClick={downloadTemplate} style={{ marginBottom: 8 }}>⬇ Download CSV template</Btn>
-        <div style={{ fontSize: 12, color: P.gray, margin: "8px 0" }}>Fill and upload. Roll Number is mandatory.</div>
-        <input type="file" accept=".csv,.txt" ref={fileRef} style={{ display: "none" }} onChange={e => {
-          const f = e.target.files[0]; if (!f) return;
-          const reader = new FileReader();
-          reader.onload = ev => {
-            const p = parseCSV(ev.target.result);
-            if (!p.length) { setMsg({ ok: false, text: "No valid students found." }); return; }
-            setStudents(p); setMsg({ ok: true, text: p.length + " students loaded" });
-          };
-          reader.readAsText(f);
-        }} />
-        <Btn variant="accent" small onClick={() => fileRef.current.click()} style={{ marginBottom: 10 }}>⬆ Upload CSV</Btn>
-        <Btn full onClick={save} disabled={saving} style={{ marginTop: 8 }}>{saving ? "Saving…" : "Create section"}</Btn>
-      </div>
-    </div>
-  );
-}
 
 // ── Section detail ─────────────────────────────────────────
 function SectionDetail({ secId, onBack }) {
