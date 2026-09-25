@@ -56,7 +56,7 @@ function TrendChart({ canvasId, labels, data, color, bgColor, min, max, ariaLabe
               ticks: {
                 color: "#6b7b8c",
                 font: { size: 10 },
-                maxTicksLimit: 10, // avoid crowding on many days
+                maxTicksLimit: 10, // avoid crowding when there are many weeks
                 maxRotation: 45,
               }
             },
@@ -226,7 +226,7 @@ export default function HoDStudentLookup({ user, onBack }) {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginBottom: 20 }}>
               <div style={{ background: "#E1F5EE", borderRadius: 12, padding: "1.3rem" }}>
                 <div style={{ fontSize: 16.5, fontWeight: 700, marginBottom: 12, color: "#04342C" }}>
-                  Attendance trend (cumulative, day-by-day)
+                  Attendance trend (cumulative, week-by-week)
                 </div>
                 {attendance.daily.length > 0 ? (
                   <TrendChart
@@ -236,7 +236,7 @@ export default function HoDStudentLookup({ user, onBack }) {
                     color="#0F6E56"
                     bgColor="rgba(15,110,86,0.12)"
                     min={0} max={100}
-                    ariaLabel="Cumulative daily attendance trend"
+                    ariaLabel="Cumulative week-wise attendance trend"
                   />
                 ) : (
                   <div style={{ fontSize: 16, color: "#5F5E5A", padding: "20px 0", textAlign: "center" }}>No attendance data yet</div>

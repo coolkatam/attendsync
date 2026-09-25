@@ -18688,7 +18688,8 @@ service firebase.storage {
       "Bash(firebase functions:delete emergencyClearAllPins --region us-central1 --force)",
       "Bash(mkdir -p \"/c/Users/aruni/AppData/Local/Temp/claude/C--Users-aruni-attendsync/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/mech-ems-redesign\" && echo created)",
       "Bash(node 'C:\\\\Users\\\\aruni\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\bundled-skills\\\\2.1.237\\\\230e594d8bbf672132bf9d6b0b8b8c2c\\\\design\\\\seed-canvas.mjs' --template 'C:\\\\Users\\\\aruni\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\bundled-skills\\\\2.1.237\\\\230e594d8bbf672132bf9d6b0b8b8c2c\\\\design\\\\payload.template.html' --out mech-ems-professional-redesign.html --title 'Mech EMS Professional Redesign' --artboard Main.dc.html --artboard Profile.dc.html --artboard Users.dc.html --artboard DesignSystem.dc.html --canvas canvas.json)",
-      "Bash(node \"C:\\\\Users\\\\aruni\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\bundled-skills\\\\2.1.237\\\\230e594d8bbf672132bf9d6b0b8b8c2c\\\\design\\\\seed-canvas.mjs\" --check mech-ems-professional-redesign.html)"
+      "Bash(node \"C:\\\\Users\\\\aruni\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\bundled-skills\\\\2.1.237\\\\230e594d8bbf672132bf9d6b0b8b8c2c\\\\design\\\\seed-canvas.mjs\" --check mech-ems-professional-redesign.html)",
+      "Bash(powershell.exe -NoProfile -File \"./bundle_codebase.ps1\")"
     ]
   }
 }
@@ -29725,7 +29726,7 @@ export default function AdminApp({ user, onLogout }) {
     <div style={{ background: P.bg, minHeight: "100vh" }}>
       <TopBar title={homeTabTitle} subtitle={user.name}
         right={<button onClick={() => setHomeTab(null)} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>← Back</button>} />
-      <div style={{ padding: "16px 16px 80px", maxWidth: 1100, margin: "0 auto" }}>
+      <div style={{ padding: "24px 24px 80px", maxWidth: "min(1700px, 92vw)", margin: "0 auto" }}>
 
         {homeTab === "myAttendance" && (
           <>
@@ -34131,12 +34132,31 @@ export default function HoDApp({ user, onLogout }) {
 // src/hod/hodAttendance.js
 // Finds a student by roll number across all sections, computes:
 //   - overallPct: single overall attendance % as on today
-//   - daily: day-by-day CUMULATIVE attendance % (running total present / running total held)
-//     plotted only for days where attendance was actually taken (weekends/holidays absent naturally)
+//   - daily: week-by-week CUMULATIVE attendance % (running total present / running total
+//     held, through the end of that week), oldest week first through the present week —
+//     grouped by calendar week (Monday start) instead of by individual day.
 
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 import { readStatus, calcPct, parseKey, fmtDate } from "../utils";
+
+// The Monday ("YYYY-MM-DD") of the calendar week a date falls in. Using the
+// real date as the grouping key (rather than a week NUMBER) means a plain
+// string sort is always correct chronological order, even across year
+// boundaries or Jan-week-1 vs Dec-week-52 edge cases.
+function mondayOf(dateStr) {
+  const d = new Date(dateStr + "T00:00:00");
+  const day = d.getDay(); // 0 = Sun .. 6 = Sat
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diffToMonday);
+  return d.toISOString().slice(0, 10);
+}
+
+function addDays(dateStr, n) {
+  const d = new Date(dateStr + "T00:00:00");
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
 
 export async function getAttendanceSummary(rollNumber) {
   const sectionsSnap = await getDocs(collection(db, "sections"));
@@ -34171,14 +34191,25 @@ export async function getAttendanceSummary(rollNumber) {
     });
   }
 
-  const sortedDates = Object.keys(byDate).sort();
+  // Roll each day up into its calendar week (Monday start).
+  const byWeek = {}; // "YYYY-MM-DD" (that week's Monday) -> { present: n, total: n }
+  Object.keys(byDate).forEach((date) => {
+    const wk = mondayOf(date);
+    if (!byWeek[wk]) byWeek[wk] = { present: 0, total: 0 };
+    byWeek[wk].present += byDate[date].present;
+    byWeek[wk].total += byDate[date].total;
+  });
+
+  // Monday dates sort correctly as plain strings, so this is always oldest
+  // week first through the present week — first week nearest the origin.
+  const sortedWeeks = Object.keys(byWeek).sort();
   let cumPresent = 0, cumTotal = 0;
-  const daily = sortedDates.map((date) => {
-    cumPresent += byDate[date].present;
-    cumTotal += byDate[date].total;
+  const daily = sortedWeeks.map((weekStart) => {
+    cumPresent += byWeek[weekStart].present;
+    cumTotal += byWeek[weekStart].total;
     return {
-      date,
-      label: fmtDate(date), // "DD/MM/YY" for chart X-axis
+      date: weekStart,
+      label: fmtDate(weekStart) + "–" + fmtDate(addDays(weekStart, 6)), // "DD/MM/YY–DD/MM/YY"
       pct: calcPct(cumPresent, cumTotal),
     };
   });
@@ -34251,7 +34282,7 @@ function TrendChart({ canvasId, labels, data, color, bgColor, min, max, ariaLabe
               ticks: {
                 color: "#6b7b8c",
                 font: { size: 10 },
-                maxTicksLimit: 10, // avoid crowding on many days
+                maxTicksLimit: 10, // avoid crowding when there are many weeks
                 maxRotation: 45,
               }
             },
@@ -34421,7 +34452,7 @@ export default function HoDStudentLookup({ user, onBack }) {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginBottom: 20 }}>
               <div style={{ background: "#E1F5EE", borderRadius: 12, padding: "1.3rem" }}>
                 <div style={{ fontSize: 16.5, fontWeight: 700, marginBottom: 12, color: "#04342C" }}>
-                  Attendance trend (cumulative, day-by-day)
+                  Attendance trend (cumulative, week-by-week)
                 </div>
                 {attendance.daily.length > 0 ? (
                   <TrendChart
@@ -34431,7 +34462,7 @@ export default function HoDStudentLookup({ user, onBack }) {
                     color="#0F6E56"
                     bgColor="rgba(15,110,86,0.12)"
                     min={0} max={100}
-                    ariaLabel="Cumulative daily attendance trend"
+                    ariaLabel="Cumulative week-wise attendance trend"
                   />
                 ) : (
                   <div style={{ fontSize: 16, color: "#5F5E5A", padding: "20px 0", textAlign: "center" }}>No attendance data yet</div>

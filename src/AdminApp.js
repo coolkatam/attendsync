@@ -321,7 +321,7 @@ export default function AdminApp({ user, onLogout }) {
     <div style={{ background: P.bg, minHeight: "100vh" }}>
       <TopBar title={homeTabTitle} subtitle={user.name}
         right={<button onClick={() => setHomeTab(null)} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>← Back</button>} />
-      <div style={{ padding: "16px 16px 80px", maxWidth: 1100, margin: "0 auto" }}>
+      <div style={{ padding: "24px 24px 80px", maxWidth: "min(1700px, 92vw)", margin: "0 auto" }}>
 
         {homeTab === "myAttendance" && (
           <>
