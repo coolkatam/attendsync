@@ -192,15 +192,7 @@ export default function AdminApp({ user, onLogout }) {
     return <SectionsSetupWizard user={user} onBack={() => setScreen("home")} />;
   }
   if (screen === "studentData") {
-    return (
-      <div style={{ position: "relative" }}>
-        <HoDStudentLookup user={user} onLogout={onLogout} />
-        <button onClick={() => setScreen("home")}
-          style={{ position: "fixed", bottom: 20, right: 20, zIndex: 1000, background: "#1C1C1A", color: "#fff", border: "none", borderRadius: 30, padding: "13px 22px", fontSize: 14, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 14px rgba(0,0,0,0.3)", fontFamily: "inherit" }}>
-          ← Back to dashboard
-        </button>
-      </div>
-    );
+    return <HoDStudentLookup user={user} onBack={() => setScreen("home")} />;
   }
   if (screen === "myProfile") {
     return (

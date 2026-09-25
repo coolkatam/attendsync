@@ -92,7 +92,7 @@ function StatCard({ bg, labelColor, valueColor, label, value }) {
   );
 }
 
-export default function HoDStudentLookup({ user, onLogout }) {
+export default function HoDStudentLookup({ user, onBack }) {
   const [roll, setRoll] = useState("");
   const [student, setStudent] = useState(null);
   const [attendance, setAttendance] = useState({ overallPct: null, daily: [] });
@@ -152,8 +152,8 @@ export default function HoDStudentLookup({ user, onLogout }) {
           <div style={{ fontWeight: 700, fontSize: 18 }}>HoD Dashboard</div>
           <div style={{ fontSize: 13, opacity: 0.85 }}>Welcome, {user?.name || "HoD"}</div>
         </div>
-        <button onClick={onLogout} style={{ background: "rgba(255,255,255,0.15)", color: "#fff", border: "none", borderRadius: 6, padding: "8px 16px", cursor: "pointer", fontWeight: 600 }}>
-          Logout
+        <button onClick={onBack} style={{ background: "rgba(255,255,255,0.15)", color: "#fff", border: "none", borderRadius: 6, padding: "8px 16px", cursor: "pointer", fontWeight: 600 }}>
+          ← Back to Dashboard
         </button>
       </div>
 
