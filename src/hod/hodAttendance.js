@@ -1,9 +1,11 @@
 // src/hod/hodAttendance.js
 // Finds a student by roll number across all sections, computes:
-//   - overallPct: single overall attendance % as on today
-//   - daily: week-by-week CUMULATIVE attendance % (running total present / running total
-//     held, through the end of that week), oldest week first through the present week —
-//     grouped by calendar week (Monday start) instead of by individual day.
+//   - overallPct: single overall attendance % across all history, as on today
+//   - daily: that week's OWN attendance % (present that week / held that week —
+//     not a running total), oldest week first through the present week, grouped
+//     by calendar week (Monday start) instead of by individual day. This is
+//     what actually shows which specific week was good or bad; a cumulative
+//     running total barely moves once there's a few weeks of history.
 
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
@@ -72,17 +74,20 @@ export async function getAttendanceSummary(rollNumber) {
   // Monday dates sort correctly as plain strings, so this is always oldest
   // week first through the present week — first week nearest the origin.
   const sortedWeeks = Object.keys(byWeek).sort();
-  let cumPresent = 0, cumTotal = 0;
   const daily = sortedWeeks.map((weekStart) => {
-    cumPresent += byWeek[weekStart].present;
-    cumTotal += byWeek[weekStart].total;
+    const { present, total } = byWeek[weekStart];
     return {
       date: weekStart,
       label: fmtDate(weekStart) + "–" + fmtDate(addDays(weekStart, 6)), // "DD/MM/YY–DD/MM/YY"
-      pct: calcPct(cumPresent, cumTotal),
+      pct: calcPct(present, total),
     };
   });
 
-  const overallPct = cumTotal > 0 ? calcPct(cumPresent, cumTotal) : null;
+  // Overall (all-time) attendance is a separate figure from any single
+  // week's — sum every week's present/held rather than reusing the loop.
+  let totalPresent = 0, totalHeld = 0;
+  Object.values(byWeek).forEach(w => { totalPresent += w.present; totalHeld += w.total; });
+  const overallPct = totalHeld > 0 ? calcPct(totalPresent, totalHeld) : null;
+
   return { overallPct, daily };
 }
