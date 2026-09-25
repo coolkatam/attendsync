@@ -51,18 +51,18 @@ function pubBreakdown(pubs) {
 
 function StatTile({ label, value, c }) {
   return (
-    <div style={{ background: c.light, borderRadius: 10, padding: "10px 8px", textAlign: "center" }}>
-      <div style={{ fontSize: 20, fontWeight: 800, color: c.dark }}>{value}</div>
-      <div style={{ fontSize: 10.5, fontWeight: 700, color: c.main, marginTop: 2, textTransform: "uppercase" }}>{label}</div>
+    <div style={{ background: c.light, borderRadius: 12, padding: "18px 14px", textAlign: "center" }}>
+      <div style={{ fontSize: 30, fontWeight: 800, color: c.dark }}>{value}</div>
+      <div style={{ fontSize: 13, fontWeight: 700, color: c.main, marginTop: 4, textTransform: "uppercase" }}>{label}</div>
     </div>
   );
 }
 
 function Panel({ title, icon, c, children }) {
   return (
-    <div style={{ background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 14, padding: 18, marginBottom: 16 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 800, fontSize: 14.5, color: c.dark, marginBottom: 14 }}>
-        <span style={{ background: c.light, color: c.main, width: 30, height: 30, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>{icon}</span>
+    <div style={{ background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 16, padding: 26, marginBottom: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, fontWeight: 800, fontSize: 18, color: c.dark, marginBottom: 18 }}>
+        <span style={{ background: c.light, color: c.main, width: 38, height: 38, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 19 }}>{icon}</span>
         {title}
       </div>
       {children}
@@ -93,34 +93,34 @@ export default function FacultyOverview({ personName, phone, profile, facultySec
   return (
     <div>
       {/* ── Header banner ── */}
-      <div style={{ background: "linear-gradient(135deg,#0f766e,#0369a1)", borderRadius: 16, padding: 22, marginBottom: 16, display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
+      <div style={{ background: "linear-gradient(135deg,#0f766e,#0369a1)", borderRadius: 20, padding: 32, marginBottom: 22, display: "flex", gap: 28, alignItems: "center", flexWrap: "wrap" }}>
         <div style={{
-          width: 92, height: 92, borderRadius: 16, flexShrink: 0, overflow: "hidden",
+          width: 128, height: 128, borderRadius: 20, flexShrink: 0, overflow: "hidden",
           background: bio.photoURL ? "transparent" : "rgba(255,255,255,0.25)", border: "3px solid #fff",
-          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30, fontWeight: 800, color: "#fff",
+          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 42, fontWeight: 800, color: "#fff",
         }}>
           {bio.photoURL ? <img src={bio.photoURL} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : initialsOf(personName)}
         </div>
-        <div style={{ flex: 1, minWidth: 220 }}>
-          <div style={{ fontWeight: 800, fontSize: 23, color: "#fff" }}>{personName}</div>
-          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", marginTop: 2 }}>College ID: {bio.employeeId || "— (not set)"}</div>
-          <div style={{ fontSize: 15, color: "#fff", marginTop: 6 }}>
+        <div style={{ flex: 1, minWidth: 280 }}>
+          <div style={{ fontWeight: 800, fontSize: 32, color: "#fff" }}>{personName}</div>
+          <div style={{ fontSize: 15.5, color: "rgba(255,255,255,0.85)", marginTop: 4 }}>College ID: {bio.employeeId || "— (not set)"}</div>
+          <div style={{ fontSize: 19, color: "#fff", marginTop: 9 }}>
             {bio.designation || "Designation not set"}{bio.department ? " · " + bio.department : ""}
           </div>
-          <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 10, fontSize: 12.5, color: "rgba(255,255,255,0.9)" }}>
+          <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginTop: 14, fontSize: 15, color: "rgba(255,255,255,0.9)" }}>
             {bio.email && <span>✉️ {bio.email}</span>}
             <span>📞 {phone}</span>
             {bio.orcidId && <span>🆔 ORCID {bio.orcidId}</span>}
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={onDownloadResume} style={{ background: "#0f172a", color: "#fff", border: "none", borderRadius: 10, padding: "10px 16px", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>📄 Resume</button>
-          <button onClick={onOpenFullProfile} style={{ background: "rgba(255,255,255,0.2)", color: "#fff", border: "none", borderRadius: 10, padding: "10px 16px", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Full profile →</button>
+        <div style={{ display: "flex", gap: 12 }}>
+          <button onClick={onDownloadResume} style={{ background: "#0f172a", color: "#fff", border: "none", borderRadius: 12, padding: "14px 22px", fontWeight: 700, fontSize: 15.5, cursor: "pointer" }}>📄 Resume</button>
+          <button onClick={onOpenFullProfile} style={{ background: "rgba(255,255,255,0.2)", color: "#fff", border: "none", borderRadius: 12, padding: "14px 22px", fontWeight: 700, fontSize: 15.5, cursor: "pointer" }}>Full profile →</button>
         </div>
       </div>
 
       {/* ── Top stat row ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 10, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 16, marginBottom: 22 }}>
         <StatTile label="Total Experience" value={totalExperienceYears ? totalExperienceYears + " yrs" : "—"} c={SC.experience} />
         <StatTile label="Experience Here" value={collegeExperienceYears != null ? collegeExperienceYears + " yrs" : "—"} c={SC.qualifications} />
         <StatTile label="Publications" value={pubs.total.total} c={SC.publications} />
@@ -130,11 +130,11 @@ export default function FacultyOverview({ personName, phone, profile, facultySec
       {/* ── Subjects teaching (live from Sections) ── */}
       <Panel title="Subjects Teaching — Current" icon="📘" c={SC.qualifications}>
         {subjects.length === 0 ? (
-          <div style={{ color: "#9ca3af", fontSize: 13.5 }}>Not currently assigned any subject in Sections.</div>
+          <div style={{ color: "#9ca3af", fontSize: 16 }}>Not currently assigned any subject in Sections.</div>
         ) : (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
             {subjects.map((s, i) => (
-              <span key={i} style={{ fontSize: 12.5, fontWeight: 600, background: SC.qualifications.light, color: SC.qualifications.dark, padding: "6px 12px", borderRadius: 16 }}>
+              <span key={i} style={{ fontSize: 15, fontWeight: 600, background: SC.qualifications.light, color: SC.qualifications.dark, padding: "9px 18px", borderRadius: 20 }}>
                 {s.subject} <span style={{ opacity: 0.7 }}>· {s.section}</span>
               </span>
             ))}
@@ -145,21 +145,21 @@ export default function FacultyOverview({ personName, phone, profile, facultySec
       {/* ── Roles & responsibilities (current position) ── */}
       <Panel title="Roles & Responsibilities" icon="💼" c={SC.experience}>
         {!currentRole ? (
-          <div style={{ color: "#9ca3af", fontSize: 13.5 }}>No experience entries added yet.</div>
+          <div style={{ color: "#9ca3af", fontSize: 16 }}>No experience entries added yet.</div>
         ) : (
           <>
-            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>
+            <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 10 }}>
               {currentRole.designation} — {currentRole.organization}
-              <span style={{ fontWeight: 500, fontSize: 12, color: "#6b7280", marginLeft: 8 }}>
+              <span style={{ fontWeight: 500, fontSize: 14.5, color: "#6b7280", marginLeft: 10 }}>
                 {fmtMY(currentRole.from)} – {currentRole.current ? "Present" : fmtMY(currentRole.to)}
               </span>
             </div>
             {(currentRole.responsibilities || []).length > 0 ? (
-              <div style={{ fontSize: 13, lineHeight: 1.8, color: "#374151" }}>
+              <div style={{ fontSize: 16, lineHeight: 1.9, color: "#374151" }}>
                 {currentRole.responsibilities.map((r, i) => <div key={i}>• {r}</div>)}
               </div>
             ) : (
-              <div style={{ color: "#9ca3af", fontSize: 13.5 }}>No responsibilities listed for this role.</div>
+              <div style={{ color: "#9ca3af", fontSize: 16 }}>No responsibilities listed for this role.</div>
             )}
           </>
         )}
@@ -168,11 +168,11 @@ export default function FacultyOverview({ personName, phone, profile, facultySec
       {/* ── Areas of research interest ── */}
       <Panel title="Areas of Research Interest" icon="🔬" c={SC.interest}>
         {(bio.specializations || []).length === 0 ? (
-          <div style={{ color: "#9ca3af", fontSize: 13.5 }}>None added yet.</div>
+          <div style={{ color: "#9ca3af", fontSize: 16 }}>None added yet.</div>
         ) : (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
             {bio.specializations.map((s, i) => (
-              <span key={i} style={{ fontSize: 12.5, fontWeight: 600, background: SC.interest.light, color: SC.interest.dark, padding: "6px 12px", borderRadius: 16 }}>{s}</span>
+              <span key={i} style={{ fontSize: 15, fontWeight: 600, background: SC.interest.light, color: SC.interest.dark, padding: "9px 18px", borderRadius: 20 }}>{s}</span>
             ))}
           </div>
         )}
@@ -180,15 +180,15 @@ export default function FacultyOverview({ personName, phone, profile, facultySec
 
       {/* ── Publications summary ── */}
       <Panel title="Publications Summary" icon="📄" c={SC.publications}>
-        <div style={{ fontSize: 12.5, fontWeight: 700, color: "#6b7280", marginBottom: 8, textTransform: "uppercase" }}>Total (all-time)</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 18 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 700, color: "#6b7280", marginBottom: 12, textTransform: "uppercase" }}>Total (all-time)</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 26 }}>
           <StatTile label="SCI" value={pubs.total.sci} c={SC.publications} />
           <StatTile label="Scopus" value={pubs.total.scopus} c={SC.qualifications} />
           <StatTile label="Conferences" value={pubs.total.conf} c={SC.conferences} />
           <StatTile label="Not Indexed" value={pubs.total.notIndexed} c={SC.workshops} />
         </div>
-        <div style={{ fontSize: 12.5, fontWeight: 700, color: "#6b7280", marginBottom: 8, textTransform: "uppercase" }}>Recent (current academic year)</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 700, color: "#6b7280", marginBottom: 12, textTransform: "uppercase" }}>Recent (current academic year)</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
           <StatTile label="SCI" value={pubs.recent.sci} c={SC.publications} />
           <StatTile label="Scopus" value={pubs.recent.scopus} c={SC.qualifications} />
           <StatTile label="Conferences" value={pubs.recent.conf} c={SC.conferences} />
@@ -198,7 +198,7 @@ export default function FacultyOverview({ personName, phone, profile, facultySec
 
       {/* ── Projects guided ── */}
       <Panel title="Projects Guided / Undertaken" icon="🧪" c={SC.projects}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16 }}>
           <StatTile label="B.Tech Projects" value={btechGuided} c={SC.projects} />
           <StatTile label="M.Tech Projects" value={mtechGuided} c={SC.skills} />
         </div>

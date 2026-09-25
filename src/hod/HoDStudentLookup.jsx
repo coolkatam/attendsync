@@ -77,7 +77,7 @@ function TrendChart({ canvasId, labels, data, color, bgColor, min, max, ariaLabe
   }, [labels, data, color, bgColor, min, max]);
 
   return (
-    <div style={{ position: "relative", height: 120 }}>
+    <div style={{ position: "relative", height: 220 }}>
       <canvas ref={canvasRef} id={canvasId} role="img" aria-label={ariaLabel} />
     </div>
   );
@@ -85,9 +85,9 @@ function TrendChart({ canvasId, labels, data, color, bgColor, min, max, ariaLabe
 
 function StatCard({ bg, labelColor, valueColor, label, value }) {
   return (
-    <div style={{ background: bg, borderRadius: 8, padding: "0.85rem" }}>
-      <div style={{ fontSize: 12, color: labelColor, marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 20, fontWeight: 600, color: valueColor || "#222" }}>{value}</div>
+    <div style={{ background: bg, borderRadius: 10, padding: "1.4rem 1.2rem" }}>
+      <div style={{ fontSize: 14.5, fontWeight: 600, color: labelColor, marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: 32, fontWeight: 700, color: valueColor || "#222" }}>{value}</div>
     </div>
   );
 }
@@ -147,60 +147,60 @@ export default function HoDStudentLookup({ user, onBack }) {
   return (
     <div>
       {/* Header */}
-      <div style={{ background: "#1a56a0", color: "#fff", padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div style={{ background: "#1a56a0", color: "#fff", padding: "18px 28px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
-          <div style={{ fontWeight: 700, fontSize: 18 }}>HoD Dashboard</div>
-          <div style={{ fontSize: 13, opacity: 0.85 }}>Welcome, {user?.name || "HoD"}</div>
+          <div style={{ fontWeight: 700, fontSize: 20 }}>HoD Dashboard</div>
+          <div style={{ fontSize: 14.5, opacity: 0.85 }}>Welcome, {user?.name || "HoD"}</div>
         </div>
-        <button onClick={onBack} style={{ background: "rgba(255,255,255,0.15)", color: "#fff", border: "none", borderRadius: 6, padding: "8px 16px", cursor: "pointer", fontWeight: 600 }}>
+        <button onClick={onBack} style={{ background: "rgba(255,255,255,0.15)", color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", cursor: "pointer", fontWeight: 600, fontSize: 15 }}>
           ← Back to Dashboard
         </button>
       </div>
 
-      <div style={{ maxWidth: 700, margin: "0 auto", padding: 16, fontFamily: "inherit" }}>
-        <h2 style={{ marginBottom: 12 }}>Student Lookup</h2>
-        <form onSubmit={handleSearch} style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+      <div style={{ maxWidth: "min(1500px, 92vw)", margin: "0 auto", padding: "24px 20px", fontFamily: "inherit" }}>
+        <h2 style={{ marginBottom: 18, fontSize: 26 }}>Student Lookup</h2>
+        <form onSubmit={handleSearch} style={{ display: "flex", gap: 12, marginBottom: 26 }}>
           <input
             value={roll} onChange={(e) => setRoll(e.target.value)}
             placeholder="Enter roll number"
-            style={{ flex: 1, padding: 10, fontSize: 16, border: "1px solid #ccc", borderRadius: 6 }}
+            style={{ flex: 1, padding: 16, fontSize: 19, border: "1px solid #ccc", borderRadius: 8 }}
           />
-          <button type="submit" disabled={loading} style={{ padding: "10px 18px", borderRadius: 6 }}>
+          <button type="submit" disabled={loading} style={{ padding: "14px 28px", borderRadius: 8, fontSize: 17, fontWeight: 600 }}>
             {loading ? "Searching..." : "Search"}
           </button>
         </form>
 
-        {error && <p style={{ color: "#d32f2f" }}>{error}</p>}
-        {info && <p style={{ color: "#166534" }}>{info}</p>}
+        {error && <p style={{ color: "#d32f2f", fontSize: 15.5 }}>{error}</p>}
+        {info && <p style={{ color: "#166534", fontSize: 15.5 }}>{info}</p>}
 
         {student && (
-          <div style={{ border: "1px solid #e0e0e0", borderRadius: 12, padding: 18, background: "#F1EFE8" }}>
+          <div style={{ border: "1px solid #e0e0e0", borderRadius: 16, padding: 28, background: "#F1EFE8" }}>
 
             {/* Name / roll header */}
-            <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14, background: "#E6F1FB", borderRadius: 8, padding: "0.9rem 1rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 20, marginBottom: 20, background: "#E6F1FB", borderRadius: 12, padding: "1.3rem 1.5rem" }}>
               <button onClick={() => { setStudent(null); setAttendance({ overallPct: null, daily: [] }); setRoll(""); }}
-                style={{ background: "rgba(24,95,165,0.12)", border: "none", borderRadius: 6, padding: "5px 10px", cursor: "pointer", color: "#185FA5", fontSize: 12, whiteSpace: "nowrap" }}>
+                style={{ background: "rgba(24,95,165,0.12)", border: "none", borderRadius: 8, padding: "8px 16px", cursor: "pointer", color: "#185FA5", fontSize: 15, whiteSpace: "nowrap" }}>
                 ← Back
               </button>
-              <div style={{ width: 56, height: 56, borderRadius: "50%", background: "#B5D4F4", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 600, color: "#0C447C" }}>
+              <div style={{ width: 76, height: 76, borderRadius: "50%", background: "#B5D4F4", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, fontWeight: 600, color: "#0C447C", flexShrink: 0 }}>
                 {student.name?.[0] || "?"}
               </div>
               <div>
-                <div style={{ fontWeight: 700, fontSize: 17, color: "#042C53" }}>{student.name || "—"}</div>
-                <div style={{ color: "#185FA5", fontSize: 13 }}>
+                <div style={{ fontWeight: 700, fontSize: 24, color: "#042C53" }}>{student.name || "—"}</div>
+                <div style={{ color: "#185FA5", fontSize: 16.5 }}>
                   {student.id}{student.category ? ` · ${student.category}` : ""}
                 </div>
               </div>
             </div>
 
             {!hasAcademicProfile && (
-              <div style={{ background: "#FAEEDA", color: "#854F0B", borderRadius: 8, padding: "8px 12px", marginBottom: 14, fontSize: 13 }}>
+              <div style={{ background: "#FAEEDA", color: "#854F0B", borderRadius: 10, padding: "12px 18px", marginBottom: 20, fontSize: 16 }}>
                 No academic profile uploaded yet — showing attendance only.
               </div>
             )}
 
             {/* Stat cards */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 10, marginBottom: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 16, marginBottom: 20 }}>
               <StatCard bg="#E1F5EE" labelColor="#0F6E56" valueColor={gradeColor(attendance.overallPct)} label="Attendance"
                 value={attendance.overallPct != null ? `${attendance.overallPct.toFixed(1)}%` : "—"} />
               <StatCard bg="#EEEDFE" labelColor="#534AB7" valueColor="#26215C" label="CGPA"
@@ -212,9 +212,9 @@ export default function HoDStudentLookup({ user, onBack }) {
             </div>
 
             {/* Personal & family details */}
-            <div style={{ background: "#fff", border: "1px solid #e0ded6", borderRadius: 8, padding: "0.9rem 1rem", marginBottom: 12 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: "#2C2C2A" }}>Personal &amp; family details</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 13, color: "#444441" }}>
+            <div style={{ background: "#fff", border: "1px solid #e0ded6", borderRadius: 12, padding: "1.3rem 1.5rem", marginBottom: 20 }}>
+              <div style={{ fontSize: 16.5, fontWeight: 700, marginBottom: 14, color: "#2C2C2A" }}>Personal &amp; family details</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, fontSize: 16, color: "#444441" }}>
                 <div><span style={{ color: "#5F5E5A" }}>Hostel:</span> {student.hostelType || "—"}</div>
                 <div><span style={{ color: "#5F5E5A" }}>Student mobile:</span> {student.studentMobile || "—"}</div>
                 <div><span style={{ color: "#5F5E5A" }}>Parent:</span> {student.parentName || "—"} {student.parentOccupation ? `(${student.parentOccupation})` : ""}</div>
@@ -223,9 +223,9 @@ export default function HoDStudentLookup({ user, onBack }) {
             </div>
 
             {/* Trend charts */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-              <div style={{ background: "#E1F5EE", borderRadius: 8, padding: "0.85rem" }}>
-                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, color: "#04342C" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginBottom: 20 }}>
+              <div style={{ background: "#E1F5EE", borderRadius: 12, padding: "1.3rem" }}>
+                <div style={{ fontSize: 16.5, fontWeight: 700, marginBottom: 12, color: "#04342C" }}>
                   Attendance trend (cumulative, day-by-day)
                 </div>
                 {attendance.daily.length > 0 ? (
@@ -239,37 +239,37 @@ export default function HoDStudentLookup({ user, onBack }) {
                     ariaLabel="Cumulative daily attendance trend"
                   />
                 ) : (
-                  <div style={{ fontSize: 13, color: "#5F5E5A", padding: "20px 0", textAlign: "center" }}>No attendance data yet</div>
+                  <div style={{ fontSize: 16, color: "#5F5E5A", padding: "20px 0", textAlign: "center" }}>No attendance data yet</div>
                 )}
               </div>
 
-              <div style={{ background: "#EEEDFE", borderRadius: 8, padding: "0.85rem" }}>
-                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, color: "#26215C" }}>
+              <div style={{ background: "#EEEDFE", borderRadius: 12, padding: "1.3rem" }}>
+                <div style={{ fontSize: 16.5, fontWeight: 700, marginBottom: 12, color: "#26215C" }}>
                   Mentor comments
                 </div>
                 {(student.mentorComments && student.mentorComments.length > 0) ? (
-                  <div style={{ maxHeight: 140, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ maxHeight: 220, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
                     {[...(student.mentorComments || [])].reverse().map((c, i) => (
-                      <div key={i} style={{ background: "#fff", borderRadius: 6, padding: "7px 10px", fontSize: 12 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                      <div key={i} style={{ background: "#fff", borderRadius: 8, padding: "10px 14px", fontSize: 15 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                           <span style={{ fontWeight: 600, color: "#534AB7" }}>{c.date}</span>
-                          {c.mentorName && <span style={{ color: "#888", fontSize: 11 }}>{c.mentorName}</span>}
+                          {c.mentorName && <span style={{ color: "#888", fontSize: 13.5 }}>{c.mentorName}</span>}
                         </div>
                         <div style={{ color: "#333", lineHeight: 1.4 }}>{c.comment}</div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div style={{ fontSize: 12, color: "#888", padding: "20px 0", textAlign: "center" }}>No mentor comments yet</div>
+                  <div style={{ fontSize: 15, color: "#888", padding: "20px 0", textAlign: "center" }}>No mentor comments yet</div>
                 )}
               </div>
             </div>
 
             {/* Semester table */}
-            <div style={{ background: "#fff", border: "1px solid #e0ded6", borderRadius: 8, padding: "0.9rem 1rem" }}>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Semester-wise performance</div>
+            <div style={{ background: "#fff", border: "1px solid #e0ded6", borderRadius: 12, padding: "1.3rem 1.5rem" }}>
+              <div style={{ fontSize: 16.5, fontWeight: 700, marginBottom: 14 }}>Semester-wise performance</div>
               {semList.length > 0 ? (
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 16 }}>
                   <thead>
                     <tr style={{ borderBottom: "1px solid #e0ded6" }}>
                       <td style={th}>Sem</td>
@@ -287,7 +287,7 @@ export default function HoDStudentLookup({ user, onBack }) {
                         <td style={td}>
                           {s.backlogs.length
                             ? s.backlogs.map((b, i) => (
-                                <span key={i} style={{ background: "#FBEAF0", color: "#993556", padding: "2px 8px", borderRadius: 6, fontSize: 12, marginRight: 4, display: "inline-block", marginBottom: 2 }}>
+                                <span key={i} style={{ background: "#FBEAF0", color: "#993556", padding: "4px 12px", borderRadius: 8, fontSize: 14.5, marginRight: 6, display: "inline-block", marginBottom: 4 }}>
                                   {b}
                                 </span>
                               ))
@@ -298,15 +298,15 @@ export default function HoDStudentLookup({ user, onBack }) {
                   </tbody>
                 </table>
               ) : (
-                <div style={{ fontSize: 13, color: "#5F5E5A", textAlign: "center", padding: "10px 0" }}>No semester data uploaded yet</div>
+                <div style={{ fontSize: 16, color: "#5F5E5A", textAlign: "center", padding: "14px 0" }}>No semester data uploaded yet</div>
               )}
 
               {N > 0 && (
-                <div style={{ marginTop: 12, fontSize: 13 }}>
+                <div style={{ marginTop: 16, fontSize: 16 }}>
                   <strong>Active backlogs:</strong>{" "}
                   {allBacklogs.length
                     ? allBacklogs.map((b, i) => (
-                        <span key={i} style={{ background: "#FBEAF0", color: "#993556", padding: "2px 8px", borderRadius: 6, fontSize: 12, marginRight: 4, display: "inline-block" }}>
+                        <span key={i} style={{ background: "#FBEAF0", color: "#993556", padding: "4px 12px", borderRadius: 8, fontSize: 14.5, marginRight: 6, display: "inline-block" }}>
                           {b}
                         </span>
                       ))
@@ -322,5 +322,5 @@ export default function HoDStudentLookup({ user, onBack }) {
   );
 }
 
-const th = { textAlign: "left", padding: "6px 4px", fontSize: 12, color: "#888" };
-const td = { padding: "6px 4px" };
+const th = { textAlign: "left", padding: "10px 8px", fontSize: 14.5, fontWeight: 700, color: "#888" };
+const td = { padding: "10px 8px" };

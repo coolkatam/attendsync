@@ -89,7 +89,7 @@ export default function HoDApp({ user, onLogout }) {
       )}
 
       {tab === "profiles" && (
-        <div style={{ padding: "20px 16px 80px", maxWidth: 1100, margin: "0 auto" }}>
+        <div style={{ padding: "24px 24px 80px", maxWidth: "min(1700px, 92vw)", margin: "0 auto" }}>
           <FacultyProfilesDirectory user={user} />
         </div>
       )}
