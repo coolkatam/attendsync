@@ -34016,6 +34016,7 @@ import FacultyApp from "../FacultyApp";
 import HoDStudentLookup from "./HoDStudentLookup";
 import FacultyProfilePage from "../profile/FacultyProfilePage";
 import FacultyProfilesDirectory from "../profile/FacultyProfilesDirectory";
+import InternalMarksPage from "../marks/InternalMarksPage";
 import HomeHub from "../components/HomeHub";
 import OriginalSectionsScreen from "../originalSections/OriginalSectionsScreen";
 import { UsersScreen } from "../AdminApp";
@@ -34054,6 +34055,7 @@ export default function HoDApp({ user, onLogout }) {
             tiles: [
               { id: "profile", title: "My Profile", desc: "Your bio, qualifications, publications and downloadable resume.", icon: IconUserCircle, color: "blue" },
               { id: "myAttendance", title: "My Section Attendance", desc: "Mark and review attendance for the subjects you personally teach.", icon: IconAttendance, color: "teal" },
+              { id: "myMarks", title: "My Subject Internal Marks", desc: "Enter marks for the subjects you teach, and any papers assigned to you for valuation.", icon: IconMarks, color: "indigo" },
             ],
           },
           {
@@ -34076,6 +34078,7 @@ export default function HoDApp({ user, onLogout }) {
 
   const tabTitle = {
     myAttendance: "My Section Attendance",
+    myMarks: "My Subject Internal Marks",
     profiles: "Faculty Profiles",
     users: "Users",
     profile: "My Profile",
@@ -34090,6 +34093,10 @@ export default function HoDApp({ user, onLogout }) {
 
       {tab === "myAttendance" && (
         <FacultyApp user={user} onLogout={onLogout} hideShell initialTab="attendance" />
+      )}
+
+      {tab === "myMarks" && (
+        <InternalMarksPage user={user} />
       )}
 
       {tab === "profiles" && (
