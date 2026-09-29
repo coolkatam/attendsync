@@ -24,6 +24,14 @@ const TABS = [
   ["projects", "Projects", IconProject],
 ];
 
+// A faculty member may type their Scholar link with or without "https://" —
+// the placeholder itself shows the no-protocol form — so without a scheme
+// the browser would treat it as a path on this site instead of an external link.
+function externalUrl(u) {
+  if (!u) return "";
+  return /^https?:\/\//i.test(u) ? u : "https://" + u;
+}
+
 const EMPTY_PROFILE = {
   bio: { designation: "", department: "", doj: "", email: "", employeeId: "", orcidId: "", scholarLink: "", experienceYears: "", specializations: [], technicalSkills: [], about: "", photoURL: "" },
   qualifications: [], experience: [], publications: [],
@@ -561,7 +569,7 @@ function BioForm({ bio, onSave, readOnly }) {
         <Row label="Employee / College ID" value={bio.employeeId} />
         <Row label="Email" value={bio.email} />
         <Row label="ORCID iD" value={bio.orcidId ? <a href={"https://orcid.org/" + bio.orcidId} target="_blank" rel="noreferrer" style={{ color: "#0369a1" }}>{bio.orcidId}</a> : ""} />
-        <Row label="Google Scholar" value={bio.scholarLink ? <a href={bio.scholarLink} target="_blank" rel="noreferrer" style={{ color: "#0369a1" }}>View profile →</a> : ""} />
+        <Row label="Google Scholar" value={bio.scholarLink ? <a href={externalUrl(bio.scholarLink)} target="_blank" rel="noreferrer" style={{ color: "#0369a1" }}>View profile →</a> : ""} />
         <Row label="Date of joining" value={bio.doj} />
         <Row label="Total experience" value={bio.experienceYears ? bio.experienceYears + " years" : ""} />
         <Row label="About" value={bio.about} />
