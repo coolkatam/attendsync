@@ -103,6 +103,15 @@ export function applySpan(model, d, i, span) {
   return m;
 }
 
+// Replace the cell that starts at (d, i); null makes it Free. Slots a longer block covers are emptied.
+export function setCell(model, d, i, cell) {
+  const m = cloneModel(model);
+  m.cells[d][i] = cell ? { ...cell, span: Math.min(cell.span || 1, maxSpan(m, i)) } : null;
+  const cur = m.cells[d][i];
+  if (cur) for (let k = 1; k < cur.span; k++) m.cells[d][i + k] = null;
+  return m;
+}
+
 export function setField(model, d, i, field, value) {
   const m = cloneModel(model);
   const c = m.cells[d][i];

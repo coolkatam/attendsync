@@ -29822,31 +29822,34 @@ export default function AdminApp({ user, onLogout }) {
           <Btn small onClick={() => setScreen("new")}>+ Sections & Subjects</Btn>
         </div>
         {sections.length === 0 && <div style={{ color: P.gray, textAlign: "center", padding: "2rem" }}>No sections yet.</div>}
-        {sections.map(sec => (
-          <Card key={sec.id}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div onClick={() => { setSecId(sec.id); setScreen("detail"); }} style={{ flex: 1, cursor: "pointer" }}>
-                <div style={{ fontWeight: 600, fontSize: 15, color: P.blue, marginBottom: 4 }}>{sec.name}</div>
-                <div style={{ fontSize: 13, color: P.gray }}>
-                  {sec.students?.length || 0} students · {sec.subjects?.length || 0} subjects
-                  {isMaster && sec.adminPhone !== user.phone && (
-                    <span style={{ marginLeft: 6 }}>· <Badge color="teal">admin: {sec.adminPhone}</Badge></span>
-                  )}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 14 }}>
+          {sections.map(sec => (
+            <Card key={sec.id} style={{ margin: 0, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+                <div onClick={() => { setSecId(sec.id); setScreen("detail"); }} style={{ flex: 1, minWidth: 0, cursor: "pointer", fontWeight: 700, fontSize: 16, color: P.blue, lineHeight: 1.3 }}>
+                  {sec.name}
                 </div>
-              </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 {isMaster && (
                   <button
                     onClick={() => trashSection(sec)}
-                    style={{ background: P.redL, border: "none", color: P.red, borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
+                    style={{ background: P.redL, border: "none", color: P.red, borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: 13, fontWeight: 600, flexShrink: 0 }}
                     title="Move to Trash"
                   >🗑</button>
                 )}
-                <span onClick={() => { setSecId(sec.id); setScreen("detail"); }} style={{ color: P.gray, fontSize: 20, cursor: "pointer" }}>›</span>
               </div>
-            </div>
-          </Card>
-        ))}
+              <div onClick={() => { setSecId(sec.id); setScreen("detail"); }} style={{ cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                <div style={{ display: "flex", gap: 22, fontSize: 13, color: P.gray }}>
+                  <span><b style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 18, color: "#1a2230", marginRight: 5 }}>{sec.students?.length || 0}</b>students</span>
+                  <span><b style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 18, color: "#1a2230", marginRight: 5 }}>{sec.subjects?.length || 0}</b>subjects</span>
+                </div>
+                <span style={{ color: P.gray, fontSize: 22 }}>›</span>
+              </div>
+              {isMaster && sec.adminPhone !== user.phone && (
+                <div><Badge color="teal">admin: {sec.adminPhone}</Badge></div>
+              )}
+            </Card>
+          ))}
+        </div>
         </>
         )}
 
@@ -40016,6 +40019,15 @@ export function applySpan(model, d, i, span) {
   return m;
 }
 
+// Replace the cell that starts at (d, i); null makes it Free. Slots a longer block covers are emptied.
+export function setCell(model, d, i, cell) {
+  const m = cloneModel(model);
+  m.cells[d][i] = cell ? { ...cell, span: Math.min(cell.span || 1, maxSpan(m, i)) } : null;
+  const cur = m.cells[d][i];
+  if (cur) for (let k = 1; k < cur.span; k++) m.cells[d][i + k] = null;
+  return m;
+}
+
 export function setField(model, d, i, field, value) {
   const m = cloneModel(model);
   const c = m.cells[d][i];
@@ -40102,10 +40114,10 @@ export function cellText(c) {
 === START_FILE: .\src\timetable\TimetablePage.jsx ===
 
 // src/timetable/TimetablePage.jsx
-// A faculty member's own weekly timetable: click a cell to edit it, add or
-// remove period columns, put lunch wherever their sections have it, then
-// save and download. Stored at facultyTimetables/{phone}; only the owner can
-// write it, the HoD reads it on the Faculty Workload screen.
+// A faculty member's own weekly timetable: click a cell to edit it in a
+// dialog, add or remove period columns, put lunch wherever their sections
+// have it, then save and download. Stored at facultyTimetables/{phone};
+// only the owner can write it, the HoD reads it on the Faculty Workload screen.
 
 import React, { useState, useEffect, useRef } from "react";
 import { collection, doc, getDoc, getDocs, setDoc } from "firebase/firestore";
@@ -40116,8 +40128,8 @@ import PrintShell from "./PrintShell";
 import { exportTimetableXLSX } from "./timetableExport";
 import {
   DAYS, TL, COUNTED, TYPE_STYLE, MAXSLOTS,
-  defaultModel, fromStore, toStore, cellAt, labelsOf, stats, maxSpan,
-  applyType, applySpan, setField, clearCell, setTime, insertCol, deleteCol,
+  defaultModel, fromStore, toStore, cellAt, labelsOf, stats, maxSpan, mkCell,
+  setCell, setTime, insertCol, deleteCol,
 } from "./timetableModel";
 
 const MONO = "'IBM Plex Mono', monospace";
@@ -40141,11 +40153,117 @@ function SegBtn({ active, disabled, onClick, dot, first, children }) {
   );
 }
 
+// A pick-one array of options, wrapping onto as many rows as it needs.
+function Chips({ items, value, onPick, empty }) {
+  if (!items.length) return <div style={{ fontSize: 12.5, color: P.gray, marginBottom: 8 }}>{empty}</div>;
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+      {items.map(it => {
+        const on = it === value;
+        return (
+          <button key={it} type="button" aria-pressed={on} onClick={() => onPick(on ? "" : it)}
+            style={{
+              border: "1.5px solid " + (on ? P.blue : P.border), background: on ? P.blue : "#fff", color: on ? "#fff" : "#1a2230",
+              borderRadius: 20, padding: "6px 14px", fontSize: 13.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+            }}>
+            {it}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function CellEditor({ title, time, initial, spanLimit, options, onApply, onCancel }) {
+  const [c, setC] = useState(initial);
+  const firstRef = useRef(null);
+  const type = c ? c.type : "free";
+  const isLunch = type === "lunch";
+  const set = patch => setC(prev => ({ ...(prev || mkCell("theory")), ...patch }));
+
+  useEffect(() => {
+    if (firstRef.current) firstRef.current.focus();
+    function onKey(e) { if (e.key === "Escape") onCancel(); }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+
+  const matched = c && c.subject ? options.pairs.filter(p => p.subject === c.subject).map(p => p.section) : [];
+  const sectionItems = matched.length ? [...new Set(matched)] : options.sections;
+
+  function pickType(t) {
+    if (t === "free") setC(null);
+    else if (t === "lunch") setC(prev => mkCell("lunch", "", "", "", prev ? Math.min(prev.span, spanLimit) : 1));
+    else set({ type: t, span: c ? c.span : (t === "lab" ? spanLimit : 1) });
+  }
+
+  const typeBtn = (t, label, dot, first) => (
+    <SegBtn key={t} first={first} dot={dot} active={type === t} onClick={() => pickType(t)}>{label}</SegBtn>
+  );
+
+  return (
+    <div role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) onCancel(); }}
+      style={{ position: "fixed", inset: 0, background: "rgba(15,30,50,0.5)", zIndex: 200, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "clamp(12px, 5vh, 56px) 16px", overflowY: "auto" }}>
+      <div role="dialog" aria-modal="true" aria-label={"Edit " + title}
+        style={{ background: "#fff", borderRadius: 16, width: "100%", maxWidth: 660, padding: "22px 24px", boxShadow: "0 18px 50px rgba(0,0,0,0.3)", boxSizing: "border-box" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
+          <div style={{ fontWeight: 700, fontSize: 18 }}>{title}</div>
+          <span style={{ fontFamily: MONO, fontSize: 13, color: P.gray }}>{time}</span>
+        </div>
+
+        <span style={lbl}>Type</span>
+        <div ref={firstRef} tabIndex={-1} style={{ outline: "none" }}>
+          <Seg>
+            {typeBtn("theory", "Theory", TYPE_STYLE.theory.dot, true)}
+            {typeBtn("lab", "Lab", TYPE_STYLE.lab.dot)}
+            {typeBtn("drawing", "Drawing", TYPE_STYLE.drawing.dot)}
+            {typeBtn("other", "Other", TYPE_STYLE.other.dot)}
+            {typeBtn("lunch", "Lunch", TYPE_STYLE.lunch.dot)}
+            {typeBtn("free", "Free", null)}
+          </Seg>
+        </div>
+
+        {c && !isLunch && (
+          <div style={{ marginTop: 18 }}>
+            <span style={lbl}>Subject</span>
+            <Chips items={options.subjects} value={c.subject} onPick={v => set({ subject: v })} empty="No subjects are assigned to you yet. Type one below." />
+            <input aria-label="Subject" placeholder="Or type a subject" value={c.subject} onChange={e => set({ subject: e.target.value })} style={inputStyle} />
+
+            <span style={{ ...lbl, marginTop: 16 }}>Section</span>
+            <Chips items={sectionItems} value={c.section} onPick={v => set({ section: v })} empty="No sections are assigned to you yet. Type one below." />
+            <input aria-label="Section" placeholder="Or type a section" value={c.section} onChange={e => set({ section: e.target.value })} style={inputStyle} />
+
+            <span style={{ ...lbl, marginTop: 16 }}>Room</span>
+            <input aria-label="Room" placeholder="e.g. R-204" value={c.room} onChange={e => set({ room: e.target.value })} style={{ ...inputStyle, maxWidth: 240 }} />
+          </div>
+        )}
+
+        {c && (
+          <div style={{ marginTop: 18 }}>
+            <span style={lbl}>Periods covered</span>
+            <Seg>
+              {[1, 2, 3].map((k, idx) => (
+                <SegBtn key={k} first={idx === 0} disabled={k > spanLimit} active={c.span === k} onClick={() => set({ span: k })}>{k}</SegBtn>
+              ))}
+            </Seg>
+          </div>
+        )}
+        {!c && <div style={{ marginTop: 16, fontSize: 13, color: P.gray }}>This period will be left free.</div>}
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 24, flexWrap: "wrap" }}>
+          <Btn variant="ghost" onClick={onCancel}>Cancel</Btn>
+          <Btn onClick={() => onApply(c)}>Apply</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Summary({ model }) {
   const s = stats(model);
   const n = model.slots.length;
   return (
-    <Card style={{ padding: "18px 20px" }}>
+    <Card style={{ padding: "18px 20px", margin: 0 }}>
       <div style={{ fontWeight: 700, fontSize: 15.5 }}>Weekly load</div>
       <div style={{ color: P.gray, fontSize: 12.5, marginBottom: 12 }}>This is the figure your HoD sees.</div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
@@ -40201,7 +40319,7 @@ export function TimetablePrintBody({ name, desig, term, model }) {
 export default function TimetablePage({ user }) {
   const [model, setModel] = useState(null);
   const [term, setTerm] = useState("");
-  const [sel, setSel] = useState({ d: 0, i: 0 });
+  const [editing, setEditing] = useState(null); // { d, i } of the cell being edited
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editCols, setEditCols] = useState(false);
@@ -40209,7 +40327,7 @@ export default function TimetablePage({ user }) {
   const [dlOpen, setDlOpen] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
   const [msg, setMsg] = useState(null);
-  const [options, setOptions] = useState({ subjects: [], sections: [] });
+  const [options, setOptions] = useState({ subjects: [], sections: [], pairs: [] });
   const dlRef = useRef(null);
 
   useEffect(() => {
@@ -40222,13 +40340,17 @@ export default function TimetablePage({ user }) {
     }).catch(() => { if (alive) setModel(defaultModel()); });
     getDocs(collection(db, "sections")).then(snap => {
       if (!alive) return;
-      const subjects = new Set(), sections = new Set();
+      const pairs = [];
       snap.docs.forEach(d => {
         const sec = d.data();
         if (sec.deleted) return;
-        (sec.subjects || []).forEach(sub => { if (sub.facultyPhone === user.phone) { subjects.add(sub.name); sections.add(sec.name); } });
+        (sec.subjects || []).forEach(sub => { if (sub.facultyPhone === user.phone) pairs.push({ subject: sub.name, section: sec.name }); });
       });
-      setOptions({ subjects: [...subjects].sort(), sections: [...sections].sort() });
+      setOptions({
+        subjects: [...new Set(pairs.map(p => p.subject))].sort(),
+        sections: [...new Set(pairs.map(p => p.section))].sort(),
+        pairs,
+      });
     }).catch(() => {});
     return () => { alive = false; };
   }, [user.phone]);
@@ -40241,24 +40363,22 @@ export default function TimetablePage({ user }) {
 
   if (!model) return <Spinner />;
 
-  const start = cellAt(model, sel.d, sel.i);
-  const cur = { d: sel.d, i: start ? start.start : sel.i };
-  const cell = model.cells[cur.d][cur.i];
   const labs = labelsOf(model);
-  const isLunch = !!cell && cell.type === "lunch";
-  const mx = maxSpan(model, cur.i);
 
   function edit(next) { setModel(next); setDirty(true); setMsg(null); }
   const posValue = pos === null || pos > model.slots.length ? model.slots.length : pos;
 
+  function openCell(d, i) {
+    const h = cellAt(model, d, i);
+    setEditing({ d, i: h ? h.start : i });
+  }
   function doInsert(kind) {
     edit(insertCol(model, posValue, kind));
-    if (cur.i >= posValue) setSel({ d: cur.d, i: cur.i + 1 });
+    setEditing(null);
   }
   function doDelete(i) {
     edit(deleteCol(model, i));
-    if (cur.i > i) setSel({ d: cur.d, i: cur.i - 1 });
-    else if (cur.i >= model.slots.length - 1) setSel({ d: cur.d, i: Math.max(model.slots.length - 2, 0) });
+    setEditing(null);
   }
   async function save() {
     setSaving(true);
@@ -40272,15 +40392,10 @@ export default function TimetablePage({ user }) {
     setSaving(false);
   }
 
-  const typeBtn = (type, label, dot, first) => (
-    <SegBtn key={type} first={first} dot={dot} active={(cell ? cell.type : "free") === type} onClick={() => edit(applyType(model, cur.d, cur.i, type))}>{label}</SegBtn>
-  );
+  const editCell = editing ? model.cells[editing.d][editing.i] : null;
 
   return (
     <div style={{ padding: "24px clamp(16px, 3vw, 32px) 80px", maxWidth: "min(1500px, 96vw)", margin: "0 auto", display: "grid", gap: 18 }}>
-      <datalist id="tt-subjects">{options.subjects.map(s => <option key={s} value={s} />)}</datalist>
-      <datalist id="tt-sections">{options.sections.map(s => <option key={s} value={s} />)}</datalist>
-
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, flexWrap: "wrap" }}>
         <div style={{ minWidth: 0 }}>
           <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>Weekly Timetable</h1>
@@ -40328,8 +40443,8 @@ export default function TimetablePage({ user }) {
           </div>
         )}
         <TimetableGrid
-          model={model} editable sel={cur} colCtl={editCols}
-          onSelect={(d, i) => setSel({ d, i })}
+          model={model} editable sel={editing} colCtl={editCols}
+          onSelect={openCell}
           onTimeCommit={(i, text) => { const t = text.trim() || "Set time"; if (t !== model.slots[i].time) edit(setTime(model, i, t)); }}
           onDeleteCol={doDelete}
         />
@@ -40339,47 +40454,22 @@ export default function TimetablePage({ user }) {
         </p>
       </Card>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 18, alignItems: "start" }}>
-        <Card style={{ padding: "18px 20px", margin: 0 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
-            <div style={{ fontWeight: 700, fontSize: 15.5 }}>{DAYS[cur.d][1]}, {labs[cur.i].text}</div>
-            <span style={{ fontFamily: MONO, fontSize: 12.5, color: P.gray }}>{model.slots[cur.i].time}</span>
-          </div>
-          <span style={lbl}>Type</span>
-          <Seg>
-            {typeBtn("theory", "Theory", TYPE_STYLE.theory.dot, true)}
-            {typeBtn("lab", "Lab", TYPE_STYLE.lab.dot)}
-            {typeBtn("drawing", "Drawing", TYPE_STYLE.drawing.dot)}
-            {typeBtn("other", "Other", TYPE_STYLE.other.dot)}
-            {typeBtn("lunch", "Lunch", TYPE_STYLE.lunch.dot)}
-            {typeBtn("free", "Free", null)}
-          </Seg>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, margin: "16px 0" }}>
-            {[["subject", "Subject", "tt-subjects", "Pick or type"], ["section", "Section", "tt-sections", "Pick or type"], ["room", "Room", null, "e.g. R-204"]].map(([f, label, list, ph]) => (
-              <div key={f}>
-                <label htmlFor={"tt-f-" + f} style={lbl}>{label}</label>
-                <input id={"tt-f-" + f} list={list || undefined} autoComplete="off" placeholder={ph}
-                  value={cell ? cell[f] : ""} disabled={!cell || isLunch}
-                  onChange={e => edit(setField(model, cur.d, cur.i, f, e.target.value))}
-                  style={{ ...inputStyle, opacity: !cell || isLunch ? 0.6 : 1, background: !cell || isLunch ? P.bg : "#fff" }} />
-              </div>
-            ))}
-          </div>
-          <span style={lbl}>Periods covered</span>
-          <Seg>
-            {[1, 2, 3].map((k, idx) => (
-              <SegBtn key={k} first={idx === 0} disabled={!cell || k > mx} active={!!cell && cell.span === k} onClick={() => edit(applySpan(model, cur.d, cur.i, k))}>{k}</SegBtn>
-            ))}
-          </Seg>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 16 }}>
-            <span style={{ fontSize: 12.5, color: P.gray, maxWidth: 360 }}>Suggestions come from the subjects and sections assigned to you. You can type anything else.</span>
-            <Btn small variant="ghost" disabled={!cell} onClick={() => edit(clearCell(model, cur.d, cur.i))}>Clear this cell</Btn>
-          </div>
-        </Card>
-        <Summary model={model} />
-      </div>
+      <div style={{ maxWidth: 680 }}><Summary model={model} /></div>
 
       <p style={{ margin: 0, fontSize: 12.5, color: P.gray }}>Your HoD can see this timetable and your weekly load on the Faculty Workload screen, read-only. Only you can edit it.</p>
+
+      {editing && (
+        <CellEditor
+          key={editing.d + "-" + editing.i}
+          title={DAYS[editing.d][1] + ", " + labs[editing.i].text}
+          time={model.slots[editing.i].time}
+          initial={editCell ? { ...editCell } : mkCell("theory")}
+          spanLimit={maxSpan(model, editing.i)}
+          options={options}
+          onCancel={() => setEditing(null)}
+          onApply={c => { edit(setCell(model, editing.d, editing.i, c)); setEditing(null); }}
+        />
+      )}
 
       {showPrint && (
         <PrintShell title="Timetable preview" onClose={() => setShowPrint(false)}>

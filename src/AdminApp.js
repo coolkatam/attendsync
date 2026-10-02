@@ -405,31 +405,34 @@ export default function AdminApp({ user, onLogout }) {
           <Btn small onClick={() => setScreen("new")}>+ Sections & Subjects</Btn>
         </div>
         {sections.length === 0 && <div style={{ color: P.gray, textAlign: "center", padding: "2rem" }}>No sections yet.</div>}
-        {sections.map(sec => (
-          <Card key={sec.id}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div onClick={() => { setSecId(sec.id); setScreen("detail"); }} style={{ flex: 1, cursor: "pointer" }}>
-                <div style={{ fontWeight: 600, fontSize: 15, color: P.blue, marginBottom: 4 }}>{sec.name}</div>
-                <div style={{ fontSize: 13, color: P.gray }}>
-                  {sec.students?.length || 0} students · {sec.subjects?.length || 0} subjects
-                  {isMaster && sec.adminPhone !== user.phone && (
-                    <span style={{ marginLeft: 6 }}>· <Badge color="teal">admin: {sec.adminPhone}</Badge></span>
-                  )}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 14 }}>
+          {sections.map(sec => (
+            <Card key={sec.id} style={{ margin: 0, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+                <div onClick={() => { setSecId(sec.id); setScreen("detail"); }} style={{ flex: 1, minWidth: 0, cursor: "pointer", fontWeight: 700, fontSize: 16, color: P.blue, lineHeight: 1.3 }}>
+                  {sec.name}
                 </div>
-              </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 {isMaster && (
                   <button
                     onClick={() => trashSection(sec)}
-                    style={{ background: P.redL, border: "none", color: P.red, borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
+                    style={{ background: P.redL, border: "none", color: P.red, borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: 13, fontWeight: 600, flexShrink: 0 }}
                     title="Move to Trash"
                   >🗑</button>
                 )}
-                <span onClick={() => { setSecId(sec.id); setScreen("detail"); }} style={{ color: P.gray, fontSize: 20, cursor: "pointer" }}>›</span>
               </div>
-            </div>
-          </Card>
-        ))}
+              <div onClick={() => { setSecId(sec.id); setScreen("detail"); }} style={{ cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                <div style={{ display: "flex", gap: 22, fontSize: 13, color: P.gray }}>
+                  <span><b style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 18, color: "#1a2230", marginRight: 5 }}>{sec.students?.length || 0}</b>students</span>
+                  <span><b style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 18, color: "#1a2230", marginRight: 5 }}>{sec.subjects?.length || 0}</b>subjects</span>
+                </div>
+                <span style={{ color: P.gray, fontSize: 22 }}>›</span>
+              </div>
+              {isMaster && sec.adminPhone !== user.phone && (
+                <div><Badge color="teal">admin: {sec.adminPhone}</Badge></div>
+              )}
+            </Card>
+          ))}
+        </div>
         </>
         )}
 
