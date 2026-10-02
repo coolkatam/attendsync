@@ -68,6 +68,14 @@ service cloud.firestore {
         (request.auth.uid == phone || isAdmin());
     }
 
+    // ── FACULTY TIMETABLES (weekly class schedule) ───────
+    // Any signed-in user can read (the HoD's workload screen reads every
+    // faculty member's); only the timetable's own owner can write it.
+    match /facultyTimetables/{phone} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == phone;
+    }
+
     // ── EMPLOYEE ROSTER (for background ID verification at signup) ──
     // Only admins/HoD/master admin can read or manage this list.
     // The actual registration-time check does NOT read this directly —

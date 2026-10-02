@@ -11,7 +11,8 @@ import MentorPage from "./mentor/MentorPage";
 import InternalMarksPage from "./marks/InternalMarksPage";
 import FacultyProfilePage from "./profile/FacultyProfilePage";
 import HomeHub from "./components/HomeHub";
-import { IconAttendance, IconMarks, IconMentor, IconUserCircle } from "./components/Icons";
+import TimetablePage from "./timetable/TimetablePage";
+import { IconAttendance, IconMarks, IconMentor, IconUserCircle, IconCalendar } from "./components/Icons";
 
 export default function FacultyApp({ user, onLogout, hideShell = false, initialTab = "attendance" }) {
   const [sections, setSections]     = useState([]);
@@ -62,6 +63,7 @@ export default function FacultyApp({ user, onLogout, hideShell = false, initialT
             { id: "attendance", title: "My Section Attendance", desc: "Mark and review attendance for the subjects you teach.", icon: IconAttendance, color: "teal" },
             { id: "marks", title: "My Subject Internal Marks", desc: "Enter marks for the subjects you teach.", icon: IconMarks, color: "indigo" },
             { id: "mentor", title: "Mentor", desc: "Track your mentee students' progress and add comments.", icon: IconMentor, color: "violet" },
+            { id: "timetable", title: "My Timetable", desc: "Your weekly class schedule. Edit it any time and download it.", icon: IconCalendar, color: "amber" },
           ],
         }]}
       />
@@ -73,6 +75,7 @@ export default function FacultyApp({ user, onLogout, hideShell = false, initialT
     marks: "My Subject Internal Marks",
     mentor: "Mentor",
     profile: "My Profile",
+    timetable: "My Timetable",
   }[mainTab] || "";
 
   return (
@@ -84,6 +87,8 @@ export default function FacultyApp({ user, onLogout, hideShell = false, initialT
 
       {mainTab === "mentor" ? (
         <MentorPage user={user} />
+      ) : mainTab === "timetable" ? (
+        <TimetablePage user={user} />
       ) : mainTab === "marks" ? (
         <InternalMarksPage user={user} />
       ) : mainTab === "profile" ? (

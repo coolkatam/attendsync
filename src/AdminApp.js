@@ -21,7 +21,9 @@ import SectionsSetupWizard from "./sections/SectionsSetupWizard";
 import HoDStudentLookup from "./hod/HoDStudentLookup";
 import MentorPage from "./mentor/MentorPage";
 import { P, Btn, Card, Badge, Fld, Sel, TopBar, GPill, ARow, Spinner, PeriodPicker } from "./components/UI";
-import { IconAttendance, IconSections, IconMarks, IconMentor, IconSearch, IconUsers, IconTrash, IconUserCircle, IconIdCard, IconPhone } from "./components/Icons";
+import TimetablePage from "./timetable/TimetablePage";
+import FacultyWorkload from "./timetable/FacultyWorkload";
+import { IconAttendance, IconSections, IconMarks, IconMentor, IconSearch, IconUsers, IconTrash, IconUserCircle, IconIdCard, IconPhone, IconCalendar, IconWorkload } from "./components/Icons";
 import { today, calcPct, parseCSV, downloadTemplate, exportXLS, makeKey, parseKey, groupByDateBatched, rowColor, MASTER_ADMIN_PHONE, fmtDate, validateBatches, studentsInBatch, readStatus, batchSlotKey } from "./utils";
 
 // ── Invite link card — each admin's shareable link for their own faculty ──
@@ -231,6 +233,16 @@ export default function AdminApp({ user, onLogout }) {
   if (screen === "allSectionsMarks") {
     return <OriginalSectionsScreen user={user} onBack={() => setScreen("home")} />;
   }
+  if (screen === "myTimetable" || (screen === "workload" && isMaster)) {
+    const isWorkload = screen === "workload";
+    return (
+      <div style={{ background: P.bg, minHeight: "100vh" }}>
+        <TopBar title={isWorkload ? "Faculty Workload" : "My Timetable"} subtitle={user.name}
+          right={<button onClick={() => setScreen("home")} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>← Back</button>} />
+        {isWorkload ? <FacultyWorkload /> : <TimetablePage user={user} />}
+      </div>
+    );
+  }
   if (screen === "users") {
     const usersToShow = allUsers; // approval rights are shared across HoD, admins, and master admin
     return (
@@ -277,6 +289,8 @@ export default function AdminApp({ user, onLogout }) {
           else if (id === "myProfile") setScreen("myProfile");
           else if (id === "studentData") setScreen("studentData");
           else if (id === "allSectionsMarks") setScreen("allSectionsMarks");
+          else if (id === "timetable") setScreen("myTimetable");
+          else if (id === "workload") setScreen("workload");
           else setHomeTab(id);
         }}
         groups={[
@@ -287,6 +301,7 @@ export default function AdminApp({ user, onLogout }) {
               { id: "myAttendance", title: "My Section Attendance", desc: "Mark and review attendance for the subjects you personally teach.", icon: IconAttendance, color: "teal" },
               { id: "myMarks", title: "My Subject Internal Marks", desc: "Enter marks for the subjects you teach.", icon: IconMarks, color: "indigo" },
               { id: "myMentor", title: "Mentor", desc: "Track your mentee students' progress and add comments.", icon: IconMentor, color: "violet" },
+              { id: "timetable", title: "My Timetable", desc: "Your weekly class schedule. Edit it any time and download it.", icon: IconCalendar, color: "amber" },
             ],
           },
           {
@@ -301,6 +316,7 @@ export default function AdminApp({ user, onLogout }) {
             label: "Master Admin only",
             tiles: [
               { id: "studentData", title: "Student Data", desc: "Look up any student's SGPA, CGPA, backlogs and attendance trend.", icon: IconSearch, color: "green" },
+              { id: "workload", title: "Faculty Workload", desc: "Weekly periods for every faculty member, from their timetables.", icon: IconWorkload, color: "indigo" },
               { id: "profiles", title: "Faculty Profiles", desc: "Directory of every faculty member's bio, publications and research.", icon: IconUsers, color: "rose" },
               { id: "trash", title: "Trash", desc: "Restore or permanently remove sections that were deleted.", icon: IconTrash, color: "slate" },
             ],

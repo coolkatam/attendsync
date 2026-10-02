@@ -216,6 +216,14 @@ service cloud.firestore {
         (request.auth.uid == phone || isAdmin());
     }
 
+    // ── FACULTY TIMETABLES (weekly class schedule) ───────
+    // Any signed-in user can read (the HoD's workload screen reads every
+    // faculty member's); only the timetable's own owner can write it.
+    match /facultyTimetables/{phone} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == phone;
+    }
+
     // ── EMPLOYEE ROSTER (for background ID verification at signup) ──
     // Only admins/HoD/master admin can read or manage this list.
     // The actual registration-time check does NOT read this directly —
@@ -29430,7 +29438,9 @@ import SectionsSetupWizard from "./sections/SectionsSetupWizard";
 import HoDStudentLookup from "./hod/HoDStudentLookup";
 import MentorPage from "./mentor/MentorPage";
 import { P, Btn, Card, Badge, Fld, Sel, TopBar, GPill, ARow, Spinner, PeriodPicker } from "./components/UI";
-import { IconAttendance, IconSections, IconMarks, IconMentor, IconSearch, IconUsers, IconTrash, IconUserCircle, IconIdCard, IconPhone } from "./components/Icons";
+import TimetablePage from "./timetable/TimetablePage";
+import FacultyWorkload from "./timetable/FacultyWorkload";
+import { IconAttendance, IconSections, IconMarks, IconMentor, IconSearch, IconUsers, IconTrash, IconUserCircle, IconIdCard, IconPhone, IconCalendar, IconWorkload } from "./components/Icons";
 import { today, calcPct, parseCSV, downloadTemplate, exportXLS, makeKey, parseKey, groupByDateBatched, rowColor, MASTER_ADMIN_PHONE, fmtDate, validateBatches, studentsInBatch, readStatus, batchSlotKey } from "./utils";
 
 // ── Invite link card — each admin's shareable link for their own faculty ──
@@ -29640,6 +29650,16 @@ export default function AdminApp({ user, onLogout }) {
   if (screen === "allSectionsMarks") {
     return <OriginalSectionsScreen user={user} onBack={() => setScreen("home")} />;
   }
+  if (screen === "myTimetable" || (screen === "workload" && isMaster)) {
+    const isWorkload = screen === "workload";
+    return (
+      <div style={{ background: P.bg, minHeight: "100vh" }}>
+        <TopBar title={isWorkload ? "Faculty Workload" : "My Timetable"} subtitle={user.name}
+          right={<button onClick={() => setScreen("home")} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>← Back</button>} />
+        {isWorkload ? <FacultyWorkload /> : <TimetablePage user={user} />}
+      </div>
+    );
+  }
   if (screen === "users") {
     const usersToShow = allUsers; // approval rights are shared across HoD, admins, and master admin
     return (
@@ -29686,6 +29706,8 @@ export default function AdminApp({ user, onLogout }) {
           else if (id === "myProfile") setScreen("myProfile");
           else if (id === "studentData") setScreen("studentData");
           else if (id === "allSectionsMarks") setScreen("allSectionsMarks");
+          else if (id === "timetable") setScreen("myTimetable");
+          else if (id === "workload") setScreen("workload");
           else setHomeTab(id);
         }}
         groups={[
@@ -29696,6 +29718,7 @@ export default function AdminApp({ user, onLogout }) {
               { id: "myAttendance", title: "My Section Attendance", desc: "Mark and review attendance for the subjects you personally teach.", icon: IconAttendance, color: "teal" },
               { id: "myMarks", title: "My Subject Internal Marks", desc: "Enter marks for the subjects you teach.", icon: IconMarks, color: "indigo" },
               { id: "myMentor", title: "Mentor", desc: "Track your mentee students' progress and add comments.", icon: IconMentor, color: "violet" },
+              { id: "timetable", title: "My Timetable", desc: "Your weekly class schedule. Edit it any time and download it.", icon: IconCalendar, color: "amber" },
             ],
           },
           {
@@ -29710,6 +29733,7 @@ export default function AdminApp({ user, onLogout }) {
             label: "Master Admin only",
             tiles: [
               { id: "studentData", title: "Student Data", desc: "Look up any student's SGPA, CGPA, backlogs and attendance trend.", icon: IconSearch, color: "green" },
+              { id: "workload", title: "Faculty Workload", desc: "Weekly periods for every faculty member, from their timetables.", icon: IconWorkload, color: "indigo" },
               { id: "profiles", title: "Faculty Profiles", desc: "Directory of every faculty member's bio, publications and research.", icon: IconUsers, color: "rose" },
               { id: "trash", title: "Trash", desc: "Restore or permanently remove sections that were deleted.", icon: IconTrash, color: "slate" },
             ],
@@ -32099,7 +32123,8 @@ import MentorPage from "./mentor/MentorPage";
 import InternalMarksPage from "./marks/InternalMarksPage";
 import FacultyProfilePage from "./profile/FacultyProfilePage";
 import HomeHub from "./components/HomeHub";
-import { IconAttendance, IconMarks, IconMentor, IconUserCircle } from "./components/Icons";
+import TimetablePage from "./timetable/TimetablePage";
+import { IconAttendance, IconMarks, IconMentor, IconUserCircle, IconCalendar } from "./components/Icons";
 
 export default function FacultyApp({ user, onLogout, hideShell = false, initialTab = "attendance" }) {
   const [sections, setSections]     = useState([]);
@@ -32150,6 +32175,7 @@ export default function FacultyApp({ user, onLogout, hideShell = false, initialT
             { id: "attendance", title: "My Section Attendance", desc: "Mark and review attendance for the subjects you teach.", icon: IconAttendance, color: "teal" },
             { id: "marks", title: "My Subject Internal Marks", desc: "Enter marks for the subjects you teach.", icon: IconMarks, color: "indigo" },
             { id: "mentor", title: "Mentor", desc: "Track your mentee students' progress and add comments.", icon: IconMentor, color: "violet" },
+            { id: "timetable", title: "My Timetable", desc: "Your weekly class schedule. Edit it any time and download it.", icon: IconCalendar, color: "amber" },
           ],
         }]}
       />
@@ -32161,6 +32187,7 @@ export default function FacultyApp({ user, onLogout, hideShell = false, initialT
     marks: "My Subject Internal Marks",
     mentor: "Mentor",
     profile: "My Profile",
+    timetable: "My Timetable",
   }[mainTab] || "";
 
   return (
@@ -32172,6 +32199,8 @@ export default function FacultyApp({ user, onLogout, hideShell = false, initialT
 
       {mainTab === "mentor" ? (
         <MentorPage user={user} />
+      ) : mainTab === "timetable" ? (
+        <TimetablePage user={user} />
       ) : mainTab === "marks" ? (
         <InternalMarksPage user={user} />
       ) : mainTab === "profile" ? (
@@ -33694,6 +33723,7 @@ export const IconSearch = (p) => <Base {...p}><circle cx="11" cy="11" r="8"/><li
 export const IconClock = (p) => <Base {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></Base>;
 export const IconDownload = (p) => <Base {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></Base>;
 export const IconCamera = (p) => <Base {...p}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></Base>;
+export const IconWorkload = (p) => <Base {...p}><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></Base>;
 export const IconSync = (p) => <Base {...p}><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></Base>;
 
 
@@ -34026,7 +34056,9 @@ import OriginalSectionsScreen from "../originalSections/OriginalSectionsScreen";
 import { UsersScreen } from "../AdminApp";
 import { approveUser, rejectUser, makeAdmin, makeFaculty, makeHod, deleteUser, resetPin } from "../userActions";
 import { P, TopBar } from "../components/UI";
-import { IconAttendance, IconSearch, IconUsers, IconUserCircle, IconMarks } from "../components/Icons";
+import TimetablePage from "../timetable/TimetablePage";
+import FacultyWorkload from "../timetable/FacultyWorkload";
+import { IconAttendance, IconSearch, IconUsers, IconUserCircle, IconMarks, IconCalendar, IconWorkload } from "../components/Icons";
 
 export default function HoDApp({ user, onLogout }) {
   const [tab, setTab] = useState(null); // null = show the home hub
@@ -34060,12 +34092,14 @@ export default function HoDApp({ user, onLogout }) {
               { id: "profile", title: "My Profile", desc: "Your bio, qualifications, publications and downloadable resume.", icon: IconUserCircle, color: "blue" },
               { id: "myAttendance", title: "My Section Attendance", desc: "Mark and review attendance for the subjects you personally teach.", icon: IconAttendance, color: "teal" },
               { id: "myMarks", title: "My Subject Internal Marks", desc: "Enter marks for the subjects you teach, and any papers assigned to you for valuation.", icon: IconMarks, color: "indigo" },
+              { id: "timetable", title: "My Timetable", desc: "Your weekly class schedule. Edit it any time and download it.", icon: IconCalendar, color: "amber" },
             ],
           },
           {
             label: "Department oversight",
             tiles: [
               { id: "studentData", title: "Student Data", desc: "Look up any student's SGPA, CGPA, backlogs and attendance trend.", icon: IconSearch, color: "green" },
+              { id: "workload", title: "Faculty Workload", desc: "Weekly periods for every faculty member, from their timetables.", icon: IconWorkload, color: "indigo" },
               { id: "allSectionsMarks", title: "All Sections Internal Marks", desc: "Monitor every original section's marks — see who's locked, drafted or not started.", icon: IconMarks, color: "amber" },
               { id: "profiles", title: "Faculty Profiles", desc: "Directory of every faculty member's bio, publications and research.", icon: IconUsers, color: "rose" },
               { id: "users", title: "Users", desc: "Approve registrations, promote faculty, manage the employee ID roster.", icon: IconUsers, color: "slate" },
@@ -34083,6 +34117,8 @@ export default function HoDApp({ user, onLogout }) {
   const tabTitle = {
     myAttendance: "My Section Attendance",
     myMarks: "My Subject Internal Marks",
+    timetable: "My Timetable",
+    workload: "Faculty Workload",
     profiles: "Faculty Profiles",
     users: "Users",
     profile: "My Profile",
@@ -34102,6 +34138,10 @@ export default function HoDApp({ user, onLogout }) {
       {tab === "myMarks" && (
         <InternalMarksPage user={user} />
       )}
+
+      {tab === "timetable" && <TimetablePage user={user} />}
+
+      {tab === "workload" && <FacultyWorkload />}
 
       {tab === "profiles" && (
         <div style={{ padding: "24px 24px 80px", maxWidth: "min(1700px, 92vw)", margin: "0 auto" }}>
@@ -39401,5 +39441,956 @@ function AssignmentsSummary({ sections, subjectNames }) {
 
 
 === END_FILE: .\src\sections\SectionsSetupWizard.jsx ===
+
+
+=== START_FILE: .\src\timetable\FacultyWorkload.jsx ===
+
+// src/timetable/FacultyWorkload.jsx
+// HoD / Master Admin view: every approved faculty member's weekly teaching
+// load, taken from the timetable they filled in. Click a name to see that
+// timetable (read-only).
+
+import React, { useState, useEffect, useRef } from "react";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "../firebase";
+import { P, Card, Btn, Spinner } from "../components/UI";
+import TimetableGrid from "./TimetableGrid";
+import PrintShell from "./PrintShell";
+import { exportWorkloadXLSX } from "./timetableExport";
+import { DAYS, COUNTED, blankModel, fromStore, stats } from "./timetableModel";
+
+const MONO = "'IBM Plex Mono', monospace";
+const th = { textAlign: "left", fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: P.gray, padding: "8px 8px", borderBottom: "1.5px solid " + P.border, whiteSpace: "nowrap" };
+const td = { padding: "9px 8px", borderBottom: "1px solid " + P.border, verticalAlign: "middle" };
+
+function initials(name) {
+  return (name || "?").replace(/[^A-Za-z ]/g, "").split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase() || "?";
+}
+
+function WorkloadTable({ list, maxT, openPhone, onToggle, printMode }) {
+  return (
+    <table style={{ borderCollapse: "collapse", width: "100%", minWidth: printMode ? 0 : 1000 }}>
+      <thead>
+        <tr>
+          <th style={th}>Faculty</th><th style={th}>Periods per week</th>
+          {["Theory", "Lab", "Drawing", "Other", "Free"].map(h => <th key={h} style={{ ...th, textAlign: "center" }}>{h}</th>)}
+          {DAYS.map(d => <th key={d[0]} style={{ ...th, textAlign: "center" }}>{d[0]}</th>)}
+        </tr>
+      </thead>
+      <tbody>
+        {list.map(f => {
+          const isOpen = !printMode && openPhone === f.phone && !f.none;
+          const nameBlock = (
+            <>
+              <span style={{ width: 34, height: 34, borderRadius: "50%", background: P.blueL, color: P.blue, fontSize: 12, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{initials(f.name)}</span>
+              <span style={{ minWidth: 0 }}>
+                <b style={{ display: "block", fontSize: 13.5 }}>{f.name}</b>
+                <small style={{ color: P.gray, fontSize: 12 }}>{f.desig}</small>
+              </span>
+            </>
+          );
+          return (
+            <React.Fragment key={f.phone}>
+              <tr>
+                <td style={td}>
+                  {printMode || f.none ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>{nameBlock}</div>
+                  ) : (
+                    <button type="button" onClick={() => onToggle(f.phone)} aria-expanded={isOpen}
+                      style={{ display: "flex", alignItems: "center", gap: 10, border: 0, background: "transparent", cursor: "pointer", textAlign: "left", padding: 0, width: "100%", fontFamily: "inherit" }}>
+                      {nameBlock}
+                      <span style={{ marginLeft: "auto", color: P.gray, transform: isOpen ? "rotate(180deg)" : "none" }}>▾</span>
+                    </button>
+                  )}
+                </td>
+                {f.none ? (
+                  <td colSpan={11} style={td}>
+                    <span style={{ fontSize: 11.5, fontWeight: 600, background: P.amberL, color: P.amber, padding: "3px 10px", borderRadius: 20, whiteSpace: "nowrap" }}>No timetable filled yet</span>
+                  </td>
+                ) : (
+                  <>
+                    <td style={td}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 150 }}>
+                        <div style={{ flex: 1, height: 9, borderRadius: 5, background: P.border, overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: (f.s.total / maxT * 100) + "%", background: P.blue, borderRadius: 5 }} />
+                        </div>
+                        <b style={{ fontFamily: MONO, minWidth: "2ch", textAlign: "right" }}>{f.s.total}</b>
+                      </div>
+                    </td>
+                    {COUNTED.map(k => <td key={k} style={{ ...td, textAlign: "center", fontFamily: MONO }}>{f.s.counts[k]}</td>)}
+                    <td style={{ ...td, textAlign: "center", fontFamily: MONO }}>{f.s.free}</td>
+                    {f.s.perDay.map((n, d) => (
+                      <td key={d} style={{ ...td, textAlign: "center" }}>
+                        <span style={{ display: "inline-block", minWidth: 30, padding: "4px 0", borderRadius: 6, fontFamily: MONO, fontSize: 12.5, background: "rgba(44,92,148," + (n / f.s.dayCap * 0.55).toFixed(2) + ")" }}>{n}</span>
+                      </td>
+                    ))}
+                  </>
+                )}
+              </tr>
+              {isOpen && (
+                <tr>
+                  <td colSpan={13} style={{ background: P.bg, padding: "10px 12px 14px" }}>
+                    <TimetableGrid model={f.model} editable={false} compact />
+                  </td>
+                </tr>
+              )}
+            </React.Fragment>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
+export default function FacultyWorkload() {
+  const [list, setList] = useState(null);
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState("most");
+  const [openPhone, setOpenPhone] = useState(null);
+  const [dlOpen, setDlOpen] = useState(false);
+  const [showPrint, setShowPrint] = useState(false);
+  const dlRef = useRef(null);
+
+  useEffect(() => {
+    let alive = true;
+    Promise.all([getDocs(collection(db, "users")), getDocs(collection(db, "facultyTimetables"))]).then(([usersSnap, ttSnap]) => {
+      if (!alive) return;
+      const tts = {};
+      ttSnap.forEach(d => { const m = fromStore(d.data()); if (m) tts[d.id] = { model: m, term: d.data().term || "" }; });
+      const rows = [];
+      usersSnap.forEach(d => {
+        const u = d.data();
+        if (u.status !== "approved") return;
+        const t = tts[d.id];
+        const model = t ? t.model : blankModel(["—"]);
+        const s = stats(model);
+        rows.push({ phone: d.id, name: u.name || d.id, desig: u.designation || "", model, term: t ? t.term : "", s, none: !t || s.total === 0 });
+      });
+      setList(rows);
+    });
+    return () => { alive = false; };
+  }, []);
+
+  useEffect(() => {
+    function onDoc(e) { if (dlRef.current && !dlRef.current.contains(e.target)) setDlOpen(false); }
+    document.addEventListener("click", onDoc);
+    return () => document.removeEventListener("click", onDoc);
+  }, []);
+
+  if (!list) return <Spinner />;
+
+  const filled = list.filter(f => !f.none);
+  const sum = filled.reduce((a, f) => a + f.s.total, 0);
+  const byTotal = filled.slice().sort((a, b) => b.s.total - a.s.total);
+  const hi = byTotal[0], lo = byTotal[byTotal.length - 1];
+  const maxT = Math.max(1, ...list.map(f => f.s.total));
+
+  const q = search.trim().toLowerCase();
+  const shown = list.filter(f => f.name.toLowerCase().includes(q)).sort((a, b) => {
+    if (sort === "name") return a.name.localeCompare(b.name);
+    if (a.none !== b.none) return a.none ? 1 : -1;
+    return sort === "least" ? a.s.total - b.s.total : b.s.total - a.s.total;
+  });
+
+  const stat = (value, label) => (
+    <div style={{ flex: "1 1 150px", padding: "14px 18px", borderRight: "1px solid " + P.border }}>
+      <b style={{ display: "block", fontFamily: MONO, fontSize: 24, fontWeight: 600, lineHeight: 1.2 }}>{value}</b>
+      <span style={{ fontSize: 12, color: P.gray }}>{label}</span>
+    </div>
+  );
+
+  return (
+    <div style={{ padding: "24px clamp(16px, 3vw, 32px) 80px", maxWidth: "min(1700px, 96vw)", margin: "0 auto", display: "grid", gap: 18 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", border: "1px solid " + P.border, borderRadius: 12, background: "#fff", overflow: "hidden" }}>
+        {stat(list.length, "Faculty in the department")}
+        {stat(filled.length ? Math.round(sum / filled.length * 10) / 10 : "—", "Average periods per week")}
+        {stat(hi ? hi.s.total : "—", hi ? "Highest: " + hi.name : "Highest")}
+        {stat(lo ? lo.s.total : "—", lo ? "Lowest: " + lo.name : "Lowest")}
+        {stat(list.length - filled.length, "No timetable filled yet")}
+      </div>
+
+      <Card style={{ padding: "18px 20px", margin: 0 }}>
+        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", justifyContent: "space-between", marginBottom: 12 }}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search faculty" aria-label="Search faculty"
+              style={{ border: "1.5px solid " + P.border, borderRadius: 9, padding: "8px 12px", fontFamily: "inherit", fontSize: 14 }} />
+            <select value={sort} onChange={e => setSort(e.target.value)} aria-label="Sort faculty"
+              style={{ border: "1.5px solid " + P.border, borderRadius: 9, padding: "8px 12px", fontFamily: "inherit", fontSize: 14, background: "#fff" }}>
+              <option value="most">Most periods first</option>
+              <option value="least">Fewest periods first</option>
+              <option value="name">Name A to Z</option>
+            </select>
+          </div>
+          <div ref={dlRef} style={{ position: "relative" }}>
+            <Btn small variant="outline" onClick={() => setDlOpen(v => !v)}>Download workload ▾</Btn>
+            {dlOpen && (
+              <div role="menu" style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", minWidth: 240, background: "#fff", border: "1px solid " + P.border, borderRadius: 10, boxShadow: "0 10px 28px rgba(0,0,0,0.18)", padding: 6, zIndex: 30 }}>
+                {[["PDF", "Workload table, one page", () => setShowPrint(true)],
+                  ["Excel (.xlsx)", "With the day-wise split", () => exportWorkloadXLSX(shown)]].map(([t, sub, fn]) => (
+                  <button key={t} role="menuitem" type="button" onClick={() => { setDlOpen(false); fn(); }}
+                    style={{ display: "block", width: "100%", textAlign: "left", border: 0, background: "transparent", padding: "9px 12px", borderRadius: 7, cursor: "pointer", fontFamily: "inherit", fontSize: 14, fontWeight: 500 }}>
+                    {t}<small style={{ display: "block", color: P.gray, fontWeight: 400, fontSize: 12 }}>{sub}</small>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <WorkloadTable list={shown} maxT={maxT} openPhone={openPhone} onToggle={p => setOpenPhone(o => o === p ? null : p)} />
+        </div>
+        {shown.length === 0 && <div style={{ color: P.gray, padding: "14px 4px" }}>No faculty match your search.</div>}
+        <p style={{ fontSize: 12.5, color: P.gray, margin: "10px 0 0" }}>
+          Periods are teaching periods per week (theory, lab, drawing and other duties). Lunch and free slots are not counted. Click a name to see that faculty's timetable.
+        </p>
+      </Card>
+
+      {showPrint && (
+        <PrintShell title="Faculty workload preview" onClose={() => setShowPrint(false)}>
+          <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Faculty Workload</div>
+          <div style={{ fontSize: 14, color: P.gray, marginBottom: 14 }}>Teaching periods per week, from each faculty member's timetable</div>
+          <WorkloadTable list={shown} maxT={maxT} printMode />
+        </PrintShell>
+      )}
+    </div>
+  );
+}
+
+
+=== END_FILE: .\src\timetable\FacultyWorkload.jsx ===
+
+
+=== START_FILE: .\src\timetable\PrintShell.jsx ===
+
+// src/timetable/PrintShell.jsx
+// Full-screen preview that prints as one landscape page. "Save as PDF" is the
+// browser's own print dialog, same approach as the resume.
+
+import React from "react";
+
+export default function PrintShell({ title, onClose, children }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#525659", zIndex: 300, overflowY: "auto" }}>
+      <style>{`
+        @media print {
+          body * { visibility: hidden; }
+          #tt-print-root, #tt-print-root * { visibility: visible; }
+          #tt-print-root { position: absolute; top: 0; left: 0; width: 100%; box-shadow: none !important; margin: 0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .tt-no-print { display: none !important; }
+          @page { size: A4 landscape; margin: 10mm; }
+        }
+      `}</style>
+      <div className="tt-no-print" style={{ position: "sticky", top: 0, zIndex: 10, background: "#1f2937", padding: "12px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ color: "#fff", fontWeight: 700, fontSize: 14 }}>{title}</div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={() => window.print()}
+            style={{ background: "#2563eb", color: "#fff", border: "none", borderRadius: 8, padding: "9px 18px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" }}>
+            Print / Save as PDF
+          </button>
+          <button onClick={onClose}
+            style={{ background: "rgba(255,255,255,0.15)", color: "#fff", border: "none", borderRadius: 8, padding: "9px 18px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" }}>
+            Close
+          </button>
+        </div>
+      </div>
+      <div id="tt-print-root" style={{ background: "#fff", maxWidth: 1180, margin: "20px auto 60px", padding: "24px 28px", color: "#1a2230", boxShadow: "0 4px 24px rgba(0,0,0,0.35)", boxSizing: "border-box" }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+
+=== END_FILE: .\src\timetable\PrintShell.jsx ===
+
+
+=== START_FILE: .\src\timetable\timetableExport.js ===
+
+// src/timetable/timetableExport.js — Excel downloads for the timetable and the HoD workload.
+
+import * as XLSX from "xlsx";
+import { DAYS, COUNTED, TL, labelsOf, cellText, stats } from "./timetableModel";
+
+function safeName(s) { return String(s || "Timetable").replace(/[\\/:*?"<>|]/g, "").trim() || "Timetable"; }
+
+export function exportTimetableXLSX(personName, term, model) {
+  const labs = labelsOf(model);
+  const n = model.slots.length;
+  const title = personName + " - Weekly Timetable" + (term ? " (" + term + ")" : "");
+  const rows = [[title], [], ["Day", ...model.slots.map((s, i) => labs[i].text + " " + s.time)]];
+  const merges = [];
+  DAYS.forEach((day, d) => {
+    const row = [day[1]];
+    let covered = -1;
+    for (let i = 0; i < n; i++) {
+      if (i <= covered) { row.push(""); continue; }
+      const c = model.cells[d][i];
+      row.push(cellText(c));
+      if (c && c.span > 1) {
+        covered = i + c.span - 1;
+        merges.push({ s: { r: rows.length, c: i + 1 }, e: { r: rows.length, c: Math.min(covered, n - 1) + 1 } });
+      }
+    }
+    rows.push(row);
+  });
+  const st = stats(model);
+  rows.push([], ["Teaching periods per week", st.total], ...COUNTED.map(k => [TL[k], st.counts[k]]));
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"] = [{ wch: 14 }, ...model.slots.map(() => ({ wch: 24 }))];
+  ws["!merges"] = merges;
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Timetable");
+  XLSX.writeFile(wb, safeName(personName) + " - Timetable.xlsx");
+}
+
+export function exportWorkloadXLSX(list) {
+  const header = ["Faculty", "Designation", "Periods per week", "Theory", "Lab", "Drawing", "Other", "Free slots", ...DAYS.map(d => d[1])];
+  const rows = list.map(f => f.none
+    ? [f.name, f.desig, "No timetable filled yet"]
+    : [f.name, f.desig, f.s.total, f.s.counts.theory, f.s.counts.lab, f.s.counts.drawing, f.s.counts.other, f.s.free, ...f.s.perDay]);
+  const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+  ws["!cols"] = header.map((h, i) => ({ wch: i < 2 ? 26 : 14 }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Faculty Workload");
+  XLSX.writeFile(wb, "Faculty Workload.xlsx");
+}
+
+
+=== END_FILE: .\src\timetable\timetableExport.js ===
+
+
+=== START_FILE: .\src\timetable\TimetableGrid.jsx ===
+
+// src/timetable/TimetableGrid.jsx
+// The days x periods table. Editable on the faculty's own screen, read-only
+// for the HoD workload view and for printing.
+
+import React from "react";
+import { P } from "../components/UI";
+import { DAYS, TL, TYPE_STYLE, labelsOf } from "./timetableModel";
+
+const MONO = "'IBM Plex Mono', monospace";
+
+export default function TimetableGrid({ model, editable, sel, onSelect, colCtl, onTimeCommit, onDeleteCol, compact }) {
+  const labs = labelsOf(model);
+  const n = model.slots.length;
+  const h = compact ? 62 : 80;
+
+  function cellBox(extra) {
+    return {
+      display: "flex", flexDirection: "column", justifyContent: "center", gap: 1, width: "100%", height: h,
+      padding: compact ? "6px 9px" : "8px 11px", borderRadius: 10, border: "1.5px solid transparent",
+      textAlign: "left", overflow: "hidden", fontFamily: "inherit", fontSize: "inherit", boxSizing: "border-box", ...extra,
+    };
+  }
+
+  function renderCell(d, i, c, span) {
+    const isSel = !!sel && sel.d === d && sel.i === i;
+    const Tag = editable ? "button" : "div";
+    const common = editable ? { type: "button", onClick: () => onSelect(d, i) } : {};
+    const selStyle = isSel ? { outline: "2.5px solid " + P.blue, outlineOffset: 1 } : {};
+    const cur = editable ? { cursor: "pointer" } : {};
+
+    if (!c) {
+      return (
+        <td key={i}>
+          <Tag {...common} aria-label={editable ? DAYS[d][1] + " " + labs[i].text + ": free" : undefined}
+            style={cellBox({ background: "transparent", border: "1.5px dashed " + P.border, color: P.gray, alignItems: "center", fontSize: 12.5, ...cur, ...selStyle })}>
+            Free
+          </Tag>
+        </td>
+      );
+    }
+    if (c.type === "lunch") {
+      return (
+        <td key={i} colSpan={span}>
+          <Tag {...common} aria-label={editable ? DAYS[d][1] + " " + labs[i].text + ": lunch" : undefined}
+            style={cellBox({
+              backgroundImage: "repeating-linear-gradient(135deg,#f1f4f7 0 9px,#e7ecf1 9px 18px)", color: P.gray,
+              alignItems: "center", fontWeight: 600, fontSize: 11.5, letterSpacing: "0.16em", textTransform: "uppercase",
+              border: "1.5px dashed " + P.border, ...cur, ...selStyle,
+            })}>
+            Lunch
+          </Tag>
+        </td>
+      );
+    }
+    const ts = TYPE_STYLE[c.type];
+    const meta = [c.section, c.room].filter(Boolean).join(" · ");
+    return (
+      <td key={i} colSpan={span}>
+        <Tag {...common} aria-label={editable ? DAYS[d][1] + " " + labs[i].text + ": " + (c.subject || "no subject yet") : undefined}
+          style={cellBox({ background: ts.bg, color: ts.fg, ...cur, ...selStyle })}>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", opacity: 0.8 }}>
+            {TL[c.type]}{span > 1 ? " · " + span + " periods" : ""}
+          </span>
+          <span style={{ fontSize: compact ? 13 : 14.5, fontWeight: 600, lineHeight: 1.25, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontStyle: c.subject ? "normal" : "italic", opacity: c.subject ? 1 : 0.7 }}>
+            {c.subject || "Add subject"}
+          </span>
+          {meta && <span style={{ fontFamily: MONO, fontSize: 11.5, opacity: 0.85, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{meta}</span>}
+        </Tag>
+      </td>
+    );
+  }
+
+  const rows = DAYS.map((day, d) => {
+    const tds = [];
+    let covered = -1;
+    for (let i = 0; i < n; i++) {
+      if (i <= covered) continue;
+      const c = model.cells[d][i];
+      const span = c ? Math.min(c.span, n - i) : 1;
+      if (c) covered = i + span - 1;
+      tds.push(renderCell(d, i, c, span));
+    }
+    return (
+      <tr key={d}>
+        <th scope="row" style={{ width: 86, textAlign: "left", verticalAlign: "middle", position: "sticky", left: 0, background: "#fff", zIndex: 1, paddingRight: 6, fontWeight: 400 }}>
+          <span style={{ display: "block", fontWeight: 700, fontSize: 14.5 }}>{day[0]}</span>
+          <span style={{ display: "block", fontSize: 11.5, color: P.gray }}>{day[1]}</span>
+        </th>
+        {tds}
+      </tr>
+    );
+  });
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table style={{ borderCollapse: "separate", borderSpacing: 6, width: "100%", tableLayout: "fixed", minWidth: 92 + n * 112 }}>
+        <thead>
+          <tr>
+            <th style={{ width: 86 }} />
+            {model.slots.map((s, i) => (
+              <th key={i} scope="col" style={{ padding: "2px 4px 6px", textAlign: "left", fontSize: 12, color: P.gray, position: "relative", verticalAlign: "bottom", fontWeight: 600 }}>
+                <span style={{ display: "block", fontFamily: MONO, fontWeight: 600, fontSize: 13, color: labs[i].lunch ? P.gray : "#1a2230", textTransform: labs[i].lunch ? "uppercase" : "none", letterSpacing: labs[i].lunch ? "0.1em" : 0 }}>{labs[i].text}</span>
+                <span
+                  contentEditable={!!editable}
+                  suppressContentEditableWarning
+                  spellCheck={false}
+                  title={editable ? "Click to edit this timing" : undefined}
+                  onBlur={editable ? e => onTimeCommit(i, e.currentTarget.textContent) : undefined}
+                  onKeyDown={editable ? e => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); } } : undefined}
+                  style={{ display: "inline-block", fontFamily: MONO, fontSize: 11.5, minWidth: "4ch", borderBottom: editable ? "1px dotted " + P.gray : "none", cursor: editable ? "text" : "default" }}>
+                  {s.time}
+                </span>
+                {colCtl && (
+                  <button type="button" onClick={() => onDeleteCol(i)} disabled={n <= 1} aria-label={"Delete column " + labs[i].text}
+                    style={{ position: "absolute", top: 0, right: 2, width: 20, height: 20, borderRadius: "50%", border: "1px solid " + P.border, background: "#fff", color: P.red, cursor: n <= 1 ? "not-allowed" : "pointer", lineHeight: 1, padding: 0, fontSize: 14 }}>
+                    ×
+                  </button>
+                )}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>{rows}</tbody>
+      </table>
+    </div>
+  );
+}
+
+export function TypeLegend() {
+  const item = (k, label) => (
+    <span key={k} style={{ display: "inline-flex", alignItems: "center" }}>
+      <i style={{ display: "inline-block", width: 10, height: 10, borderRadius: 3, marginRight: 7, background: TYPE_STYLE[k].dot }} />{label}
+    </span>
+  );
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginTop: 10, fontSize: 12.5, color: P.gray }}>
+      {item("theory", "Theory")}{item("lab", "Lab")}{item("drawing", "Drawing")}{item("other", "Other (mentoring, duty)")}{item("lunch", "Lunch")}
+      <span style={{ display: "inline-flex", alignItems: "center" }}>
+        <i style={{ display: "inline-block", width: 10, height: 10, borderRadius: 3, marginRight: 7, border: "1.5px dashed " + P.gray }} />Free
+      </span>
+    </div>
+  );
+}
+
+
+=== END_FILE: .\src\timetable\TimetableGrid.jsx ===
+
+
+=== START_FILE: .\src\timetable\timetableModel.js ===
+
+// src/timetable/timetableModel.js
+// Pure helpers for a faculty member's weekly timetable. No React, no Firebase.
+//
+// Model:  { slots: [{ time }], cells: [ [cell|null, ...slots] x 6 days ] }
+// cell:   { type: theory|lab|drawing|other|lunch, subject, section, room, span }
+// A cell with span > 1 sits in its first slot; the slots it covers are null.
+
+export const DAYS = [["Mon", "Monday"], ["Tue", "Tuesday"], ["Wed", "Wednesday"], ["Thu", "Thursday"], ["Fri", "Friday"], ["Sat", "Saturday"]];
+export const TL = { theory: "Theory", lab: "Lab", drawing: "Drawing", other: "Other", lunch: "Lunch" };
+export const COUNTED = ["theory", "lab", "drawing", "other"];
+export const MAXSLOTS = 10;
+export const DEFAULT_TIMES = ["9:00–9:50", "9:50–10:40", "10:40–11:30", "11:30–12:20", "12:20–1:10", "1:10–2:00", "2:00–2:50", "2:50–3:40"];
+
+export const TYPE_STYLE = {
+  theory:  { bg: "#e3f1e9", fg: "#175c3a", dot: "#1f7a4d" },
+  lab:     { bg: "#e9eaf7", fg: "#3c3e86", dot: "#4d4f9c" },
+  drawing: { bg: "#f8ecd6", fg: "#80490a", dot: "#a15c07" },
+  other:   { bg: "#edf0f3", fg: "#44505c", dot: "#5b6673" },
+  lunch:   { bg: "#eef1f4", fg: "#5b6673", dot: "#9aa7b4" },
+};
+
+export function mkCell(type, subject, section, room, span) {
+  return { type, subject: subject || "", section: section || "", room: room || "", span: span || 1 };
+}
+
+export function blankModel(times) {
+  return {
+    slots: times.map(t => ({ time: t })),
+    cells: DAYS.map(() => times.map(() => null)),
+  };
+}
+
+// 7 periods plus one lunch column after period 4, lunch filled on every day.
+export function defaultModel() {
+  const m = blankModel(DEFAULT_TIMES);
+  for (let d = 0; d < DAYS.length; d++) m.cells[d][4] = mkCell("lunch");
+  return m;
+}
+
+export function cloneModel(m) { return JSON.parse(JSON.stringify(m)); }
+
+// The cell that covers slot i on day d, with the slot it starts in.
+export function cellAt(m, d, i) {
+  const row = m.cells[d];
+  for (let s = 0; s <= i; s++) {
+    const c = row[s];
+    if (c && s + c.span - 1 >= i) return { cell: c, start: s };
+  }
+  return null;
+}
+
+// A column that is Lunch on every day is labelled "Lunch"; the rest are P1, P2…
+export function labelsOf(m) {
+  const out = [];
+  let k = 0;
+  m.slots.forEach((_, i) => {
+    const allLunch = DAYS.every((_d, d) => { const h = cellAt(m, d, i); return h && h.cell.type === "lunch"; });
+    out.push(allLunch ? { text: "Lunch", lunch: true } : { text: "P" + (++k), lunch: false });
+  });
+  return out;
+}
+
+export function stats(m) {
+  const n = m.slots.length;
+  const counts = { theory: 0, lab: 0, drawing: 0, other: 0 };
+  let lunch = 0, total = 0;
+  const perDay = [];
+  m.cells.forEach(row => {
+    let k = 0;
+    row.forEach(c => {
+      if (!c) return;
+      if (c.type === "lunch") lunch += c.span;
+      else { counts[c.type] += c.span; k += c.span; total += c.span; }
+    });
+    perDay.push(k);
+  });
+  const lunchCols = labelsOf(m).filter(l => l.lunch).length;
+  const cap = DAYS.length * n;
+  return { counts, total, lunch, perDay, free: cap - total - lunch, cap, dayCap: Math.max(n - lunchCols, 1) };
+}
+
+export function maxSpan(m, i) { return Math.min(3, m.slots.length - i); }
+
+// ── Edits (each returns a new model) ─────────────────────────────────────────
+export function applyType(model, d, i, type) {
+  const m = cloneModel(model);
+  const c = m.cells[d][i];
+  if (type === "free") m.cells[d][i] = null;
+  else if (type === "lunch") m.cells[d][i] = mkCell("lunch", "", "", "", c ? Math.min(c.span, maxSpan(m, i)) : 1);
+  else if (!c) m.cells[d][i] = mkCell(type, "", "", "", type === "lab" ? maxSpan(m, i) : 1);
+  else c.type = type;
+  const cur = m.cells[d][i];
+  if (cur) for (let k = 1; k < cur.span; k++) m.cells[d][i + k] = null;
+  return m;
+}
+
+export function applySpan(model, d, i, span) {
+  const m = cloneModel(model);
+  const c = m.cells[d][i];
+  if (!c) return m;
+  c.span = Math.min(span, maxSpan(m, i));
+  for (let k = 1; k < c.span; k++) m.cells[d][i + k] = null;
+  return m;
+}
+
+export function setField(model, d, i, field, value) {
+  const m = cloneModel(model);
+  const c = m.cells[d][i];
+  if (c) c[field] = value;
+  return m;
+}
+
+export function clearCell(model, d, i) {
+  const m = cloneModel(model);
+  m.cells[d][i] = null;
+  return m;
+}
+
+export function setTime(model, i, time) {
+  const m = cloneModel(model);
+  m.slots[i].time = time;
+  return m;
+}
+
+// Insert a column so it ends up at index `at`. kind: "period" | "lunch".
+export function insertCol(model, at, kind) {
+  if (model.slots.length >= MAXSLOTS) return model;
+  const m = cloneModel(model);
+  m.cells.forEach(row => {
+    for (let s = 0; s < at; s++) {
+      const c = row[s];
+      if (c && s + c.span - 1 >= at) {
+        // A block that straddles the new column either grows over it or is trimmed to stop before it.
+        if (kind === "lunch" || c.span + 1 > 3) c.span = at - s; else c.span += 1;
+      }
+    }
+    row.splice(at, 0, null);
+  });
+  m.slots.splice(at, 0, { time: kind === "lunch" ? "12:20–1:10" : "Set time" });
+  if (kind === "lunch") for (let d = 0; d < DAYS.length; d++) m.cells[d][at] = mkCell("lunch");
+  return m;
+}
+
+export function deleteCol(model, i) {
+  if (model.slots.length <= 1) return model;
+  const m = cloneModel(model);
+  m.cells.forEach(row => {
+    for (let s = 0; s < i; s++) {
+      const c = row[s];
+      if (c && s + c.span - 1 >= i) c.span -= 1;
+    }
+    const own = row[i];
+    row.splice(i, 1);
+    if (own && own.span > 1) { own.span -= 1; row[i] = own; }
+  });
+  m.slots.splice(i, 1);
+  return m;
+}
+
+// ── Firestore shape ──────────────────────────────────────────────────────────
+// Firestore cannot hold an array of arrays, so days are stored as a map: { "0": [...], "1": [...] }.
+export function toStore(m) {
+  const cells = {};
+  m.cells.forEach((row, d) => { cells[String(d)] = row; });
+  return { slots: m.slots, cells };
+}
+
+export function fromStore(data) {
+  if (!data || !Array.isArray(data.slots) || !data.cells) return null;
+  const slots = data.slots.map(s => ({ time: (s && s.time) || "" }));
+  const cells = DAYS.map((_, d) => {
+    const row = data.cells[String(d)] || [];
+    return slots.map((_s, i) => row[i] || null);
+  });
+  return { slots, cells };
+}
+
+// Plain-text version of a cell, for Excel / print.
+export function cellText(c) {
+  if (!c) return "";
+  if (c.type === "lunch") return "Lunch";
+  return [c.subject || TL[c.type], c.section, c.room].filter(Boolean).join(" · ");
+}
+
+
+=== END_FILE: .\src\timetable\timetableModel.js ===
+
+
+=== START_FILE: .\src\timetable\TimetablePage.jsx ===
+
+// src/timetable/TimetablePage.jsx
+// A faculty member's own weekly timetable: click a cell to edit it, add or
+// remove period columns, put lunch wherever their sections have it, then
+// save and download. Stored at facultyTimetables/{phone}; only the owner can
+// write it, the HoD reads it on the Faculty Workload screen.
+
+import React, { useState, useEffect, useRef } from "react";
+import { collection, doc, getDoc, getDocs, setDoc } from "firebase/firestore";
+import { db } from "../firebase";
+import { P, Btn, Card, Spinner } from "../components/UI";
+import TimetableGrid, { TypeLegend } from "./TimetableGrid";
+import PrintShell from "./PrintShell";
+import { exportTimetableXLSX } from "./timetableExport";
+import {
+  DAYS, TL, COUNTED, TYPE_STYLE, MAXSLOTS,
+  defaultModel, fromStore, toStore, cellAt, labelsOf, stats, maxSpan,
+  applyType, applySpan, setField, clearCell, setTime, insertCol, deleteCol,
+} from "./timetableModel";
+
+const MONO = "'IBM Plex Mono', monospace";
+const lbl = { display: "block", fontSize: 11.5, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: P.gray, marginBottom: 6 };
+const inputStyle = { width: "100%", boxSizing: "border-box", border: "1.5px solid " + P.border, borderRadius: 9, padding: "9px 12px", fontSize: 14, fontFamily: "inherit", background: "#fff" };
+
+function Seg({ children }) {
+  return <div style={{ display: "inline-flex", flexWrap: "wrap", border: "1.5px solid " + P.border, borderRadius: 10, overflow: "hidden", background: P.bg }}>{children}</div>;
+}
+function SegBtn({ active, disabled, onClick, dot, first, children }) {
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} aria-pressed={active}
+      style={{
+        border: 0, borderLeft: first ? 0 : "1.5px solid " + P.border, padding: "8px 14px", cursor: disabled ? "not-allowed" : "pointer", fontWeight: 600, fontSize: 13,
+        display: "flex", alignItems: "center", fontFamily: "inherit", opacity: disabled ? 0.4 : 1,
+        background: active ? P.blue : "transparent", color: active ? "#fff" : P.gray,
+      }}>
+      {dot && <i style={{ display: "inline-block", width: 10, height: 10, borderRadius: 3, marginRight: 7, background: dot }} />}
+      {children}
+    </button>
+  );
+}
+
+function Summary({ model }) {
+  const s = stats(model);
+  const n = model.slots.length;
+  return (
+    <Card style={{ padding: "18px 20px" }}>
+      <div style={{ fontWeight: 700, fontSize: 15.5 }}>Weekly load</div>
+      <div style={{ color: P.gray, fontSize: 12.5, marginBottom: 12 }}>This is the figure your HoD sees.</div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+        <b style={{ fontFamily: MONO, fontSize: 36, fontWeight: 600, lineHeight: 1 }}>{s.total}</b>
+        <span style={{ color: P.gray, fontSize: 13 }}>teaching periods this week ({n} columns x {DAYS.length} days)</span>
+      </div>
+      <div style={{ display: "flex", height: 12, borderRadius: 6, overflow: "hidden", background: P.border, margin: "12px 0 10px" }}>
+        {COUNTED.map(k => s.counts[k] ? <div key={k} title={TL[k] + ": " + s.counts[k]} style={{ width: (s.counts[k] / s.cap * 100) + "%", background: TYPE_STYLE[k].dot }} /> : null)}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", gap: "6px 16px", fontSize: 13, marginBottom: 16 }}>
+        {COUNTED.map(k => (
+          <div key={k} style={{ display: "flex", justifyContent: "space-between" }}>
+            <span><i style={{ display: "inline-block", width: 10, height: 10, borderRadius: 3, marginRight: 7, background: TYPE_STYLE[k].dot }} />{TL[k]}</span>
+            <b style={{ fontFamily: MONO }}>{s.counts[k]}</b>
+          </div>
+        ))}
+        <div style={{ display: "flex", justifyContent: "space-between" }}><span><i style={{ display: "inline-block", width: 10, height: 10, borderRadius: 3, marginRight: 7, background: TYPE_STYLE.lunch.dot }} />Lunch slots</span><b style={{ fontFamily: MONO }}>{s.lunch}</b></div>
+        <div style={{ display: "flex", justifyContent: "space-between" }}><span>Free slots</span><b style={{ fontFamily: MONO }}>{s.free}</b></div>
+      </div>
+      <span style={lbl}>Teaching periods per day</span>
+      <div style={{ display: "grid", gap: 7 }}>
+        {DAYS.map((day, d) => (
+          <div key={d} style={{ display: "grid", gridTemplateColumns: "34px minmax(0,1fr) 40px", alignItems: "center", gap: 10, fontSize: 12.5 }}>
+            <span>{day[0]}</span>
+            <div style={{ height: 8, borderRadius: 4, background: P.border, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: Math.min(s.perDay[d] / s.dayCap * 100, 100) + "%", background: P.blue, borderRadius: 4 }} />
+            </div>
+            <span style={{ textAlign: "right", color: P.gray, fontFamily: MONO }}>{s.perDay[d]}/{s.dayCap}</span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+export function TimetablePrintBody({ name, desig, term, model }) {
+  const s = stats(model);
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+        <div>
+          <div style={{ fontSize: 22, fontWeight: 700 }}>{name}</div>
+          <div style={{ fontSize: 14, color: P.gray }}>{[desig, "Weekly Timetable", term].filter(Boolean).join(" · ")}</div>
+        </div>
+        <div style={{ fontSize: 14 }}><b style={{ fontFamily: MONO }}>{s.total}</b> teaching periods per week</div>
+      </div>
+      <TimetableGrid model={model} editable={false} compact />
+      <TypeLegend />
+    </div>
+  );
+}
+
+export default function TimetablePage({ user }) {
+  const [model, setModel] = useState(null);
+  const [term, setTerm] = useState("");
+  const [sel, setSel] = useState({ d: 0, i: 0 });
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editCols, setEditCols] = useState(false);
+  const [pos, setPos] = useState(null);
+  const [dlOpen, setDlOpen] = useState(false);
+  const [showPrint, setShowPrint] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [options, setOptions] = useState({ subjects: [], sections: [] });
+  const dlRef = useRef(null);
+
+  useEffect(() => {
+    let alive = true;
+    getDoc(doc(db, "facultyTimetables", user.phone)).then(snap => {
+      if (!alive) return;
+      const stored = snap.exists() ? fromStore(snap.data()) : null;
+      setModel(stored || defaultModel());
+      setTerm(snap.exists() ? (snap.data().term || "") : "");
+    }).catch(() => { if (alive) setModel(defaultModel()); });
+    getDocs(collection(db, "sections")).then(snap => {
+      if (!alive) return;
+      const subjects = new Set(), sections = new Set();
+      snap.docs.forEach(d => {
+        const sec = d.data();
+        if (sec.deleted) return;
+        (sec.subjects || []).forEach(sub => { if (sub.facultyPhone === user.phone) { subjects.add(sub.name); sections.add(sec.name); } });
+      });
+      setOptions({ subjects: [...subjects].sort(), sections: [...sections].sort() });
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [user.phone]);
+
+  useEffect(() => {
+    function onDoc(e) { if (dlRef.current && !dlRef.current.contains(e.target)) setDlOpen(false); }
+    document.addEventListener("click", onDoc);
+    return () => document.removeEventListener("click", onDoc);
+  }, []);
+
+  if (!model) return <Spinner />;
+
+  const start = cellAt(model, sel.d, sel.i);
+  const cur = { d: sel.d, i: start ? start.start : sel.i };
+  const cell = model.cells[cur.d][cur.i];
+  const labs = labelsOf(model);
+  const isLunch = !!cell && cell.type === "lunch";
+  const mx = maxSpan(model, cur.i);
+
+  function edit(next) { setModel(next); setDirty(true); setMsg(null); }
+  const posValue = pos === null || pos > model.slots.length ? model.slots.length : pos;
+
+  function doInsert(kind) {
+    edit(insertCol(model, posValue, kind));
+    if (cur.i >= posValue) setSel({ d: cur.d, i: cur.i + 1 });
+  }
+  function doDelete(i) {
+    edit(deleteCol(model, i));
+    if (cur.i > i) setSel({ d: cur.d, i: cur.i - 1 });
+    else if (cur.i >= model.slots.length - 1) setSel({ d: cur.d, i: Math.max(model.slots.length - 2, 0) });
+  }
+  async function save() {
+    setSaving(true);
+    try {
+      await setDoc(doc(db, "facultyTimetables", user.phone), { ...toStore(model), term, updatedAt: new Date().toISOString() });
+      setDirty(false);
+      setMsg({ ok: true, text: "Timetable saved." });
+    } catch (e) {
+      setMsg({ ok: false, text: "Could not save: " + e.message });
+    }
+    setSaving(false);
+  }
+
+  const typeBtn = (type, label, dot, first) => (
+    <SegBtn key={type} first={first} dot={dot} active={(cell ? cell.type : "free") === type} onClick={() => edit(applyType(model, cur.d, cur.i, type))}>{label}</SegBtn>
+  );
+
+  return (
+    <div style={{ padding: "24px clamp(16px, 3vw, 32px) 80px", maxWidth: "min(1500px, 96vw)", margin: "0 auto", display: "grid", gap: 18 }}>
+      <datalist id="tt-subjects">{options.subjects.map(s => <option key={s} value={s} />)}</datalist>
+      <datalist id="tt-sections">{options.sections.map(s => <option key={s} value={s} />)}</datalist>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, flexWrap: "wrap" }}>
+        <div style={{ minWidth: 0 }}>
+          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>Weekly Timetable</h1>
+          <div style={{ color: P.gray, marginTop: 4, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span>Click any cell to fill it in or change it.</span>
+            <input value={term} onChange={e => { setTerm(e.target.value); setDirty(true); }} placeholder="Term, e.g. 2026-27 Sem I"
+              aria-label="Term" style={{ ...inputStyle, width: 200, padding: "5px 10px", fontSize: 13 }} />
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          {msg
+            ? <span style={{ fontSize: 12.5, fontWeight: 600, padding: "5px 12px", borderRadius: 20, background: msg.ok ? P.greenL : P.redL, color: msg.ok ? P.green : P.red }}>{msg.text}</span>
+            : <span style={{ fontSize: 12.5, fontWeight: 600, padding: "5px 12px", borderRadius: 20, background: dirty ? P.amberL : P.greenL, color: dirty ? P.amber : P.green }}>{dirty ? "Unsaved changes" : "All changes saved"}</span>}
+          <Btn small variant="outline" onClick={() => setEditCols(v => !v)}>{editCols ? "Done" : "Add or remove periods"}</Btn>
+          <div ref={dlRef} style={{ position: "relative" }}>
+            <Btn small variant="outline" onClick={() => setDlOpen(v => !v)}>Download ▾</Btn>
+            {dlOpen && (
+              <div role="menu" style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", minWidth: 250, background: "#fff", border: "1px solid " + P.border, borderRadius: 10, boxShadow: "0 10px 28px rgba(0,0,0,0.18)", padding: 6, zIndex: 30 }}>
+                {[["PDF", "One landscape page, ready to print", () => setShowPrint(true)],
+                  ["Excel (.xlsx)", "Editable spreadsheet", () => exportTimetableXLSX(user.name, term, model)]].map(([t, sub, fn]) => (
+                  <button key={t} role="menuitem" type="button" onClick={() => { setDlOpen(false); fn(); }}
+                    style={{ display: "block", width: "100%", textAlign: "left", border: 0, background: "transparent", padding: "9px 12px", borderRadius: 7, cursor: "pointer", fontFamily: "inherit", fontSize: 14, fontWeight: 500 }}>
+                    {t}<small style={{ display: "block", color: P.gray, fontWeight: 400, fontSize: 12 }}>{sub}</small>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <Btn small onClick={save} disabled={!dirty || saving}>{saving ? "Saving…" : "Save timetable"}</Btn>
+        </div>
+      </div>
+
+      <Card style={{ padding: "18px 20px", margin: 0 }}>
+        {editCols && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "10px 12px", marginBottom: 12, background: P.bg, border: "1px dashed " + P.border, borderRadius: 10 }}>
+            <label htmlFor="tt-pos" style={{ fontSize: 12.5, fontWeight: 600, color: P.gray }}>Add a column</label>
+            <select id="tt-pos" value={posValue} onChange={e => setPos(Number(e.target.value))}
+              style={{ border: "1.5px solid " + P.border, borderRadius: 8, padding: "6px 10px", background: "#fff", fontFamily: "inherit", fontSize: 13 }}>
+              <option value={0}>At the start</option>
+              {labs.map((l, i) => <option key={i} value={i + 1}>After {l.text} ({model.slots[i].time})</option>)}
+            </select>
+            <Btn small onClick={() => doInsert("period")} disabled={model.slots.length >= MAXSLOTS}>Add period</Btn>
+            <Btn small variant="outline" onClick={() => doInsert("lunch")} disabled={model.slots.length >= MAXSLOTS}>Add lunch column</Btn>
+            <span style={{ fontSize: 12.5, color: P.gray }}>Use the × on a column header to delete it. A lunch column is filled with Lunch on every day; you can still change single days.</span>
+          </div>
+        )}
+        <TimetableGrid
+          model={model} editable sel={cur} colCtl={editCols}
+          onSelect={(d, i) => setSel({ d, i })}
+          onTimeCommit={(i, text) => { const t = text.trim() || "Set time"; if (t !== model.slots[i].time) edit(setTime(model, i, t)); }}
+          onDeleteCol={doDelete}
+        />
+        <TypeLegend />
+        <p style={{ fontSize: 12.5, color: P.gray, margin: "10px 0 0" }}>
+          Timings in the header can be edited. Lunch can sit in any column and on any day, since your lunch follows the sections you teach.
+        </p>
+      </Card>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 18, alignItems: "start" }}>
+        <Card style={{ padding: "18px 20px", margin: 0 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+            <div style={{ fontWeight: 700, fontSize: 15.5 }}>{DAYS[cur.d][1]}, {labs[cur.i].text}</div>
+            <span style={{ fontFamily: MONO, fontSize: 12.5, color: P.gray }}>{model.slots[cur.i].time}</span>
+          </div>
+          <span style={lbl}>Type</span>
+          <Seg>
+            {typeBtn("theory", "Theory", TYPE_STYLE.theory.dot, true)}
+            {typeBtn("lab", "Lab", TYPE_STYLE.lab.dot)}
+            {typeBtn("drawing", "Drawing", TYPE_STYLE.drawing.dot)}
+            {typeBtn("other", "Other", TYPE_STYLE.other.dot)}
+            {typeBtn("lunch", "Lunch", TYPE_STYLE.lunch.dot)}
+            {typeBtn("free", "Free", null)}
+          </Seg>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, margin: "16px 0" }}>
+            {[["subject", "Subject", "tt-subjects", "Pick or type"], ["section", "Section", "tt-sections", "Pick or type"], ["room", "Room", null, "e.g. R-204"]].map(([f, label, list, ph]) => (
+              <div key={f}>
+                <label htmlFor={"tt-f-" + f} style={lbl}>{label}</label>
+                <input id={"tt-f-" + f} list={list || undefined} autoComplete="off" placeholder={ph}
+                  value={cell ? cell[f] : ""} disabled={!cell || isLunch}
+                  onChange={e => edit(setField(model, cur.d, cur.i, f, e.target.value))}
+                  style={{ ...inputStyle, opacity: !cell || isLunch ? 0.6 : 1, background: !cell || isLunch ? P.bg : "#fff" }} />
+              </div>
+            ))}
+          </div>
+          <span style={lbl}>Periods covered</span>
+          <Seg>
+            {[1, 2, 3].map((k, idx) => (
+              <SegBtn key={k} first={idx === 0} disabled={!cell || k > mx} active={!!cell && cell.span === k} onClick={() => edit(applySpan(model, cur.d, cur.i, k))}>{k}</SegBtn>
+            ))}
+          </Seg>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 16 }}>
+            <span style={{ fontSize: 12.5, color: P.gray, maxWidth: 360 }}>Suggestions come from the subjects and sections assigned to you. You can type anything else.</span>
+            <Btn small variant="ghost" disabled={!cell} onClick={() => edit(clearCell(model, cur.d, cur.i))}>Clear this cell</Btn>
+          </div>
+        </Card>
+        <Summary model={model} />
+      </div>
+
+      <p style={{ margin: 0, fontSize: 12.5, color: P.gray }}>Your HoD can see this timetable and your weekly load on the Faculty Workload screen, read-only. Only you can edit it.</p>
+
+      {showPrint && (
+        <PrintShell title="Timetable preview" onClose={() => setShowPrint(false)}>
+          <TimetablePrintBody name={user.name} desig={user.designation} term={term} model={model} />
+        </PrintShell>
+      )}
+    </div>
+  );
+}
+
+
+=== END_FILE: .\src\timetable\TimetablePage.jsx ===
 
 

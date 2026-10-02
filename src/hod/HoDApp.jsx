@@ -18,7 +18,9 @@ import OriginalSectionsScreen from "../originalSections/OriginalSectionsScreen";
 import { UsersScreen } from "../AdminApp";
 import { approveUser, rejectUser, makeAdmin, makeFaculty, makeHod, deleteUser, resetPin } from "../userActions";
 import { P, TopBar } from "../components/UI";
-import { IconAttendance, IconSearch, IconUsers, IconUserCircle, IconMarks } from "../components/Icons";
+import TimetablePage from "../timetable/TimetablePage";
+import FacultyWorkload from "../timetable/FacultyWorkload";
+import { IconAttendance, IconSearch, IconUsers, IconUserCircle, IconMarks, IconCalendar, IconWorkload } from "../components/Icons";
 
 export default function HoDApp({ user, onLogout }) {
   const [tab, setTab] = useState(null); // null = show the home hub
@@ -52,12 +54,14 @@ export default function HoDApp({ user, onLogout }) {
               { id: "profile", title: "My Profile", desc: "Your bio, qualifications, publications and downloadable resume.", icon: IconUserCircle, color: "blue" },
               { id: "myAttendance", title: "My Section Attendance", desc: "Mark and review attendance for the subjects you personally teach.", icon: IconAttendance, color: "teal" },
               { id: "myMarks", title: "My Subject Internal Marks", desc: "Enter marks for the subjects you teach, and any papers assigned to you for valuation.", icon: IconMarks, color: "indigo" },
+              { id: "timetable", title: "My Timetable", desc: "Your weekly class schedule. Edit it any time and download it.", icon: IconCalendar, color: "amber" },
             ],
           },
           {
             label: "Department oversight",
             tiles: [
               { id: "studentData", title: "Student Data", desc: "Look up any student's SGPA, CGPA, backlogs and attendance trend.", icon: IconSearch, color: "green" },
+              { id: "workload", title: "Faculty Workload", desc: "Weekly periods for every faculty member, from their timetables.", icon: IconWorkload, color: "indigo" },
               { id: "allSectionsMarks", title: "All Sections Internal Marks", desc: "Monitor every original section's marks — see who's locked, drafted or not started.", icon: IconMarks, color: "amber" },
               { id: "profiles", title: "Faculty Profiles", desc: "Directory of every faculty member's bio, publications and research.", icon: IconUsers, color: "rose" },
               { id: "users", title: "Users", desc: "Approve registrations, promote faculty, manage the employee ID roster.", icon: IconUsers, color: "slate" },
@@ -75,6 +79,8 @@ export default function HoDApp({ user, onLogout }) {
   const tabTitle = {
     myAttendance: "My Section Attendance",
     myMarks: "My Subject Internal Marks",
+    timetable: "My Timetable",
+    workload: "Faculty Workload",
     profiles: "Faculty Profiles",
     users: "Users",
     profile: "My Profile",
@@ -94,6 +100,10 @@ export default function HoDApp({ user, onLogout }) {
       {tab === "myMarks" && (
         <InternalMarksPage user={user} />
       )}
+
+      {tab === "timetable" && <TimetablePage user={user} />}
+
+      {tab === "workload" && <FacultyWorkload />}
 
       {tab === "profiles" && (
         <div style={{ padding: "24px 24px 80px", maxWidth: "min(1700px, 92vw)", margin: "0 auto" }}>
