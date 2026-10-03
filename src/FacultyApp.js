@@ -59,11 +59,11 @@ export default function FacultyApp({ user, onLogout, hideShell = false, initialT
         groups={[{
           label: "My own duties",
           tiles: [
+            { id: "timetable", title: "My Timetable", desc: "Your weekly class schedule. Edit it any time and download it.", icon: IconCalendar, color: "amber" },
             { id: "profile", title: "My Profile", desc: "Your bio, qualifications, publications and downloadable resume.", icon: IconUserCircle, color: "blue" },
             { id: "attendance", title: "My Section Attendance", desc: "Mark and review attendance for the subjects you teach.", icon: IconAttendance, color: "teal" },
             { id: "marks", title: "My Subject Internal Marks", desc: "Enter marks for the subjects you teach.", icon: IconMarks, color: "indigo" },
             { id: "mentor", title: "Mentor", desc: "Track your mentee students' progress and add comments.", icon: IconMentor, color: "violet" },
-            { id: "timetable", title: "My Timetable", desc: "Your weekly class schedule. Edit it any time and download it.", icon: IconCalendar, color: "amber" },
           ],
         }]}
       />

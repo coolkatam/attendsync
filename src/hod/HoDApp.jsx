@@ -51,10 +51,10 @@ export default function HoDApp({ user, onLogout }) {
           {
             label: "My own duties",
             tiles: [
+              { id: "timetable", title: "My Timetable", desc: "Your weekly class schedule. Edit it any time and download it.", icon: IconCalendar, color: "amber" },
               { id: "profile", title: "My Profile", desc: "Your bio, qualifications, publications and downloadable resume.", icon: IconUserCircle, color: "blue" },
               { id: "myAttendance", title: "My Section Attendance", desc: "Mark and review attendance for the subjects you personally teach.", icon: IconAttendance, color: "teal" },
               { id: "myMarks", title: "My Subject Internal Marks", desc: "Enter marks for the subjects you teach, and any papers assigned to you for valuation.", icon: IconMarks, color: "indigo" },
-              { id: "timetable", title: "My Timetable", desc: "Your weekly class schedule. Edit it any time and download it.", icon: IconCalendar, color: "amber" },
             ],
           },
           {
