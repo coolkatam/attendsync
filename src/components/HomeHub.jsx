@@ -23,6 +23,37 @@ export const TILE_COLORS = {
   slate:  { tint: "#eef0f2", solid: "#5b6673" },
 };
 
+// A row-wrapping grid of big navigation tiles; also used by sub-pages such as Coordinator Duties.
+export function TileGrid({ tiles, onSelect }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
+      {tiles.map(tile => {
+        const c = TILE_COLORS[tile.color] || TILE_COLORS.blue;
+        const Icon = tile.icon;
+        return (
+          <button
+            key={tile.id}
+            onClick={() => onSelect(tile.id)}
+            style={{
+              background: "#fff", border: "1px solid " + P.border, borderRadius: 14,
+              padding: "24px 22px", display: "flex", flexDirection: "column", gap: 12, textAlign: "left",
+              cursor: "pointer", fontFamily: "inherit", minHeight: 148,
+            }}
+            onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 8px 22px rgba(22,50,79,0.1)"; e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.borderColor = "#c7d0da"; }}
+            onMouseLeave={e => { e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.borderColor = P.border; }}
+          >
+            <div style={{ width: 46, height: 46, borderRadius: 11, background: c.tint, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <Icon size={22} color={c.solid} />
+            </div>
+            <div style={{ fontSize: 15.5, fontWeight: 700, color: "#1a2230" }}>{tile.title}</div>
+            <div style={{ fontSize: 12.5, color: P.gray, lineHeight: 1.5 }}>{tile.desc}</div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function HomeHub({ user, onLogout, roleLabel, masterStar, greeting, groups, onSelect }) {
   const [photoURL, setPhotoURL] = useState("");
   const [imgFailed, setImgFailed] = useState(false);
@@ -87,31 +118,7 @@ export default function HomeHub({ user, onLogout, roleLabel, masterStar, greetin
             <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: P.gray, margin: gi === 0 ? "0 0 12px" : "30px 0 12px" }}>
               {group.label}
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
-              {group.tiles.map(tile => {
-                const c = TILE_COLORS[tile.color] || TILE_COLORS.blue;
-                const Icon = tile.icon;
-                return (
-                  <button
-                    key={tile.id}
-                    onClick={() => onSelect(tile.id)}
-                    style={{
-                      background: "#fff", border: "1px solid " + P.border, borderRadius: 14,
-                      padding: "24px 22px", display: "flex", flexDirection: "column", gap: 12, textAlign: "left",
-                      cursor: "pointer", fontFamily: "inherit", minHeight: 148,
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 8px 22px rgba(22,50,79,0.1)"; e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.borderColor = "#c7d0da"; }}
-                    onMouseLeave={e => { e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.borderColor = P.border; }}
-                  >
-                    <div style={{ width: 46, height: 46, borderRadius: 11, background: c.tint, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <Icon size={22} color={c.solid} />
-                    </div>
-                    <div style={{ fontSize: 15.5, fontWeight: 700, color: "#1a2230" }}>{tile.title}</div>
-                    <div style={{ fontSize: 12.5, color: P.gray, lineHeight: 1.5 }}>{tile.desc}</div>
-                  </button>
-                );
-              })}
-            </div>
+            <TileGrid tiles={group.tiles} onSelect={onSelect} />
           </div>
         ))}
       </div>

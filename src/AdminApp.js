@@ -15,7 +15,7 @@ import MarksAdminTab from "./marks/MarksAdminTab";
 import InternalMarksPage from "./marks/InternalMarksPage";
 import FacultyProfilePage from "./profile/FacultyProfilePage";
 import FacultyProfilesDirectory from "./profile/FacultyProfilesDirectory";
-import HomeHub from "./components/HomeHub";
+import HomeHub, { TileGrid } from "./components/HomeHub";
 import OriginalSectionsScreen from "./originalSections/OriginalSectionsScreen";
 import SectionsSetupWizard from "./sections/SectionsSetupWizard";
 import HoDStudentLookup from "./hod/HoDStudentLookup";
@@ -23,8 +23,15 @@ import MentorPage from "./mentor/MentorPage";
 import { P, Btn, Card, Badge, Fld, Sel, TopBar, GPill, ARow, Spinner, PeriodPicker } from "./components/UI";
 import TimetablePage from "./timetable/TimetablePage";
 import FacultyWorkload from "./timetable/FacultyWorkload";
-import { IconAttendance, IconSections, IconMarks, IconMentor, IconSearch, IconUsers, IconTrash, IconUserCircle, IconIdCard, IconPhone, IconCalendar, IconWorkload } from "./components/Icons";
+import { IconAttendance, IconSections, IconMarks, IconMentor, IconSearch, IconUsers, IconTrash, IconUserCircle, IconIdCard, IconPhone, IconCalendar, IconWorkload, IconBuilding } from "./components/Icons";
 import { today, calcPct, parseCSV, downloadTemplate, exportXLS, makeKey, parseKey, groupByDateBatched, rowColor, MASTER_ADMIN_PHONE, fmtDate, validateBatches, studentsInBatch, readStatus, batchSlotKey } from "./utils";
+
+// The tabs that live under the Coordinator Duties tile.
+const COORD_TILES = [
+  { id: "allSections", title: "All Sections", desc: "Rosters, subjects and attendance for every section you administer.", icon: IconSections, color: "teal" },
+  { id: "allSectionsMarks", title: "All Sections Internal Marks", desc: "Monitor every original section's marks — see who's locked, drafted or not started.", icon: IconMarks, color: "amber" },
+  { id: "users", title: "Users", desc: "Approve registrations, promote faculty, manage the employee ID roster.", icon: IconUsers, color: "slate" },
+];
 
 // ── Invite link card — each admin's shareable link for their own faculty ──
 function InviteLinkCard({ adminPhone }) {
@@ -62,6 +69,7 @@ function InviteLinkCard({ adminPhone }) {
 export default function AdminApp({ user, onLogout }) {
   const [screen,   setScreen]   = useState("home");
   const [homeTab,  setHomeTab]  = useState(null); // null = show the home hub
+  const [inCoord,  setInCoord]  = useState(false); // opened from the Coordinator Duties page, so Back returns there
   const [secId,    setSecId]    = useState(null);
   const [sections, setSections] = useState([]);
   const [trashedSections, setTrashedSections] = useState([]);
@@ -231,7 +239,22 @@ export default function AdminApp({ user, onLogout }) {
     );
   }
   if (screen === "allSectionsMarks") {
-    return <OriginalSectionsScreen user={user} onBack={() => setScreen("home")} />;
+    return <OriginalSectionsScreen user={user} onBack={() => setScreen(inCoord ? "coordinator" : "home")} />;
+  }
+  if (screen === "coordinator") {
+    return (
+      <div style={{ background: P.bg, minHeight: "100vh" }}>
+        <TopBar title="Coordinator Duties" subtitle={user.name}
+          right={<button onClick={() => { setInCoord(false); setScreen("home"); }} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>← Back</button>} />
+        <div style={{ maxWidth: 1600, margin: "0 auto", padding: "32px 32px 60px" }}>
+          <div style={{ fontSize: 13.5, color: P.gray, marginBottom: 20 }}>Everything you manage across all sections and users.</div>
+          <TileGrid tiles={COORD_TILES} onSelect={id => {
+            if (id === "allSections") { setHomeTab("allSections"); setScreen("home"); }
+            else setScreen(id === "users" ? "users" : "allSectionsMarks");
+          }} />
+        </div>
+      </div>
+    );
   }
   if (screen === "myTimetable" || (screen === "workload" && isMaster)) {
     const isWorkload = screen === "workload";
@@ -257,7 +280,7 @@ export default function AdminApp({ user, onLogout }) {
         onMakeHod={makeHod}
         onDelete={deleteUser}
         onResetPin={resetPin}
-        onBack={() => setScreen("home")}
+        onBack={() => setScreen(inCoord ? "coordinator" : "home")}
       />
     );
   }
@@ -285,7 +308,7 @@ export default function AdminApp({ user, onLogout }) {
         onSelect={id => {
           if (id === "myMarks") setScreen("myMarks");
           else if (id === "myMentor") setScreen("myMentor");
-          else if (id === "users") setScreen("users");
+          else if (id === "coordinator") { setInCoord(true); setScreen("coordinator"); }
           else if (id === "myProfile") setScreen("myProfile");
           else if (id === "studentData") setScreen("studentData");
           else if (id === "allSectionsMarks") setScreen("allSectionsMarks");
@@ -305,11 +328,9 @@ export default function AdminApp({ user, onLogout }) {
             ],
           },
           {
-            label: "Coordinator duties — across everyone",
+            label: "Class coordinator",
             tiles: [
-              { id: "allSections", title: "All Sections", desc: "Rosters, subjects and attendance for every section you administer.", icon: IconSections, color: "teal" },
-              { id: "allSectionsMarks", title: "All Sections Internal Marks", desc: "Monitor every original section's marks — see who's locked, drafted or not started.", icon: IconMarks, color: "amber" },
-              { id: "users", title: "Users", desc: "Approve registrations, promote faculty, manage the employee ID roster.", icon: IconUsers, color: "slate" },
+              { id: "coordinator", title: "Coordinator Duties", desc: "All sections, section-wise internal marks and user management, all in one place.", icon: IconBuilding, color: "teal" },
             ],
           },
           ...(isMaster ? [{
@@ -336,7 +357,7 @@ export default function AdminApp({ user, onLogout }) {
   return (
     <div style={{ background: P.bg, minHeight: "100vh" }}>
       <TopBar title={homeTabTitle} subtitle={user.name}
-        right={<button onClick={() => setHomeTab(null)} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>← Back</button>} />
+        right={<button onClick={() => { setHomeTab(null); if (inCoord && homeTab === "allSections") setScreen("coordinator"); }} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>← Back</button>} />
       <div style={{ padding: "24px 24px 80px", maxWidth: "min(1700px, 92vw)", margin: "0 auto" }}>
 
         {homeTab === "myAttendance" && (
