@@ -39451,9 +39451,10 @@ function AssignmentsSummary({ sections, subjectNames }) {
 === START_FILE: .\src\timetable\FacultyWorkload.jsx ===
 
 // src/timetable/FacultyWorkload.jsx
-// HoD / Master Admin view: every approved faculty member's weekly teaching
-// load, taken from the timetable they filled in. Click a name to see that
-// timetable (read-only).
+// HoD / Master Admin view: every approved faculty member's weekly workload,
+// taken from the timetable they filled in. Teaching workload is theory + lab +
+// drawing periods, other duties are mentoring, NCC, sports etc., and overall
+// is both together. Click a name to see that timetable (read-only).
 
 import React, { useState, useEffect, useRef } from "react";
 import { collection, getDocs } from "firebase/firestore";
@@ -39462,24 +39463,36 @@ import { P, Card, Btn, Spinner } from "../components/UI";
 import TimetableGrid from "./TimetableGrid";
 import PrintShell from "./PrintShell";
 import { exportWorkloadXLSX } from "./timetableExport";
-import { DAYS, COUNTED, blankModel, fromStore, stats } from "./timetableModel";
+import { DAYS, blankModel, fromStore, stats } from "./timetableModel";
 
 const MONO = "'IBM Plex Mono', monospace";
-const th = { textAlign: "left", fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: P.gray, padding: "8px 8px", borderBottom: "1.5px solid " + P.border, whiteSpace: "nowrap" };
-const td = { padding: "9px 8px", borderBottom: "1px solid " + P.border, verticalAlign: "middle" };
+const COLS = 14; // faculty + 3 workload + 3 split + free + 6 days
+const th = { textAlign: "center", fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: P.gray, padding: "7px 8px", borderBottom: "1.5px solid " + P.border, whiteSpace: "nowrap" };
+const td = { padding: "9px 8px", borderBottom: "1px solid " + P.border, verticalAlign: "middle", textAlign: "center", fontFamily: MONO };
+const sep = { borderLeft: "1.5px solid " + P.border };
+const grp = { textAlign: "center", fontSize: 10.5, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: P.blue, padding: "0 8px 3px", borderBottom: "2px solid " + P.blue };
 
 function initials(name) {
   return (name || "?").replace(/[^A-Za-z ]/g, "").split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase() || "?";
 }
 
-function WorkloadTable({ list, maxT, openPhone, onToggle, printMode }) {
+function WorkloadTable({ list, openPhone, onToggle, printMode }) {
   return (
-    <table style={{ borderCollapse: "collapse", width: "100%", minWidth: printMode ? 0 : 1000 }}>
+    <table style={{ borderCollapse: "collapse", width: "100%", minWidth: printMode ? 0 : 1100 }}>
       <thead>
         <tr>
-          <th style={{ ...th, width: 280 }}>Faculty</th><th style={{ ...th, width: 240 }}>Periods per week</th>
-          {["Theory", "Lab", "Drawing", "Other", "Free"].map(h => <th key={h} style={{ ...th, textAlign: "center" }}>{h}</th>)}
-          {DAYS.map(d => <th key={d[0]} style={{ ...th, textAlign: "center" }}>{d[0]}</th>)}
+          <th style={{ ...th, borderBottom: 0 }} />
+          <th colSpan={3} style={grp}>Weekly workload (periods)</th>
+          <th colSpan={3} style={{ ...grp, ...sep }}>Teaching split</th>
+          <th style={{ ...th, ...sep, borderBottom: 0 }} />
+          <th colSpan={6} style={{ ...grp, ...sep }}>Periods per day</th>
+        </tr>
+        <tr>
+          <th style={{ ...th, textAlign: "left", width: 270 }}>Faculty</th>
+          <th style={th}>Teaching</th><th style={th}>Other duties</th><th style={{ ...th, color: P.blue }}>Overall</th>
+          <th style={{ ...th, ...sep }}>Theory</th><th style={th}>Lab</th><th style={th}>Drawing</th>
+          <th style={{ ...th, ...sep }}>Free slots</th>
+          {DAYS.map((d, i) => <th key={d[0]} style={{ ...th, ...(i === 0 ? sep : null) }}>{d[0]}</th>)}
         </tr>
       </thead>
       <tbody>
@@ -39487,17 +39500,17 @@ function WorkloadTable({ list, maxT, openPhone, onToggle, printMode }) {
           const isOpen = !printMode && openPhone === f.phone && !f.none;
           const nameBlock = (
             <>
-              <span style={{ width: 34, height: 34, borderRadius: "50%", background: P.blueL, color: P.blue, fontSize: 12, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{initials(f.name)}</span>
-              <span style={{ minWidth: 0 }}>
+              <span style={{ width: 34, height: 34, borderRadius: "50%", background: P.blueL, color: P.blue, fontSize: 12, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: "inherit" }}>{initials(f.name)}</span>
+              <span style={{ minWidth: 0, fontFamily: "inherit" }}>
                 <b style={{ display: "block", fontSize: 13.5 }}>{f.name}</b>
-                <small style={{ display: "block", color: P.gray, fontSize: 12, minHeight: 16 }}>{f.desig || " "}</small>
+                <small style={{ display: "block", color: P.gray, fontSize: 12, minHeight: 16, fontWeight: 400 }}>{f.desig || " "}</small>
               </span>
             </>
           );
           return (
             <React.Fragment key={f.phone}>
               <tr>
-                <td style={td}>
+                <td style={{ ...td, textAlign: "left", fontFamily: "inherit" }}>
                   {printMode || f.none ? (
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>{nameBlock}</div>
                   ) : (
@@ -39509,24 +39522,21 @@ function WorkloadTable({ list, maxT, openPhone, onToggle, printMode }) {
                   )}
                 </td>
                 {f.none ? (
-                  <td colSpan={12} style={td}>
+                  <td colSpan={COLS - 1} style={{ ...td, textAlign: "left", fontFamily: "inherit" }}>
                     <span style={{ fontSize: 11.5, fontWeight: 600, background: P.amberL, color: P.amber, padding: "3px 10px", borderRadius: 20, whiteSpace: "nowrap" }}>No timetable filled yet</span>
                   </td>
                 ) : (
                   <>
-                    <td style={td}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 150 }}>
-                        <div style={{ flex: 1, height: 9, borderRadius: 5, background: P.border, overflow: "hidden" }}>
-                          <div style={{ height: "100%", width: (f.s.total / maxT * 100) + "%", background: P.blue, borderRadius: 5 }} />
-                        </div>
-                        <b style={{ fontFamily: MONO, minWidth: "2ch", textAlign: "right" }}>{f.s.total}</b>
-                      </div>
-                    </td>
-                    {COUNTED.map(k => <td key={k} style={{ ...td, textAlign: "center", fontFamily: MONO }}>{f.s.counts[k]}</td>)}
-                    <td style={{ ...td, textAlign: "center", fontFamily: MONO }}>{f.s.free}</td>
+                    <td style={td}>{f.teach}</td>
+                    <td style={td}>{f.other}</td>
+                    <td style={{ ...td, fontWeight: 700, fontSize: 15, color: P.blue }}>{f.s.total}</td>
+                    <td style={{ ...td, ...sep }}>{f.s.counts.theory}</td>
+                    <td style={td}>{f.s.counts.lab}</td>
+                    <td style={td}>{f.s.counts.drawing}</td>
+                    <td style={{ ...td, ...sep }}>{f.s.free}</td>
                     {f.s.perDay.map((n, d) => (
-                      <td key={d} style={{ ...td, textAlign: "center" }}>
-                        <span style={{ display: "inline-block", minWidth: 30, padding: "4px 0", borderRadius: 6, fontFamily: MONO, fontSize: 12.5, background: "rgba(44,92,148," + (n / f.s.dayCap * 0.55).toFixed(2) + ")" }}>{n}</span>
+                      <td key={d} style={{ ...td, ...(d === 0 ? sep : null) }}>
+                        <span style={{ display: "inline-block", minWidth: 30, padding: "4px 0", borderRadius: 6, fontSize: 12.5, background: "rgba(44,92,148," + (n / f.s.dayCap * 0.55).toFixed(2) + ")" }}>{n}</span>
                       </td>
                     ))}
                   </>
@@ -39534,7 +39544,7 @@ function WorkloadTable({ list, maxT, openPhone, onToggle, printMode }) {
               </tr>
               {isOpen && (
                 <tr>
-                  <td colSpan={13} style={{ background: P.bg, padding: "10px 12px 14px" }}>
+                  <td colSpan={COLS} style={{ background: P.bg, padding: "10px 12px 14px" }}>
                     <TimetableGrid model={f.model} editable={false} compact />
                   </td>
                 </tr>
@@ -39547,10 +39557,19 @@ function WorkloadTable({ list, maxT, openPhone, onToggle, printMode }) {
   );
 }
 
+const SORTS = {
+  "overall-desc": { label: "Overall workload: high to low", key: f => f.s.total, dir: -1 },
+  "overall-asc": { label: "Overall workload: low to high", key: f => f.s.total, dir: 1 },
+  "teach-desc": { label: "Teaching workload: high to low", key: f => f.teach, dir: -1 },
+  "teach-asc": { label: "Teaching workload: low to high", key: f => f.teach, dir: 1 },
+  "other-desc": { label: "Other duties: high to low", key: f => f.other, dir: -1 },
+  name: { label: "Name A to Z" },
+};
+
 export default function FacultyWorkload() {
   const [list, setList] = useState(null);
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState("most");
+  const [sort, setSort] = useState("overall-desc");
   const [openPhone, setOpenPhone] = useState(null);
   const [dlOpen, setDlOpen] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
@@ -39569,7 +39588,8 @@ export default function FacultyWorkload() {
         const t = tts[d.id];
         const model = t ? t.model : blankModel(["—"]);
         const s = stats(model);
-        rows.push({ phone: d.id, name: u.name || d.id, desig: u.designation || "", model, term: t ? t.term : "", s, none: !t || s.total === 0 });
+        const teach = s.counts.theory + s.counts.lab + s.counts.drawing;
+        rows.push({ phone: d.id, name: u.name || d.id, desig: u.designation || "", model, term: t ? t.term : "", s, teach, other: s.counts.other, none: !t || s.total === 0 });
       });
       setList(rows);
     });
@@ -39588,17 +39608,17 @@ export default function FacultyWorkload() {
   const sum = filled.reduce((a, f) => a + f.s.total, 0);
   const byTotal = filled.slice().sort((a, b) => b.s.total - a.s.total);
   const hi = byTotal[0], lo = byTotal[byTotal.length - 1];
-  const maxT = Math.max(1, ...list.map(f => f.s.total));
 
   const q = search.trim().toLowerCase();
+  const rule = SORTS[sort];
   const shown = list.filter(f => f.name.toLowerCase().includes(q)).sort((a, b) => {
     if (sort === "name") return a.name.localeCompare(b.name);
     if (a.none !== b.none) return a.none ? 1 : -1;
-    return sort === "least" ? a.s.total - b.s.total : b.s.total - a.s.total;
+    return (rule.key(a) - rule.key(b)) * rule.dir || a.name.localeCompare(b.name);
   });
 
   const stat = (value, label) => (
-    <div style={{ flex: "1 1 150px", padding: "14px 18px", borderRight: "1px solid " + P.border }}>
+    <div style={{ flex: "1 1 170px", padding: "14px 18px", borderRight: "1px solid " + P.border }}>
       <b style={{ display: "block", fontFamily: MONO, fontSize: 24, fontWeight: 600, lineHeight: 1.2 }}>{value}</b>
       <span style={{ fontSize: 12, color: P.gray }}>{label}</span>
     </div>
@@ -39608,7 +39628,7 @@ export default function FacultyWorkload() {
     <div style={{ padding: "24px clamp(16px, 3vw, 32px) 80px", maxWidth: "min(1700px, 96vw)", margin: "0 auto", display: "grid", gap: 18 }}>
       <div style={{ display: "flex", flexWrap: "wrap", border: "1px solid " + P.border, borderRadius: 12, background: "#fff", overflow: "hidden" }}>
         {stat(list.length, "Faculty in the department")}
-        {stat(filled.length ? Math.round(sum / filled.length * 10) / 10 : "—", "Average periods per week")}
+        {stat(filled.length ? Math.round(sum / filled.length * 10) / 10 : "—", "Average overall workload")}
         {stat(hi ? hi.s.total : "—", hi ? "Highest: " + hi.name : "Highest")}
         {stat(lo ? lo.s.total : "—", lo ? "Lowest: " + lo.name : "Lowest")}
         {stat(list.length - filled.length, "No timetable filled yet")}
@@ -39621,9 +39641,7 @@ export default function FacultyWorkload() {
               style={{ border: "1.5px solid " + P.border, borderRadius: 9, padding: "8px 12px", fontFamily: "inherit", fontSize: 14 }} />
             <select value={sort} onChange={e => setSort(e.target.value)} aria-label="Sort faculty"
               style={{ border: "1.5px solid " + P.border, borderRadius: 9, padding: "8px 12px", fontFamily: "inherit", fontSize: 14, background: "#fff" }}>
-              <option value="most">Most periods first</option>
-              <option value="least">Fewest periods first</option>
-              <option value="name">Name A to Z</option>
+              {Object.keys(SORTS).map(k => <option key={k} value={k}>{SORTS[k].label}</option>)}
             </select>
           </div>
           <div ref={dlRef} style={{ position: "relative" }}>
@@ -39642,19 +39660,19 @@ export default function FacultyWorkload() {
           </div>
         </div>
         <div style={{ overflowX: "auto" }}>
-          <WorkloadTable list={shown} maxT={maxT} openPhone={openPhone} onToggle={p => setOpenPhone(o => o === p ? null : p)} />
+          <WorkloadTable list={shown} openPhone={openPhone} onToggle={p => setOpenPhone(o => o === p ? null : p)} />
         </div>
         {shown.length === 0 && <div style={{ color: P.gray, padding: "14px 4px" }}>No faculty match your search.</div>}
-        <p style={{ fontSize: 12.5, color: P.gray, margin: "10px 0 0" }}>
-          Periods are teaching periods per week (theory, lab, drawing and other duties). Lunch and free slots are not counted. Click a name to see that faculty's timetable.
+        <p style={{ fontSize: 12.5, color: P.gray, margin: "10px 0 0", maxWidth: "100ch" }}>
+          <b>Teaching</b> is theory + lab + drawing periods. <b>Other duties</b> are mentoring, disciplinary duties, NCC, NSS, sports and other duties. <b>Overall</b> is both together. Lunch and free slots are not counted. Click a name to see that faculty's timetable.
         </p>
       </Card>
 
       {showPrint && (
         <PrintShell title="Faculty workload preview" onClose={() => setShowPrint(false)}>
           <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Faculty Workload</div>
-          <div style={{ fontSize: 14, color: P.gray, marginBottom: 14 }}>Teaching periods per week, from each faculty member's timetable</div>
-          <WorkloadTable list={shown} maxT={maxT} printMode />
+          <div style={{ fontSize: 14, color: P.gray, marginBottom: 14 }}>Periods per week, from each faculty member's timetable</div>
+          <WorkloadTable list={shown} printMode />
         </PrintShell>
       )}
     </div>
@@ -39749,10 +39767,10 @@ export function exportTimetableXLSX(personName, term, model) {
 }
 
 export function exportWorkloadXLSX(list) {
-  const header = ["Faculty", "Designation", "Periods per week", "Theory", "Lab", "Drawing", "Other", "Free slots", ...DAYS.map(d => d[1])];
+  const header = ["Faculty", "Designation", "Teaching workload", "Other duties", "Overall workload", "Theory", "Lab", "Drawing", "Free slots", ...DAYS.map(d => d[1])];
   const rows = list.map(f => f.none
     ? [f.name, f.desig, "No timetable filled yet"]
-    : [f.name, f.desig, f.s.total, f.s.counts.theory, f.s.counts.lab, f.s.counts.drawing, f.s.counts.other, f.s.free, ...f.s.perDay]);
+    : [f.name, f.desig, f.teach, f.other, f.s.total, f.s.counts.theory, f.s.counts.lab, f.s.counts.drawing, f.s.free, ...f.s.perDay]);
   const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
   ws["!cols"] = header.map((h, i) => ({ wch: i < 2 ? 26 : 14 }));
   const wb = XLSX.utils.book_new();

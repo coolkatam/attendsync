@@ -36,10 +36,10 @@ export function exportTimetableXLSX(personName, term, model) {
 }
 
 export function exportWorkloadXLSX(list) {
-  const header = ["Faculty", "Designation", "Periods per week", "Theory", "Lab", "Drawing", "Other", "Free slots", ...DAYS.map(d => d[1])];
+  const header = ["Faculty", "Designation", "Teaching workload", "Other duties", "Overall workload", "Theory", "Lab", "Drawing", "Free slots", ...DAYS.map(d => d[1])];
   const rows = list.map(f => f.none
     ? [f.name, f.desig, "No timetable filled yet"]
-    : [f.name, f.desig, f.s.total, f.s.counts.theory, f.s.counts.lab, f.s.counts.drawing, f.s.counts.other, f.s.free, ...f.s.perDay]);
+    : [f.name, f.desig, f.teach, f.other, f.s.total, f.s.counts.theory, f.s.counts.lab, f.s.counts.drawing, f.s.free, ...f.s.perDay]);
   const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
   ws["!cols"] = header.map((h, i) => ({ wch: i < 2 ? 26 : 14 }));
   const wb = XLSX.utils.book_new();
