@@ -39768,16 +39768,28 @@ export function exportWorkloadXLSX(list) {
 // The days x periods table. Editable on the faculty's own screen, read-only
 // for the HoD workload view and for printing.
 
-import React from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { P } from "../components/UI";
-import { DAYS, TL, TYPE_STYLE, labelsOf } from "./timetableModel";
+import { DAYS, TL, TYPE_STYLE, labelsOf, toHHMM, fromHHMM, cellMeta } from "./timetableModel";
 
 const MONO = "'IBM Plex Mono', monospace";
+const LENGTHS = [30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 90, 100, 120];
 
-export default function TimetableGrid({ model, editable, sel, onSelect, colCtl, onTimeCommit, onDeleteCol, compact }) {
+export default function TimetableGrid({ model, editable, sel, onSelect, colCtl, onTimingChange, onDeleteCol, compact }) {
   const labs = labelsOf(model);
   const n = model.slots.length;
   const h = compact ? 62 : 80;
+  const [openTime, setOpenTime] = useState(null);
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    if (openTime === null) return;
+    function onDown(e) { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpenTime(null); }
+    function onKey(e) { if (e.key === "Escape") setOpenTime(null); }
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [openTime]);
 
   function cellBox(extra) {
     return {
@@ -39819,7 +39831,7 @@ export default function TimetableGrid({ model, editable, sel, onSelect, colCtl, 
       );
     }
     const ts = TYPE_STYLE[c.type];
-    const meta = [c.section, c.room].filter(Boolean).join(" · ");
+    const meta = cellMeta(c).join(" · ");
     return (
       <td key={i} colSpan={span}>
         <Tag {...common} aria-label={editable ? DAYS[d][1] + " " + labs[i].text + ": " + (c.subject || "no subject yet") : undefined}
@@ -39858,7 +39870,7 @@ export default function TimetableGrid({ model, editable, sel, onSelect, colCtl, 
   });
 
   return (
-    <div style={{ overflowX: "auto" }}>
+    <div ref={wrapRef} style={{ overflowX: "auto" }}>
       <table style={{ borderCollapse: "separate", borderSpacing: 6, width: "100%", tableLayout: "fixed", minWidth: 92 + n * 112 }}>
         <thead>
           <tr>
@@ -39866,16 +39878,30 @@ export default function TimetableGrid({ model, editable, sel, onSelect, colCtl, 
             {model.slots.map((s, i) => (
               <th key={i} scope="col" style={{ padding: "2px 4px 6px", textAlign: "left", fontSize: 12, color: P.gray, position: "relative", verticalAlign: "bottom", fontWeight: 600 }}>
                 <span style={{ display: "block", fontFamily: MONO, fontWeight: 600, fontSize: 13, color: labs[i].lunch ? P.gray : "#1a2230", textTransform: labs[i].lunch ? "uppercase" : "none", letterSpacing: labs[i].lunch ? "0.1em" : 0 }}>{labs[i].text}</span>
-                <span
-                  contentEditable={!!editable}
-                  suppressContentEditableWarning
-                  spellCheck={false}
-                  title={editable ? "Click to edit this timing" : undefined}
-                  onBlur={editable ? e => onTimeCommit(i, e.currentTarget.textContent) : undefined}
-                  onKeyDown={editable ? e => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); } } : undefined}
-                  style={{ display: "inline-block", fontFamily: MONO, fontSize: 11.5, minWidth: "4ch", borderBottom: editable ? "1px dotted " + P.gray : "none", cursor: editable ? "text" : "default" }}>
-                  {s.time}
-                </span>
+                {editable ? (
+                  <button type="button" onClick={() => setOpenTime(openTime === i ? null : i)} aria-expanded={openTime === i}
+                    title="Click to change this timing"
+                    style={{ display: "inline-block", fontFamily: MONO, fontSize: 11.5, border: 0, background: "transparent", padding: 0, color: "inherit", borderBottom: "1px dotted " + P.gray, cursor: "pointer" }}>
+                    {s.time}
+                  </button>
+                ) : (
+                  <span style={{ display: "inline-block", fontFamily: MONO, fontSize: 11.5 }}>{s.time}</span>
+                )}
+                {editable && openTime === i && (
+                  <div role="dialog" aria-label={"Timing for " + labs[i].text}
+                    style={{ position: "absolute", top: "100%", [i >= n / 2 ? "right" : "left"]: 0, zIndex: 20, width: 210, background: "#fff", border: "1px solid " + P.border, borderRadius: 10, boxShadow: "0 10px 28px rgba(0,0,0,0.18)", padding: 12, textAlign: "left", fontWeight: 400 }}>
+                    <label htmlFor={"tt-start-" + i} style={{ display: "block", fontSize: 11.5, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: P.gray, marginBottom: 4 }}>Starts at</label>
+                    <input id={"tt-start-" + i} type="time" value={toHHMM(s.start)}
+                      onChange={e => { const v = fromHHMM(e.target.value); if (v !== null) onTimingChange(i, { start: v }); }}
+                      style={{ width: "100%", boxSizing: "border-box", border: "1.5px solid " + P.border, borderRadius: 8, padding: "7px 10px", fontFamily: "inherit", fontSize: 14, marginBottom: 10 }} />
+                    <label htmlFor={"tt-len-" + i} style={{ display: "block", fontSize: 11.5, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: P.gray, marginBottom: 4 }}>Length</label>
+                    <select id={"tt-len-" + i} value={s.dur} onChange={e => onTimingChange(i, { dur: Number(e.target.value) })}
+                      style={{ width: "100%", boxSizing: "border-box", border: "1.5px solid " + P.border, borderRadius: 8, padding: "7px 10px", fontFamily: "inherit", fontSize: 14, background: "#fff", marginBottom: 8 }}>
+                      {(LENGTHS.includes(s.dur) ? LENGTHS : [...LENGTHS, s.dur].sort((a, b) => a - b)).map(m => <option key={m} value={m}>{m} minutes</option>)}
+                    </select>
+                    <div style={{ fontSize: 12, color: P.gray, lineHeight: 1.4 }}>A new length applies to every later period (lunch keeps its own). Later periods move to follow.</div>
+                  </div>
+                )}
                 {colCtl && (
                   <button type="button" onClick={() => onDeleteCol(i)} disabled={n <= 1} aria-label={"Delete column " + labs[i].text}
                     style={{ position: "absolute", top: 0, right: 2, width: 20, height: 20, borderRadius: "50%", border: "1px solid " + P.border, background: "#fff", color: P.red, cursor: n <= 1 ? "not-allowed" : "pointer", lineHeight: 1, padding: 0, fontSize: 14 }}>
@@ -39917,15 +39943,58 @@ export function TypeLegend() {
 // src/timetable/timetableModel.js
 // Pure helpers for a faculty member's weekly timetable. No React, no Firebase.
 //
-// Model:  { slots: [{ time }], cells: [ [cell|null, ...slots] x 6 days ] }
+// Model:  { slots: [{ start, dur, time }], cells: [ [cell|null, ...slots] x 6 days ] }
+// slot:   start = minutes after midnight, dur = minutes, time = "9:00–10:00" (derived, kept in sync)
 // cell:   { type: theory|lab|drawing|other|lunch, subject, section, room, span }
 // A cell with span > 1 sits in its first slot; the slots it covers are null.
+//
+// Timings chain: each slot starts when the one before it ends, so changing the
+// first start, any length, or adding / deleting a column re-times everything after it.
 
 export const DAYS = [["Mon", "Monday"], ["Tue", "Tuesday"], ["Wed", "Wednesday"], ["Thu", "Thursday"], ["Fri", "Friday"], ["Sat", "Saturday"]];
 export const TL = { theory: "Theory", lab: "Lab", drawing: "Drawing", other: "Other", lunch: "Lunch" };
 export const COUNTED = ["theory", "lab", "drawing", "other"];
 export const MAXSLOTS = 10;
-export const DEFAULT_TIMES = ["9:00–9:50", "9:50–10:40", "10:40–11:30", "11:30–12:20", "12:20–1:10", "1:10–2:00", "2:00–2:50", "2:50–3:40"];
+export const DEFAULT_START = 9 * 60;
+export const PERIOD_MIN = 60;
+export const LUNCH_MIN = 40;
+export const DUTIES = ["Mentoring", "Disciplinary duties", "NCC", "NSS", "Sports", "Other duties"];
+
+// ── Timings ──────────────────────────────────────────────────────────────────
+export function fmtMin(total) {
+  const t = ((Math.round(total) % 1440) + 1440) % 1440;
+  return (Math.floor(t / 60) % 12 || 12) + ":" + String(t % 60).padStart(2, "0");
+}
+// For <input type="time"> (24-hour "HH:MM") and back.
+export function toHHMM(total) {
+  const t = ((Math.round(total) % 1440) + 1440) % 1440;
+  return String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0");
+}
+export function fromHHMM(str) {
+  const mt = /^(\d{1,2}):(\d{2})$/.exec(str || "");
+  return mt ? Number(mt[1]) * 60 + Number(mt[2]) : null;
+}
+function refresh(slot) { slot.time = fmtMin(slot.start) + "–" + fmtMin(slot.start + slot.dur); return slot; }
+export function makeSlot(start, dur) { return refresh({ start, dur, time: "" }); }
+
+// Re-time every slot from index `from` on so each begins when the previous one ends.
+export function rechain(m, from) {
+  for (let i = Math.max(from, 1); i < m.slots.length; i++) {
+    const prev = m.slots[i - 1];
+    m.slots[i].start = prev.start + prev.dur;
+    refresh(m.slots[i]);
+  }
+}
+
+// Older saved timetables only have text like "9:50–10:40" (afternoon hours without am/pm).
+function parseRange(s) {
+  const mt = /^\s*(\d{1,2}):(\d{2})\s*[–-]\s*(\d{1,2}):(\d{2})\s*$/.exec(s || "");
+  if (!mt) return null;
+  const h24 = h => (h < 8 ? h + 12 : h);
+  const a = h24(Number(mt[1])) * 60 + Number(mt[2]);
+  const b = h24(Number(mt[3])) * 60 + Number(mt[4]);
+  return b - a > 0 && b - a <= 240 ? { start: a, dur: b - a } : null;
+}
 
 export const TYPE_STYLE = {
   theory:  { bg: "#e3f1e9", fg: "#175c3a", dot: "#1f7a4d" },
@@ -39935,20 +40004,39 @@ export const TYPE_STYLE = {
   lunch:   { bg: "#eef1f4", fg: "#5b6673", dot: "#9aa7b4" },
 };
 
-export function mkCell(type, subject, section, room, span) {
-  return { type, subject: subject || "", section: section || "", room: room || "", span: span || 1 };
+export function mkCell(type, subject, section, room, span, year) {
+  return { type, subject: subject || "", section: section || "", room: room || "", span: span || 1, year: year || "" };
 }
 
-export function blankModel(times) {
-  return {
-    slots: times.map(t => ({ time: t })),
-    cells: DAYS.map(() => times.map(() => null)),
-  };
+// "III YR I SEM SL-1" and "III-A" both start with year III; "SL-2" has no year in its name.
+export function yearOf(sectionName) {
+  const mt = /^\s*(IV|III|II|I)(?![A-Za-z])/i.exec(sectionName || "");
+  return mt ? mt[1].toUpperCase() : "";
 }
 
-// 7 periods plus one lunch column after period 4, lunch filled on every day.
+// Year, section and room as shown under a cell's subject. The year is left out when the section name already starts with it.
+export function cellMeta(c) {
+  const yr = c.year && !String(c.section || "").toUpperCase().startsWith(c.year) ? c.year + " Yr" : "";
+  return [yr, c.section, c.room].filter(Boolean);
+}
+
+// `spec` is a column count (or an array whose length is used). Every column is one period long.
+export function blankModel(spec) {
+  const n = Array.isArray(spec) ? spec.length : spec;
+  const m = { slots: [], cells: DAYS.map(() => []) };
+  for (let i = 0; i < n; i++) {
+    m.slots.push(makeSlot(DEFAULT_START + i * PERIOD_MIN, PERIOD_MIN));
+    m.cells.forEach(row => row.push(null));
+  }
+  return m;
+}
+
+// 9:00 start, 7 one-hour periods plus a 40-minute lunch column after period 4, lunch filled on every day.
 export function defaultModel() {
-  const m = blankModel(DEFAULT_TIMES);
+  const m = blankModel(8);
+  m.slots[4].dur = LUNCH_MIN;
+  refresh(m.slots[4]);
+  rechain(m, 1);
   for (let d = 0; d < DAYS.length; d++) m.cells[d][4] = mkCell("lunch");
   return m;
 }
@@ -40041,9 +40129,20 @@ export function clearCell(model, d, i) {
   return m;
 }
 
-export function setTime(model, i, time) {
+// Change one column's start and/or length (minutes). Every column after it moves to follow.
+// A new length on a period carries to every later period; lunch columns keep their own length.
+// Any single column can still be edited again afterwards.
+export function setSlotTiming(model, i, patch) {
   const m = cloneModel(model);
-  m.slots[i].time = time;
+  const lunch = labelsOf(m).map(l => l.lunch);
+  const s = m.slots[i];
+  if (typeof patch.start === "number") s.start = Math.max(0, Math.min(patch.start, 1439));
+  if (typeof patch.dur === "number") {
+    s.dur = Math.max(5, Math.min(Math.round(patch.dur), 240));
+    if (!lunch[i]) for (let j = i + 1; j < m.slots.length; j++) if (!lunch[j]) m.slots[j].dur = s.dur;
+  }
+  refresh(s);
+  rechain(m, i + 1);
   return m;
 }
 
@@ -40061,7 +40160,15 @@ export function insertCol(model, at, kind) {
     }
     row.splice(at, 0, null);
   });
-  m.slots.splice(at, 0, { time: kind === "lunch" ? "12:20–1:10" : "Set time" });
+  const start = at > 0 ? m.slots[at - 1].start + m.slots[at - 1].dur : m.slots[0].start;
+  // A new period is as long as the nearest period before it (or after it, at the start).
+  const wasLunch = labelsOf(model).map(l => l.lunch);
+  let near = -1;
+  for (let j = at - 1; j >= 0 && near < 0; j--) if (!wasLunch[j]) near = j;
+  for (let j = at; j < model.slots.length && near < 0; j++) if (!wasLunch[j]) near = j;
+  const periodLen = near >= 0 ? model.slots[near].dur : PERIOD_MIN;
+  m.slots.splice(at, 0, makeSlot(start, kind === "lunch" ? LUNCH_MIN : periodLen));
+  rechain(m, at + 1);
   if (kind === "lunch") for (let d = 0; d < DAYS.length; d++) m.cells[d][at] = mkCell("lunch");
   return m;
 }
@@ -40078,7 +40185,9 @@ export function deleteCol(model, i) {
     row.splice(i, 1);
     if (own && own.span > 1) { own.span -= 1; row[i] = own; }
   });
-  m.slots.splice(i, 1);
+  const removed = m.slots.splice(i, 1)[0];
+  if (i === 0) { m.slots[0].start = removed.start; refresh(m.slots[0]); }
+  rechain(m, i === 0 ? 1 : i);
   return m;
 }
 
@@ -40092,7 +40201,17 @@ export function toStore(m) {
 
 export function fromStore(data) {
   if (!data || !Array.isArray(data.slots) || !data.cells) return null;
-  const slots = data.slots.map(s => ({ time: (s && s.time) || "" }));
+  let prevEnd = DEFAULT_START;
+  const slots = data.slots.map(s => {
+    let start, dur;
+    if (s && typeof s.start === "number" && typeof s.dur === "number" && s.dur > 0) { start = s.start; dur = s.dur; }
+    else {
+      const p = parseRange(s && s.time);
+      if (p) { start = p.start; dur = p.dur; } else { start = prevEnd; dur = PERIOD_MIN; }
+    }
+    prevEnd = start + dur;
+    return makeSlot(start, dur);
+  });
   const cells = DAYS.map((_, d) => {
     const row = data.cells[String(d)] || [];
     return slots.map((_s, i) => row[i] || null);
@@ -40104,7 +40223,7 @@ export function fromStore(data) {
 export function cellText(c) {
   if (!c) return "";
   if (c.type === "lunch") return "Lunch";
-  return [c.subject || TL[c.type], c.section, c.room].filter(Boolean).join(" · ");
+  return [c.subject || TL[c.type], ...cellMeta(c)].join(" · ");
 }
 
 
@@ -40129,7 +40248,7 @@ import { exportTimetableXLSX } from "./timetableExport";
 import {
   DAYS, TL, COUNTED, TYPE_STYLE, MAXSLOTS,
   defaultModel, fromStore, toStore, cellAt, labelsOf, stats, maxSpan, mkCell,
-  setCell, setTime, insertCol, deleteCol,
+  setCell, setSlotTiming, insertCol, deleteCol, yearOf, DUTIES,
 } from "./timetableModel";
 
 const MONO = "'IBM Plex Mono', monospace";
@@ -40154,22 +40273,20 @@ function SegBtn({ active, disabled, onClick, dot, first, children }) {
 }
 
 // A pick-one array of options, wrapping onto as many rows as it needs.
-function Chips({ items, value, onPick, empty }) {
+// items: [{ key, label, on }]
+function Chips({ items, onPick, empty }) {
   if (!items.length) return <div style={{ fontSize: 12.5, color: P.gray, marginBottom: 8 }}>{empty}</div>;
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
-      {items.map(it => {
-        const on = it === value;
-        return (
-          <button key={it} type="button" aria-pressed={on} onClick={() => onPick(on ? "" : it)}
-            style={{
-              border: "1.5px solid " + (on ? P.blue : P.border), background: on ? P.blue : "#fff", color: on ? "#fff" : "#1a2230",
-              borderRadius: 20, padding: "6px 14px", fontSize: 13.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
-            }}>
-            {it}
-          </button>
-        );
-      })}
+      {items.map(it => (
+        <button key={it.key} type="button" aria-pressed={it.on} onClick={() => onPick(it.key)}
+          style={{
+            border: "1.5px solid " + (it.on ? P.blue : P.border), background: it.on ? P.blue : "#fff", color: it.on ? "#fff" : "#1a2230",
+            borderRadius: 20, padding: "6px 14px", fontSize: 13.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+          }}>
+          {it.label}
+        </button>
+      ))}
     </div>
   );
 }
@@ -40188,14 +40305,36 @@ function CellEditor({ title, time, initial, spanLimit, options, onApply, onCance
     return () => document.removeEventListener("keydown", onKey);
   }, [onCancel]);
 
-  const matched = c && c.subject ? options.pairs.filter(p => p.subject === c.subject).map(p => p.section) : [];
-  const sectionItems = matched.length ? [...new Set(matched)] : options.sections;
+  const isDuty = type === "other";
+  const lineRef = useRef(null);
 
   function pickType(t) {
     if (t === "free") setC(null);
     else if (t === "lunch") setC(prev => mkCell("lunch", "", "", "", prev ? Math.min(prev.span, spanLimit) : 1));
-    else set({ type: t, span: c ? c.span : (t === "lab" ? spanLimit : 1) });
+    else set({ type: t, span: c ? c.span : (t === "lab" ? Math.min(3, spanLimit) : 1) });
   }
+
+  // Picking one of my assigned subjects fills in its subject name, section and year together.
+  function pickAssigned(p) {
+    const t = /\blab\b/i.test(p.subject) ? "lab" : /drawing|graphics/i.test(p.subject) ? "drawing" : "theory";
+    const wasClass = c && c.type !== "lunch" && c.type !== "other";
+    set({ type: t, subject: p.subject, section: p.section, year: yearOf(p.section), span: t === "lab" && !(wasClass && c.span > 1) ? Math.min(3, spanLimit) : (wasClass ? c.span : 1) });
+  }
+  // Duties are "Other" periods named after the duty; "Other duties" leaves the line blank to type into.
+  function pickDuty(d) {
+    set({ type: "other", subject: d === "Other duties" ? "" : d, section: "", year: "", span: c && c.type === "other" ? c.span : 1 });
+    if (d === "Other duties") setTimeout(() => { if (lineRef.current) lineRef.current.focus(); }, 0);
+  }
+
+  const assignedItems = options.pairs.map(p => ({
+    key: p.subject + "\u0000" + p.section, label: p.subject + " · " + p.section, pair: p,
+    on: !!c && c.type !== "other" && c.type !== "lunch" && c.subject === p.subject && c.section === p.section,
+  }));
+  const presetDuties = DUTIES.slice(0, -1);
+  const dutyItems = DUTIES.map(d => ({
+    key: d, label: d,
+    on: !!c && c.type === "other" && (d === "Other duties" ? !presetDuties.includes(c.subject) : c.subject === d),
+  }));
 
   const typeBtn = (t, label, dot, first) => (
     <SegBtn key={t} first={first} dot={dot} active={type === t} onClick={() => pickType(t)}>{label}</SegBtn>
@@ -40225,15 +40364,33 @@ function CellEditor({ title, time, initial, spanLimit, options, onApply, onCance
 
         {c && !isLunch && (
           <div style={{ marginTop: 18 }}>
-            <span style={lbl}>Subject</span>
-            <Chips items={options.subjects} value={c.subject} onPick={v => set({ subject: v })} empty="No subjects are assigned to you yet. Type one below." />
-            <input aria-label="Subject" placeholder="Or type a subject" value={c.subject} onChange={e => set({ subject: e.target.value })} style={inputStyle} />
+            <span style={lbl}>My assigned subjects</span>
+            <Chips items={assignedItems} onPick={k => pickAssigned(assignedItems.find(it => it.key === k).pair)}
+              empty="No subjects are assigned to you yet. Type one below." />
+            <div style={{ fontSize: 12, color: P.gray, margin: "-4px 0 12px" }}>Pick one and its subject, section and year are filled in for you.</div>
 
-            <span style={{ ...lbl, marginTop: 16 }}>Section</span>
-            <Chips items={sectionItems} value={c.section} onPick={v => set({ section: v })} empty="No sections are assigned to you yet. Type one below." />
-            <input aria-label="Section" placeholder="Or type a section" value={c.section} onChange={e => set({ section: e.target.value })} style={inputStyle} />
+            <span style={lbl}>Duties</span>
+            <Chips items={dutyItems} onPick={pickDuty} empty="" />
 
-            <span style={{ ...lbl, marginTop: 16 }}>Room</span>
+            <span style={{ ...lbl, marginTop: 6 }}>{isDuty ? "Duty (type here for any other duty)" : "Subject"}</span>
+            <input ref={lineRef} aria-label={isDuty ? "Duty" : "Subject"} placeholder={isDuty ? "Type the duty" : "Or type a subject"} value={c.subject}
+              onChange={e => set({ subject: e.target.value })} style={inputStyle} />
+
+            {!isDuty && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14, marginTop: 16 }}>
+                <div>
+                  <span style={lbl}>Section</span>
+                  <input aria-label="Section" placeholder="Or type a section" value={c.section}
+                    onChange={e => set({ section: e.target.value, year: c.year || yearOf(e.target.value) })} style={inputStyle} />
+                </div>
+                <div>
+                  <span style={lbl}>Year</span>
+                  <Chips items={["I", "II", "III", "IV"].map(y => ({ key: y, label: y, on: c.year === y }))} onPick={y => set({ year: c.year === y ? "" : y })} empty="" />
+                </div>
+              </div>
+            )}
+
+            <span style={{ ...lbl, marginTop: 8 }}>Room</span>
             <input aria-label="Room" placeholder="e.g. R-204" value={c.room} onChange={e => set({ room: e.target.value })} style={{ ...inputStyle, maxWidth: 240 }} />
           </div>
         )}
@@ -40327,7 +40484,7 @@ export default function TimetablePage({ user }) {
   const [dlOpen, setDlOpen] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
   const [msg, setMsg] = useState(null);
-  const [options, setOptions] = useState({ subjects: [], sections: [], pairs: [] });
+  const [options, setOptions] = useState({ pairs: [] });
   const dlRef = useRef(null);
 
   useEffect(() => {
@@ -40346,11 +40503,10 @@ export default function TimetablePage({ user }) {
         if (sec.deleted) return;
         (sec.subjects || []).forEach(sub => { if (sub.facultyPhone === user.phone) pairs.push({ subject: sub.name, section: sec.name }); });
       });
-      setOptions({
-        subjects: [...new Set(pairs.map(p => p.subject))].sort(),
-        sections: [...new Set(pairs.map(p => p.section))].sort(),
-        pairs,
-      });
+      const seen = new Set();
+      const unique = pairs.filter(p => { const k = p.subject + "\u0000" + p.section; if (seen.has(k)) return false; seen.add(k); return true; })
+        .sort((a, b) => a.subject.localeCompare(b.subject) || a.section.localeCompare(b.section));
+      setOptions({ pairs: unique });
     }).catch(() => {});
     return () => { alive = false; };
   }, [user.phone]);
@@ -40445,12 +40601,12 @@ export default function TimetablePage({ user }) {
         <TimetableGrid
           model={model} editable sel={editing} colCtl={editCols}
           onSelect={openCell}
-          onTimeCommit={(i, text) => { const t = text.trim() || "Set time"; if (t !== model.slots[i].time) edit(setTime(model, i, t)); }}
+          onTimingChange={(i, patch) => edit(setSlotTiming(model, i, patch))}
           onDeleteCol={doDelete}
         />
         <TypeLegend />
         <p style={{ fontSize: 12.5, color: P.gray, margin: "10px 0 0" }}>
-          Timings in the header can be edited. Lunch can sit in any column and on any day, since your lunch follows the sections you teach.
+          Click a timing in the header to change its start or length. A new length applies to every later period (lunch keeps its own), and adding or deleting a period re-times the rest. You can still change any single timing again. Lunch can sit in any column and on any day.
         </p>
       </Card>
 

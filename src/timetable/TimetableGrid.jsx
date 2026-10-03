@@ -2,16 +2,28 @@
 // The days x periods table. Editable on the faculty's own screen, read-only
 // for the HoD workload view and for printing.
 
-import React from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { P } from "../components/UI";
-import { DAYS, TL, TYPE_STYLE, labelsOf } from "./timetableModel";
+import { DAYS, TL, TYPE_STYLE, labelsOf, toHHMM, fromHHMM, cellMeta } from "./timetableModel";
 
 const MONO = "'IBM Plex Mono', monospace";
+const LENGTHS = [30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 90, 100, 120];
 
-export default function TimetableGrid({ model, editable, sel, onSelect, colCtl, onTimeCommit, onDeleteCol, compact }) {
+export default function TimetableGrid({ model, editable, sel, onSelect, colCtl, onTimingChange, onDeleteCol, compact }) {
   const labs = labelsOf(model);
   const n = model.slots.length;
   const h = compact ? 62 : 80;
+  const [openTime, setOpenTime] = useState(null);
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    if (openTime === null) return;
+    function onDown(e) { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpenTime(null); }
+    function onKey(e) { if (e.key === "Escape") setOpenTime(null); }
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [openTime]);
 
   function cellBox(extra) {
     return {
@@ -53,7 +65,7 @@ export default function TimetableGrid({ model, editable, sel, onSelect, colCtl, 
       );
     }
     const ts = TYPE_STYLE[c.type];
-    const meta = [c.section, c.room].filter(Boolean).join(" · ");
+    const meta = cellMeta(c).join(" · ");
     return (
       <td key={i} colSpan={span}>
         <Tag {...common} aria-label={editable ? DAYS[d][1] + " " + labs[i].text + ": " + (c.subject || "no subject yet") : undefined}
@@ -92,7 +104,7 @@ export default function TimetableGrid({ model, editable, sel, onSelect, colCtl, 
   });
 
   return (
-    <div style={{ overflowX: "auto" }}>
+    <div ref={wrapRef} style={{ overflowX: "auto" }}>
       <table style={{ borderCollapse: "separate", borderSpacing: 6, width: "100%", tableLayout: "fixed", minWidth: 92 + n * 112 }}>
         <thead>
           <tr>
@@ -100,16 +112,30 @@ export default function TimetableGrid({ model, editable, sel, onSelect, colCtl, 
             {model.slots.map((s, i) => (
               <th key={i} scope="col" style={{ padding: "2px 4px 6px", textAlign: "left", fontSize: 12, color: P.gray, position: "relative", verticalAlign: "bottom", fontWeight: 600 }}>
                 <span style={{ display: "block", fontFamily: MONO, fontWeight: 600, fontSize: 13, color: labs[i].lunch ? P.gray : "#1a2230", textTransform: labs[i].lunch ? "uppercase" : "none", letterSpacing: labs[i].lunch ? "0.1em" : 0 }}>{labs[i].text}</span>
-                <span
-                  contentEditable={!!editable}
-                  suppressContentEditableWarning
-                  spellCheck={false}
-                  title={editable ? "Click to edit this timing" : undefined}
-                  onBlur={editable ? e => onTimeCommit(i, e.currentTarget.textContent) : undefined}
-                  onKeyDown={editable ? e => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); } } : undefined}
-                  style={{ display: "inline-block", fontFamily: MONO, fontSize: 11.5, minWidth: "4ch", borderBottom: editable ? "1px dotted " + P.gray : "none", cursor: editable ? "text" : "default" }}>
-                  {s.time}
-                </span>
+                {editable ? (
+                  <button type="button" onClick={() => setOpenTime(openTime === i ? null : i)} aria-expanded={openTime === i}
+                    title="Click to change this timing"
+                    style={{ display: "inline-block", fontFamily: MONO, fontSize: 11.5, border: 0, background: "transparent", padding: 0, color: "inherit", borderBottom: "1px dotted " + P.gray, cursor: "pointer" }}>
+                    {s.time}
+                  </button>
+                ) : (
+                  <span style={{ display: "inline-block", fontFamily: MONO, fontSize: 11.5 }}>{s.time}</span>
+                )}
+                {editable && openTime === i && (
+                  <div role="dialog" aria-label={"Timing for " + labs[i].text}
+                    style={{ position: "absolute", top: "100%", [i >= n / 2 ? "right" : "left"]: 0, zIndex: 20, width: 210, background: "#fff", border: "1px solid " + P.border, borderRadius: 10, boxShadow: "0 10px 28px rgba(0,0,0,0.18)", padding: 12, textAlign: "left", fontWeight: 400 }}>
+                    <label htmlFor={"tt-start-" + i} style={{ display: "block", fontSize: 11.5, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: P.gray, marginBottom: 4 }}>Starts at</label>
+                    <input id={"tt-start-" + i} type="time" value={toHHMM(s.start)}
+                      onChange={e => { const v = fromHHMM(e.target.value); if (v !== null) onTimingChange(i, { start: v }); }}
+                      style={{ width: "100%", boxSizing: "border-box", border: "1.5px solid " + P.border, borderRadius: 8, padding: "7px 10px", fontFamily: "inherit", fontSize: 14, marginBottom: 10 }} />
+                    <label htmlFor={"tt-len-" + i} style={{ display: "block", fontSize: 11.5, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: P.gray, marginBottom: 4 }}>Length</label>
+                    <select id={"tt-len-" + i} value={s.dur} onChange={e => onTimingChange(i, { dur: Number(e.target.value) })}
+                      style={{ width: "100%", boxSizing: "border-box", border: "1.5px solid " + P.border, borderRadius: 8, padding: "7px 10px", fontFamily: "inherit", fontSize: 14, background: "#fff", marginBottom: 8 }}>
+                      {(LENGTHS.includes(s.dur) ? LENGTHS : [...LENGTHS, s.dur].sort((a, b) => a - b)).map(m => <option key={m} value={m}>{m} minutes</option>)}
+                    </select>
+                    <div style={{ fontSize: 12, color: P.gray, lineHeight: 1.4 }}>A new length applies to every later period (lunch keeps its own). Later periods move to follow.</div>
+                  </div>
+                )}
                 {colCtl && (
                   <button type="button" onClick={() => onDeleteCol(i)} disabled={n <= 1} aria-label={"Delete column " + labs[i].text}
                     style={{ position: "absolute", top: 0, right: 2, width: 20, height: 20, borderRadius: "50%", border: "1px solid " + P.border, background: "#fff", color: P.red, cursor: n <= 1 ? "not-allowed" : "pointer", lineHeight: 1, padding: 0, fontSize: 14 }}>

@@ -1,15 +1,58 @@
 // src/timetable/timetableModel.js
 // Pure helpers for a faculty member's weekly timetable. No React, no Firebase.
 //
-// Model:  { slots: [{ time }], cells: [ [cell|null, ...slots] x 6 days ] }
+// Model:  { slots: [{ start, dur, time }], cells: [ [cell|null, ...slots] x 6 days ] }
+// slot:   start = minutes after midnight, dur = minutes, time = "9:00–10:00" (derived, kept in sync)
 // cell:   { type: theory|lab|drawing|other|lunch, subject, section, room, span }
 // A cell with span > 1 sits in its first slot; the slots it covers are null.
+//
+// Timings chain: each slot starts when the one before it ends, so changing the
+// first start, any length, or adding / deleting a column re-times everything after it.
 
 export const DAYS = [["Mon", "Monday"], ["Tue", "Tuesday"], ["Wed", "Wednesday"], ["Thu", "Thursday"], ["Fri", "Friday"], ["Sat", "Saturday"]];
 export const TL = { theory: "Theory", lab: "Lab", drawing: "Drawing", other: "Other", lunch: "Lunch" };
 export const COUNTED = ["theory", "lab", "drawing", "other"];
 export const MAXSLOTS = 10;
-export const DEFAULT_TIMES = ["9:00–9:50", "9:50–10:40", "10:40–11:30", "11:30–12:20", "12:20–1:10", "1:10–2:00", "2:00–2:50", "2:50–3:40"];
+export const DEFAULT_START = 9 * 60;
+export const PERIOD_MIN = 60;
+export const LUNCH_MIN = 40;
+export const DUTIES = ["Mentoring", "Disciplinary duties", "NCC", "NSS", "Sports", "Other duties"];
+
+// ── Timings ──────────────────────────────────────────────────────────────────
+export function fmtMin(total) {
+  const t = ((Math.round(total) % 1440) + 1440) % 1440;
+  return (Math.floor(t / 60) % 12 || 12) + ":" + String(t % 60).padStart(2, "0");
+}
+// For <input type="time"> (24-hour "HH:MM") and back.
+export function toHHMM(total) {
+  const t = ((Math.round(total) % 1440) + 1440) % 1440;
+  return String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0");
+}
+export function fromHHMM(str) {
+  const mt = /^(\d{1,2}):(\d{2})$/.exec(str || "");
+  return mt ? Number(mt[1]) * 60 + Number(mt[2]) : null;
+}
+function refresh(slot) { slot.time = fmtMin(slot.start) + "–" + fmtMin(slot.start + slot.dur); return slot; }
+export function makeSlot(start, dur) { return refresh({ start, dur, time: "" }); }
+
+// Re-time every slot from index `from` on so each begins when the previous one ends.
+export function rechain(m, from) {
+  for (let i = Math.max(from, 1); i < m.slots.length; i++) {
+    const prev = m.slots[i - 1];
+    m.slots[i].start = prev.start + prev.dur;
+    refresh(m.slots[i]);
+  }
+}
+
+// Older saved timetables only have text like "9:50–10:40" (afternoon hours without am/pm).
+function parseRange(s) {
+  const mt = /^\s*(\d{1,2}):(\d{2})\s*[–-]\s*(\d{1,2}):(\d{2})\s*$/.exec(s || "");
+  if (!mt) return null;
+  const h24 = h => (h < 8 ? h + 12 : h);
+  const a = h24(Number(mt[1])) * 60 + Number(mt[2]);
+  const b = h24(Number(mt[3])) * 60 + Number(mt[4]);
+  return b - a > 0 && b - a <= 240 ? { start: a, dur: b - a } : null;
+}
 
 export const TYPE_STYLE = {
   theory:  { bg: "#e3f1e9", fg: "#175c3a", dot: "#1f7a4d" },
@@ -19,20 +62,39 @@ export const TYPE_STYLE = {
   lunch:   { bg: "#eef1f4", fg: "#5b6673", dot: "#9aa7b4" },
 };
 
-export function mkCell(type, subject, section, room, span) {
-  return { type, subject: subject || "", section: section || "", room: room || "", span: span || 1 };
+export function mkCell(type, subject, section, room, span, year) {
+  return { type, subject: subject || "", section: section || "", room: room || "", span: span || 1, year: year || "" };
 }
 
-export function blankModel(times) {
-  return {
-    slots: times.map(t => ({ time: t })),
-    cells: DAYS.map(() => times.map(() => null)),
-  };
+// "III YR I SEM SL-1" and "III-A" both start with year III; "SL-2" has no year in its name.
+export function yearOf(sectionName) {
+  const mt = /^\s*(IV|III|II|I)(?![A-Za-z])/i.exec(sectionName || "");
+  return mt ? mt[1].toUpperCase() : "";
 }
 
-// 7 periods plus one lunch column after period 4, lunch filled on every day.
+// Year, section and room as shown under a cell's subject. The year is left out when the section name already starts with it.
+export function cellMeta(c) {
+  const yr = c.year && !String(c.section || "").toUpperCase().startsWith(c.year) ? c.year + " Yr" : "";
+  return [yr, c.section, c.room].filter(Boolean);
+}
+
+// `spec` is a column count (or an array whose length is used). Every column is one period long.
+export function blankModel(spec) {
+  const n = Array.isArray(spec) ? spec.length : spec;
+  const m = { slots: [], cells: DAYS.map(() => []) };
+  for (let i = 0; i < n; i++) {
+    m.slots.push(makeSlot(DEFAULT_START + i * PERIOD_MIN, PERIOD_MIN));
+    m.cells.forEach(row => row.push(null));
+  }
+  return m;
+}
+
+// 9:00 start, 7 one-hour periods plus a 40-minute lunch column after period 4, lunch filled on every day.
 export function defaultModel() {
-  const m = blankModel(DEFAULT_TIMES);
+  const m = blankModel(8);
+  m.slots[4].dur = LUNCH_MIN;
+  refresh(m.slots[4]);
+  rechain(m, 1);
   for (let d = 0; d < DAYS.length; d++) m.cells[d][4] = mkCell("lunch");
   return m;
 }
@@ -125,9 +187,20 @@ export function clearCell(model, d, i) {
   return m;
 }
 
-export function setTime(model, i, time) {
+// Change one column's start and/or length (minutes). Every column after it moves to follow.
+// A new length on a period carries to every later period; lunch columns keep their own length.
+// Any single column can still be edited again afterwards.
+export function setSlotTiming(model, i, patch) {
   const m = cloneModel(model);
-  m.slots[i].time = time;
+  const lunch = labelsOf(m).map(l => l.lunch);
+  const s = m.slots[i];
+  if (typeof patch.start === "number") s.start = Math.max(0, Math.min(patch.start, 1439));
+  if (typeof patch.dur === "number") {
+    s.dur = Math.max(5, Math.min(Math.round(patch.dur), 240));
+    if (!lunch[i]) for (let j = i + 1; j < m.slots.length; j++) if (!lunch[j]) m.slots[j].dur = s.dur;
+  }
+  refresh(s);
+  rechain(m, i + 1);
   return m;
 }
 
@@ -145,7 +218,15 @@ export function insertCol(model, at, kind) {
     }
     row.splice(at, 0, null);
   });
-  m.slots.splice(at, 0, { time: kind === "lunch" ? "12:20–1:10" : "Set time" });
+  const start = at > 0 ? m.slots[at - 1].start + m.slots[at - 1].dur : m.slots[0].start;
+  // A new period is as long as the nearest period before it (or after it, at the start).
+  const wasLunch = labelsOf(model).map(l => l.lunch);
+  let near = -1;
+  for (let j = at - 1; j >= 0 && near < 0; j--) if (!wasLunch[j]) near = j;
+  for (let j = at; j < model.slots.length && near < 0; j++) if (!wasLunch[j]) near = j;
+  const periodLen = near >= 0 ? model.slots[near].dur : PERIOD_MIN;
+  m.slots.splice(at, 0, makeSlot(start, kind === "lunch" ? LUNCH_MIN : periodLen));
+  rechain(m, at + 1);
   if (kind === "lunch") for (let d = 0; d < DAYS.length; d++) m.cells[d][at] = mkCell("lunch");
   return m;
 }
@@ -162,7 +243,9 @@ export function deleteCol(model, i) {
     row.splice(i, 1);
     if (own && own.span > 1) { own.span -= 1; row[i] = own; }
   });
-  m.slots.splice(i, 1);
+  const removed = m.slots.splice(i, 1)[0];
+  if (i === 0) { m.slots[0].start = removed.start; refresh(m.slots[0]); }
+  rechain(m, i === 0 ? 1 : i);
   return m;
 }
 
@@ -176,7 +259,17 @@ export function toStore(m) {
 
 export function fromStore(data) {
   if (!data || !Array.isArray(data.slots) || !data.cells) return null;
-  const slots = data.slots.map(s => ({ time: (s && s.time) || "" }));
+  let prevEnd = DEFAULT_START;
+  const slots = data.slots.map(s => {
+    let start, dur;
+    if (s && typeof s.start === "number" && typeof s.dur === "number" && s.dur > 0) { start = s.start; dur = s.dur; }
+    else {
+      const p = parseRange(s && s.time);
+      if (p) { start = p.start; dur = p.dur; } else { start = prevEnd; dur = PERIOD_MIN; }
+    }
+    prevEnd = start + dur;
+    return makeSlot(start, dur);
+  });
   const cells = DAYS.map((_, d) => {
     const row = data.cells[String(d)] || [];
     return slots.map((_s, i) => row[i] || null);
@@ -188,5 +281,5 @@ export function fromStore(data) {
 export function cellText(c) {
   if (!c) return "";
   if (c.type === "lunch") return "Lunch";
-  return [c.subject || TL[c.type], c.section, c.room].filter(Boolean).join(" · ");
+  return [c.subject || TL[c.type], ...cellMeta(c)].join(" · ");
 }

@@ -14,7 +14,7 @@ import { exportTimetableXLSX } from "./timetableExport";
 import {
   DAYS, TL, COUNTED, TYPE_STYLE, MAXSLOTS,
   defaultModel, fromStore, toStore, cellAt, labelsOf, stats, maxSpan, mkCell,
-  setCell, setTime, insertCol, deleteCol,
+  setCell, setSlotTiming, insertCol, deleteCol, yearOf, DUTIES,
 } from "./timetableModel";
 
 const MONO = "'IBM Plex Mono', monospace";
@@ -39,22 +39,20 @@ function SegBtn({ active, disabled, onClick, dot, first, children }) {
 }
 
 // A pick-one array of options, wrapping onto as many rows as it needs.
-function Chips({ items, value, onPick, empty }) {
+// items: [{ key, label, on }]
+function Chips({ items, onPick, empty }) {
   if (!items.length) return <div style={{ fontSize: 12.5, color: P.gray, marginBottom: 8 }}>{empty}</div>;
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
-      {items.map(it => {
-        const on = it === value;
-        return (
-          <button key={it} type="button" aria-pressed={on} onClick={() => onPick(on ? "" : it)}
-            style={{
-              border: "1.5px solid " + (on ? P.blue : P.border), background: on ? P.blue : "#fff", color: on ? "#fff" : "#1a2230",
-              borderRadius: 20, padding: "6px 14px", fontSize: 13.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
-            }}>
-            {it}
-          </button>
-        );
-      })}
+      {items.map(it => (
+        <button key={it.key} type="button" aria-pressed={it.on} onClick={() => onPick(it.key)}
+          style={{
+            border: "1.5px solid " + (it.on ? P.blue : P.border), background: it.on ? P.blue : "#fff", color: it.on ? "#fff" : "#1a2230",
+            borderRadius: 20, padding: "6px 14px", fontSize: 13.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+          }}>
+          {it.label}
+        </button>
+      ))}
     </div>
   );
 }
@@ -73,14 +71,36 @@ function CellEditor({ title, time, initial, spanLimit, options, onApply, onCance
     return () => document.removeEventListener("keydown", onKey);
   }, [onCancel]);
 
-  const matched = c && c.subject ? options.pairs.filter(p => p.subject === c.subject).map(p => p.section) : [];
-  const sectionItems = matched.length ? [...new Set(matched)] : options.sections;
+  const isDuty = type === "other";
+  const lineRef = useRef(null);
 
   function pickType(t) {
     if (t === "free") setC(null);
     else if (t === "lunch") setC(prev => mkCell("lunch", "", "", "", prev ? Math.min(prev.span, spanLimit) : 1));
-    else set({ type: t, span: c ? c.span : (t === "lab" ? spanLimit : 1) });
+    else set({ type: t, span: c ? c.span : (t === "lab" ? Math.min(3, spanLimit) : 1) });
   }
+
+  // Picking one of my assigned subjects fills in its subject name, section and year together.
+  function pickAssigned(p) {
+    const t = /\blab\b/i.test(p.subject) ? "lab" : /drawing|graphics/i.test(p.subject) ? "drawing" : "theory";
+    const wasClass = c && c.type !== "lunch" && c.type !== "other";
+    set({ type: t, subject: p.subject, section: p.section, year: yearOf(p.section), span: t === "lab" && !(wasClass && c.span > 1) ? Math.min(3, spanLimit) : (wasClass ? c.span : 1) });
+  }
+  // Duties are "Other" periods named after the duty; "Other duties" leaves the line blank to type into.
+  function pickDuty(d) {
+    set({ type: "other", subject: d === "Other duties" ? "" : d, section: "", year: "", span: c && c.type === "other" ? c.span : 1 });
+    if (d === "Other duties") setTimeout(() => { if (lineRef.current) lineRef.current.focus(); }, 0);
+  }
+
+  const assignedItems = options.pairs.map(p => ({
+    key: p.subject + "\u0000" + p.section, label: p.subject + " · " + p.section, pair: p,
+    on: !!c && c.type !== "other" && c.type !== "lunch" && c.subject === p.subject && c.section === p.section,
+  }));
+  const presetDuties = DUTIES.slice(0, -1);
+  const dutyItems = DUTIES.map(d => ({
+    key: d, label: d,
+    on: !!c && c.type === "other" && (d === "Other duties" ? !presetDuties.includes(c.subject) : c.subject === d),
+  }));
 
   const typeBtn = (t, label, dot, first) => (
     <SegBtn key={t} first={first} dot={dot} active={type === t} onClick={() => pickType(t)}>{label}</SegBtn>
@@ -110,15 +130,33 @@ function CellEditor({ title, time, initial, spanLimit, options, onApply, onCance
 
         {c && !isLunch && (
           <div style={{ marginTop: 18 }}>
-            <span style={lbl}>Subject</span>
-            <Chips items={options.subjects} value={c.subject} onPick={v => set({ subject: v })} empty="No subjects are assigned to you yet. Type one below." />
-            <input aria-label="Subject" placeholder="Or type a subject" value={c.subject} onChange={e => set({ subject: e.target.value })} style={inputStyle} />
+            <span style={lbl}>My assigned subjects</span>
+            <Chips items={assignedItems} onPick={k => pickAssigned(assignedItems.find(it => it.key === k).pair)}
+              empty="No subjects are assigned to you yet. Type one below." />
+            <div style={{ fontSize: 12, color: P.gray, margin: "-4px 0 12px" }}>Pick one and its subject, section and year are filled in for you.</div>
 
-            <span style={{ ...lbl, marginTop: 16 }}>Section</span>
-            <Chips items={sectionItems} value={c.section} onPick={v => set({ section: v })} empty="No sections are assigned to you yet. Type one below." />
-            <input aria-label="Section" placeholder="Or type a section" value={c.section} onChange={e => set({ section: e.target.value })} style={inputStyle} />
+            <span style={lbl}>Duties</span>
+            <Chips items={dutyItems} onPick={pickDuty} empty="" />
 
-            <span style={{ ...lbl, marginTop: 16 }}>Room</span>
+            <span style={{ ...lbl, marginTop: 6 }}>{isDuty ? "Duty (type here for any other duty)" : "Subject"}</span>
+            <input ref={lineRef} aria-label={isDuty ? "Duty" : "Subject"} placeholder={isDuty ? "Type the duty" : "Or type a subject"} value={c.subject}
+              onChange={e => set({ subject: e.target.value })} style={inputStyle} />
+
+            {!isDuty && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14, marginTop: 16 }}>
+                <div>
+                  <span style={lbl}>Section</span>
+                  <input aria-label="Section" placeholder="Or type a section" value={c.section}
+                    onChange={e => set({ section: e.target.value, year: c.year || yearOf(e.target.value) })} style={inputStyle} />
+                </div>
+                <div>
+                  <span style={lbl}>Year</span>
+                  <Chips items={["I", "II", "III", "IV"].map(y => ({ key: y, label: y, on: c.year === y }))} onPick={y => set({ year: c.year === y ? "" : y })} empty="" />
+                </div>
+              </div>
+            )}
+
+            <span style={{ ...lbl, marginTop: 8 }}>Room</span>
             <input aria-label="Room" placeholder="e.g. R-204" value={c.room} onChange={e => set({ room: e.target.value })} style={{ ...inputStyle, maxWidth: 240 }} />
           </div>
         )}
@@ -212,7 +250,7 @@ export default function TimetablePage({ user }) {
   const [dlOpen, setDlOpen] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
   const [msg, setMsg] = useState(null);
-  const [options, setOptions] = useState({ subjects: [], sections: [], pairs: [] });
+  const [options, setOptions] = useState({ pairs: [] });
   const dlRef = useRef(null);
 
   useEffect(() => {
@@ -231,11 +269,10 @@ export default function TimetablePage({ user }) {
         if (sec.deleted) return;
         (sec.subjects || []).forEach(sub => { if (sub.facultyPhone === user.phone) pairs.push({ subject: sub.name, section: sec.name }); });
       });
-      setOptions({
-        subjects: [...new Set(pairs.map(p => p.subject))].sort(),
-        sections: [...new Set(pairs.map(p => p.section))].sort(),
-        pairs,
-      });
+      const seen = new Set();
+      const unique = pairs.filter(p => { const k = p.subject + "\u0000" + p.section; if (seen.has(k)) return false; seen.add(k); return true; })
+        .sort((a, b) => a.subject.localeCompare(b.subject) || a.section.localeCompare(b.section));
+      setOptions({ pairs: unique });
     }).catch(() => {});
     return () => { alive = false; };
   }, [user.phone]);
@@ -330,12 +367,12 @@ export default function TimetablePage({ user }) {
         <TimetableGrid
           model={model} editable sel={editing} colCtl={editCols}
           onSelect={openCell}
-          onTimeCommit={(i, text) => { const t = text.trim() || "Set time"; if (t !== model.slots[i].time) edit(setTime(model, i, t)); }}
+          onTimingChange={(i, patch) => edit(setSlotTiming(model, i, patch))}
           onDeleteCol={doDelete}
         />
         <TypeLegend />
         <p style={{ fontSize: 12.5, color: P.gray, margin: "10px 0 0" }}>
-          Timings in the header can be edited. Lunch can sit in any column and on any day, since your lunch follows the sections you teach.
+          Click a timing in the header to change its start or length. A new length applies to every later period (lunch keeps its own), and adding or deleting a period re-times the rest. You can still change any single timing again. Lunch can sit in any column and on any day.
         </p>
       </Card>
 
