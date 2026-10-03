@@ -9,10 +9,11 @@ import { DAYS, TL, TYPE_STYLE, labelsOf, toHHMM, fromHHMM, cellMeta } from "./ti
 const MONO = "'IBM Plex Mono', monospace";
 const LENGTHS = [30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 90, 100, 120];
 
-export default function TimetableGrid({ model, editable, sel, onSelect, colCtl, onTimingChange, onDeleteCol, compact }) {
+export default function TimetableGrid({ model, editable, sel, onSelect, colCtl, onTimingChange, onDeleteCol, compact, cellHeight }) {
   const labs = labelsOf(model);
   const n = model.slots.length;
-  const h = compact ? 62 : 80;
+  const h = cellHeight || (compact ? 62 : 80);
+  const dayW = compact ? 70 : 86;
   const [openTime, setOpenTime] = useState(null);
   const wrapRef = useRef(null);
 
@@ -94,7 +95,7 @@ export default function TimetableGrid({ model, editable, sel, onSelect, colCtl, 
     }
     return (
       <tr key={d}>
-        <th scope="row" style={{ width: 86, textAlign: "left", verticalAlign: "middle", position: "sticky", left: 0, background: "#fff", zIndex: 1, paddingRight: 6, fontWeight: 400 }}>
+        <th scope="row" style={{ width: dayW, textAlign: "left", verticalAlign: "middle", position: "sticky", left: 0, background: "#fff", zIndex: 1, paddingRight: 6, fontWeight: 400 }}>
           <span style={{ display: "block", fontWeight: 700, fontSize: 14.5 }}>{day[0]}</span>
           <span style={{ display: "block", fontSize: 11.5, color: P.gray }}>{day[1]}</span>
         </th>
@@ -105,10 +106,10 @@ export default function TimetableGrid({ model, editable, sel, onSelect, colCtl, 
 
   return (
     <div ref={wrapRef} style={{ overflowX: "auto" }}>
-      <table style={{ borderCollapse: "separate", borderSpacing: 6, width: "100%", tableLayout: "fixed", minWidth: 92 + n * 112 }}>
+      <table style={{ borderCollapse: "separate", borderSpacing: 6, width: "100%", tableLayout: "fixed", minWidth: dayW + 6 + n * (compact ? 94 : 112) }}>
         <thead>
           <tr>
-            <th style={{ width: 86 }} />
+            <th style={{ width: dayW }} />
             {model.slots.map((s, i) => (
               <th key={i} scope="col" style={{ padding: "2px 4px 6px", textAlign: "left", fontSize: 12, color: P.gray, position: "relative", verticalAlign: "bottom", fontWeight: 600 }}>
                 <span style={{ display: "block", fontFamily: MONO, fontWeight: 600, fontSize: 13, color: labs[i].lunch ? P.gray : "#1a2230", textTransform: labs[i].lunch ? "uppercase" : "none", letterSpacing: labs[i].lunch ? "0.1em" : 0 }}>{labs[i].text}</span>

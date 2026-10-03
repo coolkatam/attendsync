@@ -184,14 +184,13 @@ function CellEditor({ title, time, initial, spanLimit, options, onApply, onCance
 
 function Summary({ model }) {
   const s = stats(model);
-  const n = model.slots.length;
   return (
-    <Card style={{ padding: "18px 20px", margin: 0 }}>
+    <Card style={{ padding: "16px 18px", margin: 0, overflow: "auto", minHeight: 0 }}>
       <div style={{ fontWeight: 700, fontSize: 15.5 }}>Weekly load</div>
       <div style={{ color: P.gray, fontSize: 12.5, marginBottom: 12 }}>This is the figure your HoD sees.</div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
         <b style={{ fontFamily: MONO, fontSize: 36, fontWeight: 600, lineHeight: 1 }}>{s.total}</b>
-        <span style={{ color: P.gray, fontSize: 13 }}>teaching periods this week ({n} columns x {DAYS.length} days)</span>
+        <span style={{ color: P.gray, fontSize: 12.5 }}>teaching periods this week</span>
       </div>
       <div style={{ display: "flex", height: 12, borderRadius: 6, overflow: "hidden", background: P.border, margin: "12px 0 10px" }}>
         {COUNTED.map(k => s.counts[k] ? <div key={k} title={TL[k] + ": " + s.counts[k]} style={{ width: (s.counts[k] / s.cap * 100) + "%", background: TYPE_STYLE[k].dot }} /> : null)}
@@ -218,6 +217,7 @@ function Summary({ model }) {
           </div>
         ))}
       </div>
+      <p style={{ margin: "14px 0 0", fontSize: 12, color: P.gray }}>Updates as you edit. Lunch and free slots are not counted. Your HoD sees this timetable and load read-only on the Faculty Workload screen; only you can edit it.</p>
     </Card>
   );
 }
@@ -239,6 +239,16 @@ export function TimetablePrintBody({ name, desig, term, model }) {
   );
 }
 
+function useWide() {
+  const [wide, setWide] = useState(typeof window === "undefined" ? true : window.innerWidth >= 1000);
+  useEffect(() => {
+    const f = () => setWide(window.innerWidth >= 1000);
+    window.addEventListener("resize", f);
+    return () => window.removeEventListener("resize", f);
+  }, []);
+  return wide;
+}
+
 export default function TimetablePage({ user }) {
   const [model, setModel] = useState(null);
   const [term, setTerm] = useState("");
@@ -252,6 +262,7 @@ export default function TimetablePage({ user }) {
   const [msg, setMsg] = useState(null);
   const [options, setOptions] = useState({ pairs: [] });
   const dlRef = useRef(null);
+  const wide = useWide();
 
   useEffect(() => {
     let alive = true;
@@ -317,17 +328,14 @@ export default function TimetablePage({ user }) {
   const editCell = editing ? model.cells[editing.d][editing.i] : null;
 
   return (
-    <div style={{ padding: "24px clamp(16px, 3vw, 32px) 80px", maxWidth: "min(1500px, 96vw)", margin: "0 auto", display: "grid", gap: 18 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, flexWrap: "wrap" }}>
-        <div style={{ minWidth: 0 }}>
-          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>Weekly Timetable</h1>
-          <div style={{ color: P.gray, marginTop: 4, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span>Click any cell to fill it in or change it.</span>
-            <input value={term} onChange={e => { setTerm(e.target.value); setDirty(true); }} placeholder="Term, e.g. 2026-27 Sem I"
-              aria-label="Term" style={{ ...inputStyle, width: 200, padding: "5px 10px", fontSize: 13 }} />
-          </div>
+    <div style={{ height: wide ? "calc(100vh - 64px)" : "auto", minHeight: wide ? 540 : undefined, boxSizing: "border-box", padding: "12px clamp(16px, 2vw, 28px) 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", flex: "none" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", minWidth: 0 }}>
+          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, whiteSpace: "nowrap" }}>Weekly Timetable</h1>
+          <input value={term} onChange={e => { setTerm(e.target.value); setDirty(true); }} placeholder="Term, e.g. 2026-27 Sem I"
+            aria-label="Term" style={{ ...inputStyle, width: 190, padding: "5px 10px", fontSize: 13 }} />
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           {msg
             ? <span style={{ fontSize: 12.5, fontWeight: 600, padding: "5px 12px", borderRadius: 20, background: msg.ok ? P.greenL : P.redL, color: msg.ok ? P.green : P.red }}>{msg.text}</span>
             : <span style={{ fontSize: 12.5, fontWeight: 600, padding: "5px 12px", borderRadius: 20, background: dirty ? P.amberL : P.greenL, color: dirty ? P.amber : P.green }}>{dirty ? "Unsaved changes" : "All changes saved"}</span>}
@@ -350,35 +358,38 @@ export default function TimetablePage({ user }) {
         </div>
       </div>
 
-      <Card style={{ padding: "18px 20px", margin: 0 }}>
-        {editCols && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "10px 12px", marginBottom: 12, background: P.bg, border: "1px dashed " + P.border, borderRadius: 10 }}>
-            <label htmlFor="tt-pos" style={{ fontSize: 12.5, fontWeight: 600, color: P.gray }}>Add a column</label>
-            <select id="tt-pos" value={posValue} onChange={e => setPos(Number(e.target.value))}
-              style={{ border: "1.5px solid " + P.border, borderRadius: 8, padding: "6px 10px", background: "#fff", fontFamily: "inherit", fontSize: 13 }}>
-              <option value={0}>At the start</option>
-              {labs.map((l, i) => <option key={i} value={i + 1}>After {l.text} ({model.slots[i].time})</option>)}
-            </select>
-            <Btn small onClick={() => doInsert("period")} disabled={model.slots.length >= MAXSLOTS}>Add period</Btn>
-            <Btn small variant="outline" onClick={() => doInsert("lunch")} disabled={model.slots.length >= MAXSLOTS}>Add lunch column</Btn>
-            <span style={{ fontSize: 12.5, color: P.gray }}>Use the × on a column header to delete it. A lunch column is filled with Lunch on every day; you can still change single days.</span>
+      <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: wide ? "minmax(0, 1fr) 330px" : "minmax(0, 1fr)", gap: 16 }}>
+        <Card style={{ padding: "12px 14px 10px", margin: 0, display: "flex", flexDirection: "column", minHeight: 0, minWidth: 0 }}>
+          {editCols && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "8px 12px", marginBottom: 8, background: P.bg, border: "1px dashed " + P.border, borderRadius: 10, flex: "none" }}>
+              <label htmlFor="tt-pos" style={{ fontSize: 12.5, fontWeight: 600, color: P.gray }}>Add a column</label>
+              <select id="tt-pos" value={posValue} onChange={e => setPos(Number(e.target.value))}
+                style={{ border: "1.5px solid " + P.border, borderRadius: 8, padding: "6px 10px", background: "#fff", fontFamily: "inherit", fontSize: 13 }}>
+                <option value={0}>At the start</option>
+                {labs.map((l, i) => <option key={i} value={i + 1}>After {l.text} ({model.slots[i].time})</option>)}
+              </select>
+              <Btn small onClick={() => doInsert("period")} disabled={model.slots.length >= MAXSLOTS}>Add period</Btn>
+              <Btn small variant="outline" onClick={() => doInsert("lunch")} disabled={model.slots.length >= MAXSLOTS}>Add lunch column</Btn>
+              <span style={{ fontSize: 12.5, color: P.gray }}>Use the × on a column header to delete it.</span>
+            </div>
+          )}
+          <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+            <TimetableGrid
+              model={model} editable compact sel={editing} colCtl={editCols}
+              cellHeight={wide ? "clamp(58px, calc((100vh - 305px) / 6), 112px)" : 76}
+              onSelect={openCell}
+              onTimingChange={(i, patch) => edit(setSlotTiming(model, i, patch))}
+              onDeleteCol={doDelete}
+            />
           </div>
-        )}
-        <TimetableGrid
-          model={model} editable sel={editing} colCtl={editCols}
-          onSelect={openCell}
-          onTimingChange={(i, patch) => edit(setSlotTiming(model, i, patch))}
-          onDeleteCol={doDelete}
-        />
-        <TypeLegend />
-        <p style={{ fontSize: 12.5, color: P.gray, margin: "10px 0 0" }}>
-          Click a timing in the header to change its start or length. A new length applies to every later period (lunch keeps its own), and adding or deleting a period re-times the rest. You can still change any single timing again. Lunch can sit in any column and on any day.
-        </p>
-      </Card>
+          <div style={{ flex: "none", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px 16px" }}>
+            <TypeLegend />
+            <span style={{ fontSize: 12, color: P.gray, marginTop: 10, marginLeft: "auto" }}>Click a cell to edit it. Click a timing to change its start or length; later periods follow.</span>
+          </div>
+        </Card>
 
-      <div style={{ maxWidth: 680 }}><Summary model={model} /></div>
-
-      <p style={{ margin: 0, fontSize: 12.5, color: P.gray }}>Your HoD can see this timetable and your weekly load on the Faculty Workload screen, read-only. Only you can edit it.</p>
+        <Summary model={model} />
+      </div>
 
       {editing && (
         <CellEditor
