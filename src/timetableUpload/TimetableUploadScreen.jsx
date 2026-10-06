@@ -3,18 +3,19 @@
 //   1. pick the year and download the Excel template (pre-filled with that year's subjects, short names and faculty)
 //   2. upload the filled workbook: it is read, checked against everything already published, and the
 //      overlaps, suggested changes and each faculty member's workload are shown here and in a downloadable report
-//   3. (next update) publish, once there are no overlaps, to put the classes into each faculty member's timetable
+//   3. publish, once there are no overlaps: the year's timetable is saved as the master timetable, every later
+//      upload is checked against it, and it can be replaced or withdrawn from the "Published timetables" card
 
 import React, { useState, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
-import { collection, onSnapshot, getDocs, updateDoc, doc } from "firebase/firestore";
+import { collection, onSnapshot, getDocs, updateDoc, setDoc, deleteDoc, doc } from "firebase/firestore";
 import { db } from "../firebase";
 import { P, Btn, Card, Sel, Spinner } from "../components/UI";
 import { MASTER_ADMIN_PHONE } from "../utils";
 import { buildTemplate } from "./templateBuilder";
 import { parseWorkbook } from "./timetableParser";
 import { groupBlocks, detectOverlaps, checkCombos, suggestionsFor, computeWorkload } from "./overlapCheck";
-import { addReportSheets } from "./reportBuilder";
+import { addReportSheets, writeReport } from "./reportBuilder";
 import { yearOfSection, DAY_NAMES, fmtRange } from "./timeUtils";
 import { facultyListOf, shortOf } from "../sections/subjectUtils";
 
@@ -41,6 +42,10 @@ export default function TimetableUploadScreen({ user }) {
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [withdrawYear, setWithdrawYear] = useState("");
   const fileRef = useRef(null);
   const seeAll = user.phone === MASTER_ADMIN_PHONE || user.role === "hod";
 
@@ -62,11 +67,12 @@ export default function TimetableUploadScreen({ user }) {
       us.forEach(d => { const u = d.data(); if (u.status === "approved") list.push({ phone: d.id, name: u.name || d.id, employeeId: emp[d.id] || u.employeeId || "" }); });
       setPeople(list);
     });
-    getDocs(collection(db, "masterTimetables")).then(snap => {
+    const unsubPub = onSnapshot(collection(db, "masterTimetables"), snap => {
       if (!alive) return;
+      setPublishedErr(false);
       setPublished(snap.docs.map(d => ({ year: d.id, ...d.data() })));
-    }).catch(() => { if (alive) setPublishedErr(true); });
-    return () => { alive = false; };
+    }, () => { if (alive) setPublishedErr(true); });
+    return () => { alive = false; unsubPub(); };
   }, []);
 
   if (!sections || !people) return <Spinner />;
@@ -117,12 +123,47 @@ export default function TimetableUploadScreen({ user }) {
 
   function downloadReport() {
     const rep = addReportSheets(result.wb, {
-      blocks: result.blocks, conflicts: result.conflicts, suggestions: result.suggestions, workload: result.workload,
+      blocks: result.blocks, conflicts: result.conflicts, suggestions: result.suggestions, workload: result.workload, sections: result.parse.sections,
       publishedLabel: b => "already published (Year " + (b.publishedYear || "?") + (b.publishedBy ? ", by " + b.publishedBy : "") + ")",
     });
-    XLSX.writeFile(rep, "Timetable report - Year " + year + ".xlsx");
+    writeReport(rep, "Timetable report - Year " + year + ".xlsx");
   }
 
+  async function publishNow() {
+    setPublishing(true); setError(""); setNotice("");
+    try {
+      const keep = b => ({
+        id: b.id, sectionId: b.sectionId, sectionName: b.sectionName, day: b.day, start: b.start, end: b.end,
+        token: b.token, subject: b.subject, type: b.type, combo: b.combo || "", periods: b.periods,
+        faculty: b.faculty.map(f => ({ key: f.key, name: f.name, phone: f.phone || null, external: !!f.external, role: f.role })),
+      });
+      const data = JSON.parse(JSON.stringify({
+        year,
+        blocks: result.blocks.map(keep),
+        sections: result.parse.sections.map(sec => ({ id: sec.id, name: sec.name, slots: sec.slots.map(x => ({ start: x.start, end: x.end, brk: !!x.brk })) })),
+        publishedBy: user.phone, publishedByName: user.name || user.phone, publishedAt: new Date().toISOString(),
+        fileName: fileName || "",
+      }));
+      if (JSON.stringify(data).length > 900000) throw new Error("this timetable is too large to store in one piece");
+      await setDoc(doc(db, "masterTimetables", year), data);
+      setNotice("Year " + year + " timetable published: " + data.sections.length + " sections, " + data.blocks.length + " classes. Later uploads for other years are now checked against it.");
+      setResult(null); setFileName(""); setConfirming(false);
+    } catch (err) {
+      setError("Could not publish (" + err.message + "). Nothing was changed.");
+    }
+    setPublishing(false);
+  }
+
+  async function withdraw(y) {
+    setError(""); setNotice("");
+    try {
+      await deleteDoc(doc(db, "masterTimetables", y));
+      setNotice("Year " + y + " timetable withdrawn. It is no longer used for overlap checks.");
+    } catch (err) { setError("Could not withdraw it (" + err.message + ")."); }
+    setWithdrawYear("");
+  }
+
+  const alreadyPublished = published.find(p => p.year === year);
   const errors = result ? result.parse.problems.filter(p => p.level === "error") : [];
   const notes = result ? result.parse.problems.concat(result.comboProblems).filter(p => p.level !== "error") : [];
   const ready = result && errors.length === 0 && result.conflicts.length === 0;
@@ -193,6 +234,45 @@ export default function TimetableUploadScreen({ user }) {
         {error && <div style={{ fontSize: 13, color: P.red, background: P.redL, borderRadius: 8, padding: "8px 12px", marginTop: 10 }}>{error}</div>}
       </Card>
 
+      {notice && <div style={{ fontSize: 13.5, color: P.green, background: P.greenL, borderRadius: 10, padding: "12px 16px", fontWeight: 600 }}>{notice}</div>}
+
+      {published.length > 0 && (
+        <Card style={{ margin: 0, padding: "16px 20px" }}>
+          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Published timetables</div>
+          <div style={{ fontSize: 12.5, color: P.gray, marginBottom: 10 }}>Every new upload is checked against these. To change a published year, upload its corrected sheet and publish again, or withdraw it here.</div>
+          {published.slice().sort((a, b) => a.year.localeCompare(b.year)).map(p => (
+            <div key={p.year} style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "9px 0", borderTop: "1px solid " + P.border }}>
+              <span style={{ fontWeight: 700, fontSize: 14, minWidth: 70 }}>Year {p.year}</span>
+              <span style={{ fontSize: 13, color: P.gray, flex: 1, minWidth: 240 }}>
+                {(p.sections || []).map(x => x.name).join(", ")} · {(p.blocks || []).length} classes · by {p.publishedByName || "—"}{p.publishedAt ? " on " + new Date(p.publishedAt).toLocaleDateString() : ""}
+              </span>
+              {withdrawYear === p.year ? (
+                <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <span style={{ fontSize: 12.5, color: P.red }}>Withdraw Year {p.year}?</span>
+                  <Btn small onClick={() => withdraw(p.year)}>Yes, withdraw</Btn>
+                  <Btn small onClick={() => setWithdrawYear("")}>Keep</Btn>
+                </span>
+              ) : <Btn small onClick={() => setWithdrawYear(p.year)}>Withdraw</Btn>}
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {result && confirming && (
+        <Card style={{ margin: 0, padding: "16px 20px", borderColor: P.blue }}>
+          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>Publish the Year {year} timetable?</div>
+          <div style={{ fontSize: 13.5, lineHeight: 1.6, marginBottom: 12 }}>
+            {result.parse.sections.length} sections and {result.blocks.length} classes will be saved as the master timetable for Year {year}.
+            {alreadyPublished && <> <b style={{ color: P.amber }}>This replaces the Year {year} timetable already published by {alreadyPublished.publishedByName || "someone"}.</b></>}
+            {" "}Attendance and marks stay with each subject's Main faculty; Assisting faculty are shown on the timetable only.
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <Btn onClick={publishNow} disabled={publishing}>{publishing ? "Publishing…" : "Yes, publish"}</Btn>
+            <Btn onClick={() => setConfirming(false)} disabled={publishing}>Cancel</Btn>
+          </div>
+        </Card>
+      )}
+
       {result && (
         <>
           <Card style={{ margin: 0, padding: "16px 20px" }}>
@@ -210,7 +290,7 @@ export default function TimetableUploadScreen({ user }) {
                 {result.conflicts.length > 0 && <Pill color={P.red} bg={P.redL}>{result.conflicts.length} overlap{result.conflicts.length === 1 ? "" : "s"} to clear</Pill>}
                 {ready && <Pill color={P.green} bg={P.greenL}>No overlaps — ready to publish</Pill>}
                 <Btn small onClick={downloadReport}>Download report (Excel)</Btn>
-                <Btn small disabled>Publish (coming in the next update)</Btn>
+                <Btn small disabled={!ready || publishing} onClick={() => setConfirming(true)}>Publish Year {year}</Btn>
               </div>
             </div>
           </Card>
