@@ -5,7 +5,9 @@
 // is both together. Click a name to see that timetable (read-only).
 
 import React, { useState, useEffect, useRef } from "react";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, onSnapshot } from "firebase/firestore";
+import { computeWorkload } from "../timetableUpload/overlapCheck";
+import { DAY_NAMES, fmtRange } from "../timetableUpload/timeUtils";
 import { db } from "../firebase";
 import { P, Card, Btn, Spinner } from "../components/UI";
 import TimetableGrid from "./TimetableGrid";
@@ -93,7 +95,18 @@ function WorkloadTable({ list, openPhone, onToggle, printMode }) {
               {isOpen && (
                 <tr>
                   <td colSpan={COLS} style={{ background: P.bg, padding: "10px 12px 14px" }}>
-                    <TimetableGrid model={f.model} editable={false} compact />
+                    {f.hasOwn && <TimetableGrid model={f.model} editable={false} compact />}
+                    {f.pub.length > 0 && (
+                      <div style={{ fontFamily: "inherit", fontSize: 13, textAlign: "left", marginTop: f.hasOwn ? 12 : 0 }}>
+                        <b>Published classes</b> (from the uploaded timetable)
+                        {f.pub.slice().sort((a, b) => a.day - b.day || a.start - b.start).map(b => (
+                          <div key={b.id + b.publishedYear} style={{ padding: "2px 0", color: "#1a2230" }}>
+                            {DAY_NAMES[b.day].slice(0, 3)} {fmtRange(b.start, b.end)} · {b.token} · {b.sectionName}
+                            {(b.faculty.find(x => x.key === f.phone) || {}).role === "asst" ? " (Asst. Faculty)" : ""}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </td>
                 </tr>
               )}
@@ -103,6 +116,31 @@ function WorkloadTable({ list, openPhone, onToggle, printMode }) {
       </tbody>
     </table>
   );
+}
+
+// Workload of one faculty member = their published classes + whatever they filled in themselves that doesn't
+// clash in time with a published class (a published class replaces a colliding entry of their own).
+function combine(model, hasOwn, mine, pubRow, pubCap) {
+  const base = stats(model);
+  if (!mine.length) return base;
+  const counts = { theory: 0, lab: 0, drawing: 0, other: 0 };
+  const perDay = [0, 0, 0, 0, 0, 0];
+  if (hasOwn) {
+    model.cells.forEach((cells, d) => cells.forEach((c, i) => {
+      if (!c || c.type === "lunch") return;
+      const last = model.slots[Math.min(i + c.span - 1, model.slots.length - 1)];
+      const a = model.slots[i].start, b = last.start + last.dur;
+      if (mine.some(x => x.day === d && x.start < b && x.end > a)) return;
+      counts[c.type] += c.span; perDay[d] += c.span;
+    }));
+  }
+  if (pubRow) {
+    Object.keys(counts).forEach(k => { counts[k] += pubRow[k] || 0; });
+    pubRow.perDay.forEach((n, d) => { perDay[d] += n; });
+  }
+  const total = counts.theory + counts.lab + counts.drawing + counts.other;
+  const dayCap = Math.max(hasOwn ? base.dayCap : 0, pubCap, 1);
+  return { counts, total, lunch: base.lunch, perDay, free: Math.max(0, dayCap * 6 - total), cap: dayCap * 6, dayCap };
 }
 
 const SORTS = {
@@ -123,26 +161,37 @@ export default function FacultyWorkload() {
   const [showPrint, setShowPrint] = useState(false);
   const dlRef = useRef(null);
 
+  // Live: the screen follows users, faculty timetables and published master timetables as they change.
+  const [src, setSrc] = useState({ users: null, tts: null, pub: [] });
   useEffect(() => {
-    let alive = true;
-    Promise.all([getDocs(collection(db, "users")), getDocs(collection(db, "facultyTimetables"))]).then(([usersSnap, ttSnap]) => {
-      if (!alive) return;
-      const tts = {};
-      ttSnap.forEach(d => { const m = fromStore(d.data()); if (m) tts[d.id] = { model: m, term: d.data().term || "" }; });
-      const rows = [];
-      usersSnap.forEach(d => {
-        const u = d.data();
-        if (u.status !== "approved") return;
-        const t = tts[d.id];
-        const model = t ? t.model : blankModel(["—"]);
-        const s = stats(model);
-        const teach = s.counts.theory + s.counts.lab + s.counts.drawing;
-        rows.push({ phone: d.id, name: u.name || d.id, desig: u.designation || "", model, term: t ? t.term : "", s, teach, other: s.counts.other, none: !t || s.total === 0 });
-      });
-      setList(rows);
-    });
-    return () => { alive = false; };
+    const unsubs = [
+      onSnapshot(collection(db, "users"), snap => setSrc(s => ({ ...s, users: snap.docs.map(d => ({ id: d.id, ...d.data() })) }))),
+      onSnapshot(collection(db, "facultyTimetables"), snap => setSrc(s => ({ ...s, tts: snap.docs.map(d => ({ id: d.id, ...d.data() })) }))),
+      onSnapshot(collection(db, "masterTimetables"), snap => setSrc(s => ({ ...s, pub: snap.docs.map(d => ({ year: d.id, ...d.data() })) })), () => {}),
+    ];
+    return () => unsubs.forEach(u => u());
   }, []);
+
+  useEffect(() => {
+    if (!src.users || !src.tts) return;
+    const tts = {};
+    src.tts.forEach(d => { const m = fromStore(d); if (m) tts[d.id] = { model: m, term: d.term || "" }; });
+    const pubBlocks = src.pub.flatMap(p => (p.blocks || []).map(b => ({ ...b, publishedYear: p.year })));
+    const pubRows = {};
+    computeWorkload(pubBlocks).forEach(r => { pubRows[r.key] = r; });
+    const pubCap = Math.max(0, ...src.pub.flatMap(p => (p.sections || []).map(x => (x.slots || []).filter(k => !k.brk).length)));
+    const rows = [];
+    src.users.forEach(u => {
+      if (u.status !== "approved") return;
+      const t = tts[u.id];
+      const model = t ? t.model : blankModel(["—"]);
+      const mine = pubBlocks.filter(b => b.type !== "note" && b.faculty.some(f => f.key === u.id));
+      const s = combine(model, !!t, mine, pubRows[u.id], pubCap);
+      const teach = s.counts.theory + s.counts.lab + s.counts.drawing;
+      rows.push({ phone: u.id, name: u.name || u.id, desig: u.designation || "", model, hasOwn: !!t && stats(model).total > 0, pub: mine, term: t ? t.term : "", s, teach, other: s.counts.other, none: s.total === 0 });
+    });
+    setList(rows);
+  }, [src]);
 
   useEffect(() => {
     function onDoc(e) { if (dlRef.current && !dlRef.current.contains(e.target)) setDlOpen(false); }
