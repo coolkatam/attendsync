@@ -182,6 +182,7 @@ export default function TimetableUploadScreen({ user }) {
         <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>2. Upload the filled workbook</div>
         <div style={{ fontSize: 13, color: P.gray, marginBottom: 14, lineHeight: 1.6 }}>
           The sheet is read straight away. Nothing is saved or sent to any faculty member at this stage, and the check includes every timetable already published for the other years.
+          Once it has been checked, a <b>Download report (Excel)</b> button appears below with every faculty member's individual timetable, the overlaps with suggested changes, and the workload summary.
         </div>
         <input ref={fileRef} type="file" accept=".xlsx,.xlsm,.xls" onChange={onFile} style={{ display: "none" }} />
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -208,7 +209,7 @@ export default function TimetableUploadScreen({ user }) {
                 {errors.length > 0 && <Pill color={P.red} bg={P.redL}>{errors.length} problem{errors.length === 1 ? "" : "s"} to fix</Pill>}
                 {result.conflicts.length > 0 && <Pill color={P.red} bg={P.redL}>{result.conflicts.length} overlap{result.conflicts.length === 1 ? "" : "s"} to clear</Pill>}
                 {ready && <Pill color={P.green} bg={P.greenL}>No overlaps — ready to publish</Pill>}
-                <Btn small variant="outline" onClick={downloadReport}>Download report (Excel)</Btn>
+                <Btn small onClick={downloadReport}>Download report (Excel)</Btn>
                 <Btn small disabled>Publish (coming in the next update)</Btn>
               </div>
             </div>

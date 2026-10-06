@@ -26,7 +26,7 @@ export const TILE_COLORS = {
 // A row-wrapping grid of big navigation tiles; also used by sub-pages such as Coordinator Duties.
 export function TileGrid({ tiles, onSelect }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
       {tiles.map(tile => {
         const c = TILE_COLORS[tile.color] || TILE_COLORS.blue;
         const Icon = tile.icon;
