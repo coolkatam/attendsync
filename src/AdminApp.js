@@ -18,6 +18,8 @@ import FacultyProfilesDirectory from "./profile/FacultyProfilesDirectory";
 import HomeHub, { TileGrid } from "./components/HomeHub";
 import OriginalSectionsScreen from "./originalSections/OriginalSectionsScreen";
 import SectionsSetupWizard from "./sections/SectionsSetupWizard";
+import FacultyListEditor, { cleanList } from "./sections/FacultyListEditor";
+import { facultyListOf, withFaculty, suggestShort } from "./sections/subjectUtils";
 import HoDStudentLookup from "./hod/HoDStudentLookup";
 import MentorPage from "./mentor/MentorPage";
 import { P, Btn, Card, Badge, Fld, Sel, TopBar, GPill, ARow, Spinner, PeriodPicker } from "./components/UI";
@@ -1395,9 +1397,10 @@ function TabStudents({ section }) {
 
 // ── Subjects tab ───────────────────────────────────────────
 function TabSubjects({ section }) {
-  const [editId, setEditId] = useState(null); const [fp, setFp] = useState("");
+  const [editId, setEditId] = useState(null); const [fl, setFl] = useState([""]);
   const [addingSub, setAddingSub] = useState(false);
   const [newName, setNewName] = useState("");
+  const [newShort, setNewShort] = useState("");
   const [newType, setNewType] = useState("Theory");
   const [facultyList, setFacultyList] = useState([]);
   const [batchEditSubId, setBatchEditSubId] = useState(null);
@@ -1416,21 +1419,28 @@ function TabSubjects({ section }) {
   async function saveNewSubject() {
     if (!newName.trim()) return;
     const subs = [...(section.subjects || []), {
-      id: "sub-" + Date.now(), name: newName.trim(), type: newType, facultyPhone: "", batches: [],
+      id: "sub-" + Date.now(), name: newName.trim(), short: newShort.trim() || suggestShort(newName), type: newType, facultyPhone: "", faculty: [], batches: [],
     }];
     await updateDoc(doc(db, "sections", section.id), { subjects: subs });
-    setNewName(""); setNewType("Theory"); setAddingSub(false);
+    setNewName(""); setNewShort(""); setNewType("Theory"); setAddingSub(false);
   }
 
+  // The first faculty is the Main faculty; the rest are Assisting. Attendance and marks follow the Main faculty only.
   async function assignFaculty(subId) {
-    if (!fp) return;
-    const subs = (section.subjects || []).map(s => s.id === subId ? { ...s, facultyPhone: fp } : s);
+    const list = cleanList(fl);
+    if (list.length === 0) return;
+    const subs = (section.subjects || []).map(s => s.id === subId ? withFaculty(s, list) : s);
     await updateDoc(doc(db, "sections", section.id), { subjects: subs });
-    // Stamp the assignment onto the attendance/marks docs too — the security
+    // Stamp the Main faculty onto the attendance/marks docs too — the security
     // rules check this field to let only the assigned teacher write there.
-    await setDoc(doc(db, "attendance", section.id, "subjects", subId), { teacherPhone: fp }, { merge: true });
-    await setDoc(doc(db, "internalMarks", section.id, "subjects", subId), { teacherPhone: fp }, { merge: true });
-    setEditId(null); setFp("");
+    await setDoc(doc(db, "attendance", section.id, "subjects", subId), { teacherPhone: list[0] }, { merge: true });
+    await setDoc(doc(db, "internalMarks", section.id, "subjects", subId), { teacherPhone: list[0] }, { merge: true });
+    setEditId(null); setFl([""]);
+  }
+
+  async function saveShort(subId, value) {
+    const subs = (section.subjects || []).map(s => s.id === subId ? { ...s, short: value.trim() } : s);
+    await updateDoc(doc(db, "sections", section.id), { subjects: subs });
   }
 
   async function saveBatches(subId, batches) {
@@ -1459,6 +1469,7 @@ function TabSubjects({ section }) {
       {addingSub && (
         <Card>
           <Fld label="Subject name" value={newName} onChange={setNewName} placeholder="e.g. Fluid Mechanics" />
+          <Fld label="Short name (used in the timetable sheet)" value={newShort} onChange={setNewShort} placeholder={newName.trim() ? suggestShort(newName) : "e.g. FM"} />
           <Sel label="Type" value={newType} onChange={setNewType} options={[
             { value: "Theory", label: "Theory" },
             { value: "Lab", label: "Lab" },
@@ -1466,15 +1477,16 @@ function TabSubjects({ section }) {
           ]} />
           <div style={{ display: "flex", gap: 8 }}>
             <Btn small onClick={saveNewSubject}>Save</Btn>
-            <Btn small variant="ghost" onClick={() => { setAddingSub(false); setNewName(""); }}>Cancel</Btn>
+            <Btn small variant="ghost" onClick={() => { setAddingSub(false); setNewName(""); setNewShort(""); }}>Cancel</Btn>
           </div>
         </Card>
       )}
       {(section.subjects || []).map(sub => (
         <SubjectCard key={sub.id} sub={sub} section={section}
-          editId={editId} setEditId={setEditId} fp={fp} setFp={setFp}
+          editId={editId} setEditId={setEditId} fl={fl} setFl={setFl}
           facultyList={facultyList}
           onAssign={() => assignFaculty(sub.id)}
+          onSaveShort={v => saveShort(sub.id, v)}
           onDelete={() => deleteSubject(sub)}
           batchEditOpen={batchEditSubId === sub.id}
           onToggleBatchEdit={() => setBatchEditSubId(batchEditSubId === sub.id ? null : sub.id)}
@@ -1485,16 +1497,19 @@ function TabSubjects({ section }) {
   );
 }
 
-function SubjectCard({ sub, section, editId, setEditId, fp, setFp, facultyList, onAssign, onDelete, batchEditOpen, onToggleBatchEdit, onSaveBatches }) {
-  const [facName, setFacName] = useState(null);
+function SubjectCard({ sub, section, editId, setEditId, fl, setFl, facultyList, onAssign, onSaveShort, onDelete, batchEditOpen, onToggleBatchEdit, onSaveBatches }) {
+  const [names, setNames] = useState({});
   const hasBatches = sub.batches && sub.batches.length > 0;
+  const list = facultyListOf(sub);
 
   useEffect(() => {
-    if (!sub.facultyPhone) { setFacName(null); return; }
-    getDoc(doc(db, "users", sub.facultyPhone)).then(snap => {
-      setFacName(snap.exists() ? snap.data().name : sub.facultyPhone);
+    facultyListOf(sub).forEach(p => {
+      getDoc(doc(db, "users", p)).then(snap => {
+        setNames(prev => ({ ...prev, [p]: snap.exists() ? snap.data().name : p }));
+      });
     });
-  }, [sub.facultyPhone]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [list.join(",")]);
 
   const facultyOptions = (facultyList || [])
     .slice()
@@ -1506,10 +1521,18 @@ function SubjectCard({ sub, section, editId, setEditId, fp, setFp, facultyList, 
 
   return (
     <Card>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6, gap: 10 }}>
         <div>
           <div style={{ fontWeight: 600, fontSize: 14, color: P.teal }}>{sub.name}</div>
-          <Badge color="gray">{sub.type || "Theory"}</Badge>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
+            <Badge color="gray">{sub.type || "Theory"}</Badge>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: P.gray }}>
+              Short name
+              <input key={sub.short || ""} defaultValue={sub.short || ""} placeholder={suggestShort(sub.name)} aria-label={"Short name for " + sub.name}
+                onBlur={e => { if (e.target.value.trim() !== (sub.short || "")) onSaveShort(e.target.value); }}
+                style={{ width: 90, border: "1px solid " + P.border, borderRadius: 6, padding: "3px 8px", fontSize: 12.5, fontFamily: "'IBM Plex Mono', monospace" }} />
+            </label>
+          </div>
         </div>
         <button
           onClick={onDelete}
@@ -1518,27 +1541,32 @@ function SubjectCard({ sub, section, editId, setEditId, fp, setFp, facultyList, 
         >🗑</button>
       </div>
 
-      {facName ? (
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div><Badge color="teal">{facName}</Badge><div style={{ fontSize: 11, color: P.gray, marginTop: 3 }}>{sub.facultyPhone}</div></div>
-          <Btn small variant="ghost" onClick={() => { setEditId(sub.id); setFp(sub.facultyPhone); }}>Change</Btn>
+      {list.length > 0 ? (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+          <div>
+            <div><Badge color="teal">Main: {names[list[0]] || list[0]}</Badge><div style={{ fontSize: 11, color: P.gray, marginTop: 3 }}>{list[0]}</div></div>
+            {list.slice(1).map(p => (
+              <div key={p} style={{ marginTop: 6 }}><Badge color="blue">Asst: {names[p] || p}</Badge></div>
+            ))}
+          </div>
+          <Btn small variant="ghost" onClick={() => { setEditId(sub.id); setFl(list); }}>Change</Btn>
         </div>
       ) : (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <Badge color="amber">No faculty assigned</Badge>
-          <Btn small onClick={() => { setEditId(sub.id); setFp(""); }}>Assign</Btn>
+          <Btn small onClick={() => { setEditId(sub.id); setFl([""]); }}>Assign</Btn>
         </div>
       )}
       {editId === sub.id && (
         <div style={{ marginTop: 10 }}>
           {facultyOptions.length > 0 ? (
-            <Sel label="Select faculty" value={fp} onChange={setFp} options={facultyOptions} />
+            <FacultyListEditor list={fl} onChange={setFl} facultyOptions={facultyOptions} />
           ) : (
             <div style={{ fontSize: 12, color: P.gray, marginBottom: 10 }}>
               No approved faculty available to assign yet. Share your invite link and approve faculty first.
             </div>
           )}
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
             <Btn small onClick={onAssign}>Save</Btn>
             <Btn small variant="ghost" onClick={() => setEditId(null)}>Cancel</Btn>
           </div>
