@@ -224,6 +224,14 @@ service cloud.firestore {
       allow write: if isSignedIn() && request.auth.uid == phone;
     }
 
+    // ── MASTER TIMETABLES (published per year from the coordinator's uploaded sheet) ──
+    // Anyone signed in can read them (the overlap check compares a new upload against these);
+    // admins, HoD and the master admin publish.
+    match /masterTimetables/{year} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
     // ── EMPLOYEE ROSTER (for background ID verification at signup) ──
     // Only admins/HoD/master admin can read or manage this list.
     // The actual registration-time check does NOT read this directly —
@@ -18703,7 +18711,8 @@ service firebase.storage {
       "Bash(git log *)",
       "Bash(npx firebase *)",
       "Bash(node -e ' *)",
-      "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/C--Users-aruni-attendsync/3b90c489-7d4d-4efc-b7c1-68135f417da3/scratchpad/apply-layout.js\")"
+      "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/C--Users-aruni-attendsync/3b90c489-7d4d-4efc-b7c1-68135f417da3/scratchpad/apply-layout.js\")",
+      "Bash(grep -i -E \"^esbuild$|^sucrase$|^babel-node$\")"
     ]
   }
 }
@@ -29437,11 +29446,14 @@ import FacultyProfilesDirectory from "./profile/FacultyProfilesDirectory";
 import HomeHub, { TileGrid } from "./components/HomeHub";
 import OriginalSectionsScreen from "./originalSections/OriginalSectionsScreen";
 import SectionsSetupWizard from "./sections/SectionsSetupWizard";
+import FacultyListEditor, { cleanList } from "./sections/FacultyListEditor";
+import { facultyListOf, withFaculty, suggestShort } from "./sections/subjectUtils";
 import HoDStudentLookup from "./hod/HoDStudentLookup";
 import MentorPage from "./mentor/MentorPage";
 import { P, Btn, Card, Badge, Fld, Sel, TopBar, GPill, ARow, Spinner, PeriodPicker } from "./components/UI";
 import TimetablePage from "./timetable/TimetablePage";
 import FacultyWorkload from "./timetable/FacultyWorkload";
+import TimetableUploadScreen from "./timetableUpload/TimetableUploadScreen";
 import { IconAttendance, IconSections, IconMarks, IconMentor, IconSearch, IconUsers, IconTrash, IconUserCircle, IconIdCard, IconPhone, IconCalendar, IconWorkload, IconBuilding } from "./components/Icons";
 import { today, calcPct, parseCSV, downloadTemplate, exportXLS, makeKey, parseKey, groupByDateBatched, rowColor, MASTER_ADMIN_PHONE, fmtDate, validateBatches, studentsInBatch, readStatus, batchSlotKey } from "./utils";
 
@@ -29449,6 +29461,7 @@ import { today, calcPct, parseCSV, downloadTemplate, exportXLS, makeKey, parseKe
 const COORD_TILES = [
   { id: "allSections", title: "All Sections", desc: "Rosters, subjects and attendance for every section you administer.", icon: IconSections, color: "teal" },
   { id: "allSectionsMarks", title: "All Sections Internal Marks", desc: "Monitor every original section's marks — see who's locked, drafted or not started.", icon: IconMarks, color: "amber" },
+  { id: "timetableUpload", title: "Timetable Upload", desc: "Download the year's timetable template, upload it, clear overlaps and see each faculty member's workload.", icon: IconCalendar, color: "indigo" },
   { id: "users", title: "Users", desc: "Approve registrations, promote faculty, manage the employee ID roster.", icon: IconUsers, color: "slate" },
 ];
 
@@ -29669,9 +29682,18 @@ export default function AdminApp({ user, onLogout }) {
           <div style={{ fontSize: 13.5, color: P.gray, marginBottom: 20 }}>Everything you manage across all sections and users.</div>
           <TileGrid tiles={COORD_TILES} onSelect={id => {
             if (id === "allSections") { setHomeTab("allSections"); setScreen("home"); }
-            else setScreen(id === "users" ? "users" : "allSectionsMarks");
+            else setScreen(id === "users" ? "users" : id === "timetableUpload" ? "timetableUpload" : "allSectionsMarks");
           }} />
         </div>
+      </div>
+    );
+  }
+  if (screen === "timetableUpload") {
+    return (
+      <div style={{ background: P.bg, minHeight: "100vh" }}>
+        <TopBar title="Timetable Upload" subtitle={user.name}
+          right={<button onClick={() => setScreen(inCoord ? "coordinator" : "home")} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>← Back</button>} />
+        <TimetableUploadScreen user={user} />
       </div>
     );
   }
@@ -30814,9 +30836,10 @@ function TabStudents({ section }) {
 
 // ── Subjects tab ───────────────────────────────────────────
 function TabSubjects({ section }) {
-  const [editId, setEditId] = useState(null); const [fp, setFp] = useState("");
+  const [editId, setEditId] = useState(null); const [fl, setFl] = useState([""]);
   const [addingSub, setAddingSub] = useState(false);
   const [newName, setNewName] = useState("");
+  const [newShort, setNewShort] = useState("");
   const [newType, setNewType] = useState("Theory");
   const [facultyList, setFacultyList] = useState([]);
   const [batchEditSubId, setBatchEditSubId] = useState(null);
@@ -30835,21 +30858,28 @@ function TabSubjects({ section }) {
   async function saveNewSubject() {
     if (!newName.trim()) return;
     const subs = [...(section.subjects || []), {
-      id: "sub-" + Date.now(), name: newName.trim(), type: newType, facultyPhone: "", batches: [],
+      id: "sub-" + Date.now(), name: newName.trim(), short: newShort.trim() || suggestShort(newName), type: newType, facultyPhone: "", faculty: [], batches: [],
     }];
     await updateDoc(doc(db, "sections", section.id), { subjects: subs });
-    setNewName(""); setNewType("Theory"); setAddingSub(false);
+    setNewName(""); setNewShort(""); setNewType("Theory"); setAddingSub(false);
   }
 
+  // The first faculty is the Main faculty; the rest are Assisting. Attendance and marks follow the Main faculty only.
   async function assignFaculty(subId) {
-    if (!fp) return;
-    const subs = (section.subjects || []).map(s => s.id === subId ? { ...s, facultyPhone: fp } : s);
+    const list = cleanList(fl);
+    if (list.length === 0) return;
+    const subs = (section.subjects || []).map(s => s.id === subId ? withFaculty(s, list) : s);
     await updateDoc(doc(db, "sections", section.id), { subjects: subs });
-    // Stamp the assignment onto the attendance/marks docs too — the security
+    // Stamp the Main faculty onto the attendance/marks docs too — the security
     // rules check this field to let only the assigned teacher write there.
-    await setDoc(doc(db, "attendance", section.id, "subjects", subId), { teacherPhone: fp }, { merge: true });
-    await setDoc(doc(db, "internalMarks", section.id, "subjects", subId), { teacherPhone: fp }, { merge: true });
-    setEditId(null); setFp("");
+    await setDoc(doc(db, "attendance", section.id, "subjects", subId), { teacherPhone: list[0] }, { merge: true });
+    await setDoc(doc(db, "internalMarks", section.id, "subjects", subId), { teacherPhone: list[0] }, { merge: true });
+    setEditId(null); setFl([""]);
+  }
+
+  async function saveShort(subId, value) {
+    const subs = (section.subjects || []).map(s => s.id === subId ? { ...s, short: value.trim() } : s);
+    await updateDoc(doc(db, "sections", section.id), { subjects: subs });
   }
 
   async function saveBatches(subId, batches) {
@@ -30878,6 +30908,7 @@ function TabSubjects({ section }) {
       {addingSub && (
         <Card>
           <Fld label="Subject name" value={newName} onChange={setNewName} placeholder="e.g. Fluid Mechanics" />
+          <Fld label="Short name (used in the timetable sheet)" value={newShort} onChange={setNewShort} placeholder={newName.trim() ? suggestShort(newName) : "e.g. FM"} />
           <Sel label="Type" value={newType} onChange={setNewType} options={[
             { value: "Theory", label: "Theory" },
             { value: "Lab", label: "Lab" },
@@ -30885,15 +30916,16 @@ function TabSubjects({ section }) {
           ]} />
           <div style={{ display: "flex", gap: 8 }}>
             <Btn small onClick={saveNewSubject}>Save</Btn>
-            <Btn small variant="ghost" onClick={() => { setAddingSub(false); setNewName(""); }}>Cancel</Btn>
+            <Btn small variant="ghost" onClick={() => { setAddingSub(false); setNewName(""); setNewShort(""); }}>Cancel</Btn>
           </div>
         </Card>
       )}
       {(section.subjects || []).map(sub => (
         <SubjectCard key={sub.id} sub={sub} section={section}
-          editId={editId} setEditId={setEditId} fp={fp} setFp={setFp}
+          editId={editId} setEditId={setEditId} fl={fl} setFl={setFl}
           facultyList={facultyList}
           onAssign={() => assignFaculty(sub.id)}
+          onSaveShort={v => saveShort(sub.id, v)}
           onDelete={() => deleteSubject(sub)}
           batchEditOpen={batchEditSubId === sub.id}
           onToggleBatchEdit={() => setBatchEditSubId(batchEditSubId === sub.id ? null : sub.id)}
@@ -30904,16 +30936,19 @@ function TabSubjects({ section }) {
   );
 }
 
-function SubjectCard({ sub, section, editId, setEditId, fp, setFp, facultyList, onAssign, onDelete, batchEditOpen, onToggleBatchEdit, onSaveBatches }) {
-  const [facName, setFacName] = useState(null);
+function SubjectCard({ sub, section, editId, setEditId, fl, setFl, facultyList, onAssign, onSaveShort, onDelete, batchEditOpen, onToggleBatchEdit, onSaveBatches }) {
+  const [names, setNames] = useState({});
   const hasBatches = sub.batches && sub.batches.length > 0;
+  const list = facultyListOf(sub);
 
   useEffect(() => {
-    if (!sub.facultyPhone) { setFacName(null); return; }
-    getDoc(doc(db, "users", sub.facultyPhone)).then(snap => {
-      setFacName(snap.exists() ? snap.data().name : sub.facultyPhone);
+    facultyListOf(sub).forEach(p => {
+      getDoc(doc(db, "users", p)).then(snap => {
+        setNames(prev => ({ ...prev, [p]: snap.exists() ? snap.data().name : p }));
+      });
     });
-  }, [sub.facultyPhone]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [list.join(",")]);
 
   const facultyOptions = (facultyList || [])
     .slice()
@@ -30925,10 +30960,18 @@ function SubjectCard({ sub, section, editId, setEditId, fp, setFp, facultyList, 
 
   return (
     <Card>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6, gap: 10 }}>
         <div>
           <div style={{ fontWeight: 600, fontSize: 14, color: P.teal }}>{sub.name}</div>
-          <Badge color="gray">{sub.type || "Theory"}</Badge>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
+            <Badge color="gray">{sub.type || "Theory"}</Badge>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: P.gray }}>
+              Short name
+              <input key={sub.short || ""} defaultValue={sub.short || ""} placeholder={suggestShort(sub.name)} aria-label={"Short name for " + sub.name}
+                onBlur={e => { if (e.target.value.trim() !== (sub.short || "")) onSaveShort(e.target.value); }}
+                style={{ width: 90, border: "1px solid " + P.border, borderRadius: 6, padding: "3px 8px", fontSize: 12.5, fontFamily: "'IBM Plex Mono', monospace" }} />
+            </label>
+          </div>
         </div>
         <button
           onClick={onDelete}
@@ -30937,27 +30980,32 @@ function SubjectCard({ sub, section, editId, setEditId, fp, setFp, facultyList, 
         >🗑</button>
       </div>
 
-      {facName ? (
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div><Badge color="teal">{facName}</Badge><div style={{ fontSize: 11, color: P.gray, marginTop: 3 }}>{sub.facultyPhone}</div></div>
-          <Btn small variant="ghost" onClick={() => { setEditId(sub.id); setFp(sub.facultyPhone); }}>Change</Btn>
+      {list.length > 0 ? (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+          <div>
+            <div><Badge color="teal">Main: {names[list[0]] || list[0]}</Badge><div style={{ fontSize: 11, color: P.gray, marginTop: 3 }}>{list[0]}</div></div>
+            {list.slice(1).map(p => (
+              <div key={p} style={{ marginTop: 6 }}><Badge color="blue">Asst: {names[p] || p}</Badge></div>
+            ))}
+          </div>
+          <Btn small variant="ghost" onClick={() => { setEditId(sub.id); setFl(list); }}>Change</Btn>
         </div>
       ) : (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <Badge color="amber">No faculty assigned</Badge>
-          <Btn small onClick={() => { setEditId(sub.id); setFp(""); }}>Assign</Btn>
+          <Btn small onClick={() => { setEditId(sub.id); setFl([""]); }}>Assign</Btn>
         </div>
       )}
       {editId === sub.id && (
         <div style={{ marginTop: 10 }}>
           {facultyOptions.length > 0 ? (
-            <Sel label="Select faculty" value={fp} onChange={setFp} options={facultyOptions} />
+            <FacultyListEditor list={fl} onChange={setFl} facultyOptions={facultyOptions} />
           ) : (
             <div style={{ fontSize: 12, color: P.gray, marginBottom: 10 }}>
               No approved faculty available to assign yet. Share your invite link and approve faculty first.
             </div>
           )}
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
             <Btn small onClick={onAssign}>Save</Btn>
             <Btn small variant="ghost" onClick={() => setEditId(null)}>Cancel</Btn>
           </div>
@@ -34091,6 +34139,7 @@ import { approveUser, rejectUser, makeAdmin, makeFaculty, makeHod, deleteUser, r
 import { P, TopBar } from "../components/UI";
 import TimetablePage from "../timetable/TimetablePage";
 import FacultyWorkload from "../timetable/FacultyWorkload";
+import TimetableUploadScreen from "../timetableUpload/TimetableUploadScreen";
 import { IconAttendance, IconSearch, IconUsers, IconUserCircle, IconMarks, IconCalendar, IconWorkload } from "../components/Icons";
 
 export default function HoDApp({ user, onLogout }) {
@@ -34132,6 +34181,7 @@ export default function HoDApp({ user, onLogout }) {
             label: "Department oversight",
             tiles: [
               { id: "studentData", title: "Student Data", desc: "Look up any student's SGPA, CGPA, backlogs and attendance trend.", icon: IconSearch, color: "green" },
+              { id: "timetableUpload", title: "Timetable Upload", desc: "Download the year's timetable template, upload it, clear overlaps and see each faculty member's workload.", icon: IconCalendar, color: "indigo" },
               { id: "workload", title: "Faculty Workload", desc: "Weekly periods for every faculty member, from their timetables.", icon: IconWorkload, color: "indigo" },
               { id: "allSectionsMarks", title: "All Sections Internal Marks", desc: "Monitor every original section's marks — see who's locked, drafted or not started.", icon: IconMarks, color: "amber" },
               { id: "profiles", title: "Faculty Profiles", desc: "Directory of every faculty member's bio, publications and research.", icon: IconUsers, color: "rose" },
@@ -34152,6 +34202,7 @@ export default function HoDApp({ user, onLogout }) {
     myMarks: "My Subject Internal Marks",
     timetable: "My Timetable",
     workload: "Faculty Workload",
+    timetableUpload: "Timetable Upload",
     profiles: "Faculty Profiles",
     users: "Users",
     profile: "My Profile",
@@ -34175,6 +34226,8 @@ export default function HoDApp({ user, onLogout }) {
       {tab === "timetable" && <TimetablePage user={user} />}
 
       {tab === "workload" && <FacultyWorkload />}
+
+      {tab === "timetableUpload" && <TimetableUploadScreen user={user} />}
 
       {tab === "profiles" && (
         <div style={{ padding: "24px 24px 80px", maxWidth: "min(1700px, 92vw)", margin: "0 auto" }}>
@@ -39078,14 +39131,74 @@ export default function ResumeView({ personName, phone, profile, onClose }) {
 === END_FILE: .\src\profile\ResumeView.jsx ===
 
 
+=== START_FILE: .\src\sections\FacultyListEditor.jsx ===
+
+// src/sections/FacultyListEditor.jsx
+// An ordered list of faculty for one subject: the first row is the Main
+// faculty (attendance and marks stay with them), the rest are Assisting
+// faculty who share the timetable load. An empty string is a row not yet filled in.
+
+import React from "react";
+import { P, Btn } from "../components/UI";
+
+export function cleanList(list) {
+  const out = [];
+  (list || []).forEach(p => { if (p && !out.includes(p)) out.push(p); });
+  return out;
+}
+
+export default function FacultyListEditor({ list, onChange, facultyOptions }) {
+  const rows = list.length ? list : [""];
+  const setAt = (i, v) => { const n = rows.slice(); n[i] = v; onChange(n); };
+  const removeAt = i => { const n = rows.filter((_, k) => k !== i); onChange(n.length ? n : [""]); };
+  const makeMain = i => { const n = rows.slice(); const [x] = n.splice(i, 1); n.unshift(x); onChange(n); };
+
+  return (
+    <div>
+      {rows.map((p, i) => (
+        <div key={i} style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
+          <span style={{ width: 158, fontSize: 12, fontWeight: 700, borderRadius: 20, padding: "5px 12px", textAlign: "center", boxSizing: "border-box", background: i === 0 ? P.blueL : P.bg, color: i === 0 ? P.blue : P.gray, border: "1px solid " + (i === 0 ? "transparent" : P.border) }}>
+            {i === 0 ? "Main faculty" : "Assisting faculty " + i}
+          </span>
+          <select value={p} onChange={e => setAt(i, e.target.value)} aria-label={i === 0 ? "Main faculty" : "Assisting faculty " + i}
+            style={{ flex: 1, minWidth: 220, border: "1px solid " + P.border, borderRadius: 8, padding: "9px 12px", fontSize: 14, fontFamily: "inherit", background: "#fff" }}>
+            <option value="">— select faculty —</option>
+            {facultyOptions.filter(o => o.value === p || !rows.includes(o.value)).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          {i > 0 && p && (
+            <button type="button" onClick={() => makeMain(i)}
+              style={{ border: "1px solid " + P.border, background: "#fff", borderRadius: 8, padding: "7px 12px", fontSize: 12.5, fontWeight: 600, color: P.blue, cursor: "pointer", fontFamily: "inherit" }}>
+              Make main
+            </button>
+          )}
+          {(rows.length > 1 || p) && (
+            <button type="button" onClick={() => removeAt(i)} aria-label="Remove this faculty"
+              style={{ border: "1px solid " + P.border, background: "#fff", borderRadius: 8, width: 34, height: 34, color: P.red, cursor: "pointer", fontSize: 15, fontFamily: "inherit" }}>
+              ×
+            </button>
+          )}
+        </div>
+      ))}
+      <Btn small variant="outline" onClick={() => onChange([...rows, ""])}>+ Add faculty</Btn>
+      <div style={{ fontSize: 12, color: P.gray, marginTop: 8, lineHeight: 1.5 }}>
+        The first faculty is the Main faculty, who marks attendance and enters marks. Assisting faculty share the subject's timetable workload.
+      </div>
+    </div>
+  );
+}
+
+
+=== END_FILE: .\src\sections\FacultyListEditor.jsx ===
+
+
 === START_FILE: .\src\sections\SectionsSetupWizard.jsx ===
 
 // src/sections/SectionsSetupWizard.jsx
-// Replaces the old single-section "New section" form with a 3-step flow:
+// A 3-step flow for setting up a year's sections:
 //   1. Sections  — Year + Section-letter (or a custom label like AL/SL) → Save
-//   2. Subjects  — paste a subject list once, apply it to any of your sections
-//   3. Assign Faculty — pick Subject + Faculty, tick every section they teach
-//      it in, and one save assigns (or unassigns) all of them at once.
+//   2. Subjects  — subject name + short name (+ type), applied to any of your sections
+//   3. Assign Faculty — pick a subject, build its ordered faculty list (Main
+//      first, then Assisting), tick the sections it applies to, one save.
 // Student rosters and periods-per-day are still set from a section's own
 // detail page — this wizard is only about section names, subjects and who
 // teaches what.
@@ -39095,12 +39208,16 @@ import { collection, doc, getDoc, setDoc, updateDoc, onSnapshot } from "firebase
 import { db } from "../firebase";
 import { P, Btn, Card, Sel, Fld, TopBar } from "../components/UI";
 import { MASTER_ADMIN_PHONE } from "../utils";
+import FacultyListEditor, { cleanList } from "./FacultyListEditor";
+import { facultyListOf, sameList, withFaculty, suggestShort, guessType, shortOf, SUBJECT_TYPES } from "./subjectUtils";
 
+const newId = () => "sub-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
 const YEARS = ["I", "II", "III", "IV"];
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
 const thStyle = { padding: "8px 10px", textAlign: "left", fontWeight: 600, fontSize: 11.5, textTransform: "uppercase", letterSpacing: "0.03em", color: P.gray, borderBottom: "1.5px solid " + P.border };
 const tdStyle = { padding: "9px 10px", fontSize: 13, borderBottom: "1px solid " + P.border, verticalAlign: "top" };
+const cellInput = { width: "100%", boxSizing: "border-box", border: "1px solid " + P.border, borderRadius: 8, padding: "8px 10px", fontSize: 14, fontFamily: "inherit", background: "#fff" };
 
 export default function SectionsSetupWizard({ user, onBack }) {
   const [step, setStep] = useState(1);
@@ -39130,36 +39247,57 @@ export default function SectionsSetupWizard({ user, onBack }) {
     });
   }
 
-  async function saveSubjectsToSections(subjectNames, sectionIds) {
+  // subjects: [{ name, short, type }]. A subject already in a section (same name) is not added twice,
+  // but picks up its short name if it didn't have one.
+  async function saveSubjectsToSections(subjects, sectionIds) {
     for (const secId of sectionIds) {
       const sec = sections.find(s => s.id === secId);
       if (!sec) continue;
-      const existingNames = new Set((sec.subjects || []).map(s => s.name.trim().toLowerCase()));
-      const toAdd = subjectNames.filter(n => !existingNames.has(n.trim().toLowerCase()));
-      if (toAdd.length === 0) continue;
-      const newSubs = toAdd.map((n, i) => ({ id: "sub-" + Date.now() + "-" + i, name: n.trim(), type: "Theory", facultyPhone: "", batches: [] }));
-      await updateDoc(doc(db, "sections", secId), { subjects: [...(sec.subjects || []), ...newSubs] });
+      const list = (sec.subjects || []).map(s => ({ ...s }));
+      let changed = false;
+      subjects.forEach(inc => {
+        const hit = list.find(s => s.name.trim().toLowerCase() === inc.name.trim().toLowerCase());
+        if (hit) {
+          if (!hit.short) { hit.short = inc.short; changed = true; }
+        } else {
+          list.push({ id: newId(), name: inc.name.trim(), short: inc.short, type: inc.type, facultyPhone: "", faculty: [], batches: [] });
+          changed = true;
+        }
+      });
+      if (changed) await updateDoc(doc(db, "sections", secId), { subjects: list });
     }
   }
 
-  // Ticked sections get this faculty assigned to `subjectName`; sections that
-  // currently have THIS faculty assigned but were left unticked get cleared —
-  // the checkboxes are the source of truth for "who's assigned here".
-  async function assignFacultyBulk(subjectName, facultyPhone, checkedSectionIds) {
+  // shortByName: { subject name -> short name }, applied to every one of my sections that has that subject.
+  async function saveShortNames(shortByName) {
+    for (const sec of sections) {
+      let changed = false;
+      const list = (sec.subjects || []).map(s => {
+        const v = shortByName[s.name];
+        if (v !== undefined && v !== (s.short || "")) { changed = true; return { ...s, short: v }; }
+        return s;
+      });
+      if (changed) await updateDoc(doc(db, "sections", sec.id), { subjects: list });
+    }
+  }
+
+  // Ticked sections get this ordered faculty list for `subjectName`. Unticked sections that still carry the
+  // list this form was loaded with are cleared, so the ticks are the source of truth for "who's assigned here".
+  // Attendance and marks follow the Main faculty only (the first in the list).
+  async function assignFacultyBulk(subjectName, list, checkedSectionIds, originalList) {
     const relevant = sections.filter(sec => (sec.subjects || []).some(s => s.name === subjectName));
     for (const sec of relevant) {
       const sub = sec.subjects.find(s => s.name === subjectName);
-      const shouldBeAssigned = checkedSectionIds.includes(sec.id);
-      let newPhone = sub.facultyPhone || "";
-      if (shouldBeAssigned) newPhone = facultyPhone;
-      else if (sub.facultyPhone === facultyPhone) newPhone = "";
-      if (newPhone === (sub.facultyPhone || "")) continue;
-      const updatedSubs = sec.subjects.map(s => s.id === sub.id ? { ...s, facultyPhone: newPhone } : s);
-      await updateDoc(doc(db, "sections", sec.id), { subjects: updatedSubs });
-      if (newPhone) {
-        await setDoc(doc(db, "attendance", sec.id, "subjects", sub.id), { teacherPhone: newPhone }, { merge: true });
-        await setDoc(doc(db, "internalMarks", sec.id, "subjects", sub.id), { teacherPhone: newPhone }, { merge: true });
-      }
+      const cur = facultyListOf(sub);
+      let next = cur;
+      if (checkedSectionIds.includes(sec.id)) next = list;
+      else if (sameList(cur, originalList)) next = [];
+      if (sameList(next, cur)) continue;
+      const updated = sec.subjects.map(s => s.id === sub.id ? withFaculty(s, next) : s);
+      await updateDoc(doc(db, "sections", sec.id), { subjects: updated });
+      const main = next[0] || "";
+      await setDoc(doc(db, "attendance", sec.id, "subjects", sub.id), { teacherPhone: main }, { merge: true });
+      await setDoc(doc(db, "internalMarks", sec.id, "subjects", sub.id), { teacherPhone: main }, { merge: true });
     }
   }
 
@@ -39169,7 +39307,7 @@ export default function SectionsSetupWizard({ user, onBack }) {
       <StepTabs step={step} setStep={setStep} />
       <div style={{ padding: 16, maxWidth: 900, margin: "0 auto" }}>
         {step === 1 && <StepSections sections={sections} onCreate={createSection} onNext={() => setStep(2)} />}
-        {step === 2 && <StepSubjects sections={sections} onSave={saveSubjectsToSections} onBack={() => setStep(1)} onNext={() => setStep(3)} />}
+        {step === 2 && <StepSubjects sections={sections} onSave={saveSubjectsToSections} onSaveShorts={saveShortNames} onBack={() => setStep(1)} onNext={() => setStep(3)} />}
         {step === 3 && <StepAssign sections={sections} facultyList={facultyList} onAssign={assignFacultyBulk} onBack={() => setStep(2)} onDone={onBack} />}
       </div>
     </div>
@@ -39252,14 +39390,34 @@ function StepSections({ sections, onCreate, onNext }) {
 }
 
 // ── Step 2 — Subjects ──────────────────────────────────────
-function StepSubjects({ sections, onSave, onBack, onNext }) {
-  const [text, setText] = useState("");
+const blankRow = () => ({ name: "", short: "", type: "" });
+
+function StepSubjects({ sections, onSave, onSaveShorts, onBack, onNext }) {
+  const [rows, setRows] = useState([blankRow(), blankRow(), blankRow()]);
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState("");
   const [uncheckedIds, setUncheckedIds] = useState(new Set());
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState(null);
+  const [shortEdits, setShortEdits] = useState({});
+  const [savingShorts, setSavingShorts] = useState(false);
 
   const selectedIds = sections.filter(s => !uncheckedIds.has(s.id)).map(s => s.id);
-  const subjectNames = text.split("\n").map(s => s.trim()).filter(Boolean);
+  const filled = rows.filter(r => r.name.trim());
+  const subjects = filled.map(r => ({ name: r.name.trim(), short: r.short.trim() || suggestShort(r.name), type: r.type || guessType(r.name) }));
+
+  const setRow = (i, patch) => setRows(prev => prev.map((r, k) => k === i ? { ...r, ...patch } : r));
+  const removeRow = i => setRows(prev => prev.length > 1 ? prev.filter((_, k) => k !== i) : [blankRow()]);
+
+  function addPasted() {
+    const parsed = pasteText.split("\n").map(l => l.trim()).filter(Boolean).map(l => {
+      const m = /^(.*?)[\t,]\s*(.+)$/.exec(l);
+      return m ? { name: m[1].trim(), short: m[2].trim(), type: "" } : { name: l, short: "", type: "" };
+    });
+    if (!parsed.length) return;
+    setRows(prev => [...prev.filter(r => r.name.trim()), ...parsed]);
+    setPasteText(""); setPasteOpen(false);
+  }
 
   function toggle(id) {
     setUncheckedIds(prev => {
@@ -39270,24 +39428,81 @@ function StepSubjects({ sections, onSave, onBack, onNext }) {
   }
 
   async function save() {
-    if (subjectNames.length === 0 || selectedIds.length === 0) return;
+    if (subjects.length === 0 || selectedIds.length === 0) return;
     setSaving(true);
     setSavedMsg(null);
-    await onSave(subjectNames, selectedIds);
+    await onSave(subjects, selectedIds);
     setSaving(false);
-    setSavedMsg("Saved " + subjectNames.length + " subject" + (subjectNames.length === 1 ? "" : "s") + " to " + selectedIds.length + " section" + (selectedIds.length === 1 ? "" : "s") + ".");
+    setSavedMsg("Saved " + subjects.length + " subject" + (subjects.length === 1 ? "" : "s") + " to " + selectedIds.length + " section" + (selectedIds.length === 1 ? "" : "s") + ".");
+    setRows([blankRow(), blankRow(), blankRow()]);
+  }
+
+  // Existing subjects, one line per distinct name, with the short name they currently carry.
+  const existing = [];
+  const seen = new Set();
+  sections.forEach(s => (s.subjects || []).forEach(sub => {
+    if (seen.has(sub.name)) { const e = existing.find(x => x.name === sub.name); if (e && !e.short && sub.short) e.short = sub.short; return; }
+    seen.add(sub.name);
+    existing.push({ name: sub.name, short: sub.short || "" });
+  }));
+  existing.sort((a, b) => a.name.localeCompare(b.name));
+  const shortValue = e => shortEdits[e.name] !== undefined ? shortEdits[e.name] : e.short;
+  const dirtyShorts = Object.keys(shortEdits).filter(n => shortEdits[n] !== (existing.find(e => e.name === n) || {}).short);
+
+  async function saveShorts() {
+    setSavingShorts(true);
+    const out = {};
+    dirtyShorts.forEach(n => { out[n] = shortEdits[n].trim(); });
+    await onSaveShorts(out);
+    setShortEdits({});
+    setSavingShorts(false);
   }
 
   return (
     <div>
       <Card>
-        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Upload subject names</div>
+        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Add subjects</div>
         <div style={{ fontSize: 12.5, color: P.gray, marginBottom: 14, lineHeight: 1.6 }}>
-          Type or paste one subject per line, then tick which sections to add them to below. A subject already present in a section (same name) won't be added twice.
+          Give each subject its full name and a short name. The short name is what goes in the timetable sheet, like TD for Thermodynamics. Leave the short name blank to use the suggestion. A subject already in a section (same name) won't be added twice.
         </div>
-        <textarea value={text} onChange={e => setText(e.target.value)} rows={5}
-          placeholder={"Engineering Mechanics\nThermodynamics\nFluid Mechanics Lab"}
-          style={{ width: "100%", boxSizing: "border-box", border: "1px solid " + P.border, borderRadius: 8, padding: "10px 12px", fontSize: 14, fontFamily: "inherit", marginBottom: 16 }} />
+
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 520 }}>
+            <thead>
+              <tr><th style={thStyle}>Subject name</th><th style={{ ...thStyle, width: 150 }}>Short name</th><th style={{ ...thStyle, width: 150 }}>Type</th><th style={{ ...thStyle, width: 40 }} /></tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i}>
+                  <td style={{ ...tdStyle, paddingLeft: 0 }}><input aria-label={"Subject name " + (i + 1)} value={r.name} onChange={e => setRow(i, { name: e.target.value })} placeholder="e.g. Mechanics of Solids" style={cellInput} /></td>
+                  <td style={tdStyle}><input aria-label={"Short name " + (i + 1)} value={r.short} onChange={e => setRow(i, { short: e.target.value })} placeholder={r.name.trim() ? suggestShort(r.name) : "e.g. MOS"} style={{ ...cellInput, fontFamily: "'IBM Plex Mono', monospace" }} /></td>
+                  <td style={tdStyle}>
+                    <select aria-label={"Type " + (i + 1)} value={r.type} onChange={e => setRow(i, { type: e.target.value })} style={cellInput}>
+                      <option value="">{r.name.trim() ? "Auto (" + guessType(r.name) + ")" : "Auto"}</option>
+                      {SUBJECT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </td>
+                  <td style={{ ...tdStyle, paddingRight: 0 }}>
+                    <button type="button" onClick={() => removeRow(i)} aria-label="Remove this row" style={{ border: "1px solid " + P.border, background: "#fff", borderRadius: 8, width: 32, height: 34, color: P.red, cursor: "pointer", fontSize: 15 }}>×</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ display: "flex", gap: 8, margin: "10px 0 16px", flexWrap: "wrap" }}>
+          <Btn small variant="outline" onClick={() => setRows(r => [...r, blankRow()])}>+ Add subject</Btn>
+          <Btn small variant="ghost" onClick={() => setPasteOpen(v => !v)}>{pasteOpen ? "Close paste box" : "Paste a list"}</Btn>
+        </div>
+        {pasteOpen && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12.5, color: P.gray, marginBottom: 6 }}>One subject per line. To give a short name too, put it after a comma or tab: <b>Thermodynamics, TD</b>. Pasting two columns from Excel works.</div>
+            <textarea value={pasteText} onChange={e => setPasteText(e.target.value)} rows={5}
+              placeholder={"Thermodynamics, TD\nFluid Mechanics and Hydraulic Machinery, FMHM\nMechanics of Solids, MOS"}
+              style={{ ...cellInput, marginBottom: 8 }} />
+            <Btn small onClick={addPasted} disabled={!pasteText.trim()}>Add these to the table</Btn>
+          </div>
+        )}
 
         <div style={{ fontSize: 12, fontWeight: 600, color: P.gray, marginBottom: 8, textTransform: "uppercase" }}>Add to these sections</div>
         {sections.length === 0 ? (
@@ -39305,10 +39520,29 @@ function StepSubjects({ sections, onSave, onBack, onNext }) {
         )}
 
         {savedMsg && <div style={{ background: P.greenL, color: P.green, fontSize: 13, padding: "8px 12px", borderRadius: 8, marginBottom: 12 }}>{savedMsg}</div>}
-        <Btn onClick={save} disabled={saving || subjectNames.length === 0 || selectedIds.length === 0}>
-          {saving ? "Saving…" : "Save " + (subjectNames.length || 0) + " subject" + (subjectNames.length === 1 ? "" : "s") + " to " + selectedIds.length + " section" + (selectedIds.length === 1 ? "" : "s")}
+        <Btn onClick={save} disabled={saving || subjects.length === 0 || selectedIds.length === 0}>
+          {saving ? "Saving…" : "Save " + subjects.length + " subject" + (subjects.length === 1 ? "" : "s") + " to " + selectedIds.length + " section" + (selectedIds.length === 1 ? "" : "s")}
         </Btn>
       </Card>
+
+      {existing.length > 0 && (
+        <Card>
+          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Short names of existing subjects</div>
+          <div style={{ fontSize: 12.5, color: P.gray, marginBottom: 12, lineHeight: 1.6 }}>
+            Subjects added earlier may not have a short name yet. Blank ones show a suggestion; correct any that are wrong and save. The change applies to every one of your sections that has the subject.
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "8px 18px", marginBottom: 14 }}>
+            {existing.map(e => (
+              <div key={e.name} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={e.name}>{e.name}</span>
+                <input aria-label={"Short name for " + e.name} value={shortValue(e)} onChange={ev => setShortEdits(prev => ({ ...prev, [e.name]: ev.target.value }))}
+                  placeholder={suggestShort(e.name)} style={{ ...cellInput, width: 110, fontFamily: "'IBM Plex Mono', monospace" }} />
+              </div>
+            ))}
+          </div>
+          <Btn small onClick={saveShorts} disabled={savingShorts || dirtyShorts.length === 0}>{savingShorts ? "Saving…" : "Save short names"}</Btn>
+        </Card>
+      )}
 
       <div style={{ display: "flex", justifyContent: "space-between" }}>
         <Btn variant="outline" onClick={onBack}>← Back</Btn>
@@ -39322,9 +39556,11 @@ function StepSubjects({ sections, onSave, onBack, onNext }) {
 function StepAssign({ sections, facultyList, onAssign, onBack, onDone }) {
   const subjectNames = Array.from(new Set(sections.flatMap(s => (s.subjects || []).map(sub => sub.name)))).sort();
   const [subjectName, setSubjectName] = useState("");
-  const [facultyPhone, setFacultyPhone] = useState("");
+  const [list, setList] = useState([""]);
+  const [originalList, setOriginalList] = useState([]);
   const [checkedIds, setCheckedIds] = useState(new Set());
   const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
 
   useEffect(() => {
     if (!subjectName && subjectNames.length > 0) setSubjectName(subjectNames[0]);
@@ -39333,16 +39569,18 @@ function StepAssign({ sections, facultyList, onAssign, onBack, onDone }) {
 
   const relevantSections = sections.filter(s => (s.subjects || []).some(sub => sub.name === subjectName));
 
+  // Picking a subject loads the faculty list it already has (taken from the first section that has one)
+  // and ticks every section that carries exactly that list.
   useEffect(() => {
-    if (!facultyPhone) { setCheckedIds(new Set()); return; }
-    const pre = new Set(
-      relevantSections
-        .filter(s => (s.subjects.find(sub => sub.name === subjectName) || {}).facultyPhone === facultyPhone)
-        .map(s => s.id)
-    );
-    setCheckedIds(pre);
+    setMsg(null);
+    const lists = relevantSections.map(s => ({ id: s.id, list: facultyListOf(s.subjects.find(sub => sub.name === subjectName)) }));
+    const first = lists.find(l => l.list.length);
+    const base = first ? first.list : [];
+    setList(base.length ? base : [""]);
+    setOriginalList(base);
+    setCheckedIds(new Set(base.length ? lists.filter(l => sameList(l.list, base)).map(l => l.id) : []));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subjectName, facultyPhone]);
+  }, [subjectName]);
 
   function toggle(id) {
     setCheckedIds(prev => {
@@ -39352,11 +39590,15 @@ function StepAssign({ sections, facultyList, onAssign, onBack, onDone }) {
     });
   }
 
+  const cleaned = cleanList(list);
+
   async function save() {
-    if (!subjectName || !facultyPhone) return;
+    if (!subjectName || cleaned.length === 0) return;
     setSaving(true);
-    await onAssign(subjectName, facultyPhone, Array.from(checkedIds));
+    await onAssign(subjectName, cleaned, Array.from(checkedIds), originalList);
+    setOriginalList(cleaned);
     setSaving(false);
+    setMsg("Saved. " + (checkedIds.size) + " section" + (checkedIds.size === 1 ? "" : "s") + " now " + (checkedIds.size === 1 ? "has" : "have") + " " + cleaned.length + " faculty for " + subjectName + ".");
   }
 
   const facultyOptions = facultyList.slice()
@@ -39365,43 +39607,46 @@ function StepAssign({ sections, facultyList, onAssign, onBack, onDone }) {
       const phoneVal = u.phone || u.id;
       return { value: phoneVal, label: (u.name || phoneVal) + " · " + phoneVal };
     });
+  const nameOf = phone => (facultyOptions.find(o => o.value === phone) || { label: phone }).label.split(" · ")[0];
 
   return (
     <div>
       <Card>
-        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Assign a faculty member to a subject</div>
+        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Assign faculty to a subject</div>
         <div style={{ fontSize: 12.5, color: P.gray, marginBottom: 16, lineHeight: 1.6 }}>
-          Pick the subject, pick the faculty member, then tick every section they should be assigned to for it — one save assigns all of them at once.
+          Pick the subject, set its faculty (the first is the Main faculty, add more as Assisting), then tick every section this applies to. One save assigns them all.
         </div>
         {subjectNames.length === 0 ? (
           <div style={{ color: P.gray, fontSize: 13 }}>No subjects yet — go back and add some first.</div>
         ) : (
           <>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <Sel label="Subject" value={subjectName} onChange={setSubjectName} options={subjectNames.map(n => ({ value: n, label: n }))} />
-              <Sel label="Faculty" value={facultyPhone} onChange={setFacultyPhone} options={facultyOptions} />
-            </div>
+            <Sel label="Subject" value={subjectName} onChange={setSubjectName} options={subjectNames.map(n => ({ value: n, label: n }))} />
 
-            <div style={{ fontSize: 12, fontWeight: 600, color: P.gray, marginBottom: 8, textTransform: "uppercase" }}>
-              Tick every section this faculty member should teach "{subjectName}" in
+            <div style={{ fontSize: 12, fontWeight: 600, color: P.gray, margin: "4px 0 8px", textTransform: "uppercase" }}>Faculty for "{subjectName}"</div>
+            <FacultyListEditor list={list} onChange={setList} facultyOptions={facultyOptions} />
+
+            <div style={{ fontSize: 12, fontWeight: 600, color: P.gray, margin: "18px 0 8px", textTransform: "uppercase" }}>
+              Tick every section this faculty list applies to
             </div>
             <div style={{ border: "1.5px solid " + P.border, borderRadius: 10, padding: 6, maxHeight: 220, overflowY: "auto", marginBottom: 16 }}>
               {relevantSections.map(s => {
-                const sub = s.subjects.find(x => x.name === subjectName);
+                const cur = facultyListOf(s.subjects.find(x => x.name === subjectName));
+                const differs = cur.length > 0 && !sameList(cur, cleaned);
                 return (
-                  <label key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 7, cursor: facultyPhone ? "pointer" : "not-allowed", opacity: facultyPhone ? 1 : 0.6 }}>
-                    <input type="checkbox" checked={checkedIds.has(s.id)} onChange={() => toggle(s.id)} disabled={!facultyPhone} style={{ width: 16, height: 16, accentColor: P.blue }} />
+                  <label key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 7, cursor: "pointer" }}>
+                    <input type="checkbox" checked={checkedIds.has(s.id)} onChange={() => toggle(s.id)} style={{ width: 16, height: 16, accentColor: P.blue }} />
                     <span style={{ fontWeight: 600, fontSize: 13.5 }}>{s.name}</span>
                     <span style={{ fontSize: 11.5, color: P.gray }}>· {s.students?.length || 0} students</span>
-                    {sub.facultyPhone && sub.facultyPhone !== facultyPhone && (
-                      <span style={{ fontSize: 11, color: P.amber, marginLeft: "auto" }}>currently: {sub.facultyPhone}</span>
+                    {differs && (
+                      <span style={{ fontSize: 11, color: P.amber, marginLeft: "auto" }}>currently: {cur.map(nameOf).join(", ")}</span>
                     )}
                   </label>
                 );
               })}
             </div>
 
-            <Btn onClick={save} disabled={saving || !facultyPhone}>
+            {msg && <div style={{ background: P.greenL, color: P.green, fontSize: 13, padding: "8px 12px", borderRadius: 8, marginBottom: 12 }}>{msg}</div>}
+            <Btn onClick={save} disabled={saving || cleaned.length === 0}>
               {saving ? "Saving…" : "Assign to " + checkedIds.size + " section" + (checkedIds.size === 1 ? "" : "s")}
             </Btn>
           </>
@@ -39426,7 +39671,7 @@ function AssignmentsSummary({ sections, subjectNames }) {
 
   useEffect(() => {
     const phones = new Set();
-    sections.forEach(s => (s.subjects || []).forEach(sub => { if (sub.facultyPhone) phones.add(sub.facultyPhone); }));
+    sections.forEach(s => (s.subjects || []).forEach(sub => facultyListOf(sub).forEach(p => phones.add(p))));
     phones.forEach(p => {
       if (names[p] !== undefined) return;
       getDoc(doc(db, "users", p)).then(snap => {
@@ -39451,15 +39696,24 @@ function AssignmentsSummary({ sections, subjectNames }) {
         <tbody>
           {subjectNames.map(name => {
             const withIt = sections.filter(s => (s.subjects || []).some(sub => sub.name === name));
-            const assigned = withIt.filter(s => (s.subjects.find(sub => sub.name === name) || {}).facultyPhone);
-            const unassigned = withIt.filter(s => !(s.subjects.find(sub => sub.name === name) || {}).facultyPhone);
+            const assigned = withIt.filter(s => facultyListOf(s.subjects.find(sub => sub.name === name)).length > 0);
+            const unassigned = withIt.filter(s => facultyListOf(s.subjects.find(sub => sub.name === name)).length === 0);
+            const sample = (withIt[0] && withIt[0].subjects.find(sub => sub.name === name)) || {};
             return (
               <tr key={name}>
-                <td style={{ ...tdStyle, fontWeight: 600 }}>{name}</td>
+                <td style={{ ...tdStyle, fontWeight: 600 }}>
+                  {name}
+                  <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11.5, color: P.gray, fontWeight: 500 }}>{shortOf(sample)}</div>
+                </td>
                 <td style={tdStyle}>
                   {assigned.length === 0 ? "—" : assigned.map(s => {
-                    const sub = s.subjects.find(x => x.name === name);
-                    return <div key={s.id}>{s.name}: <b>{names[sub.facultyPhone] || sub.facultyPhone}</b></div>;
+                    const l = facultyListOf(s.subjects.find(x => x.name === name));
+                    return (
+                      <div key={s.id} style={{ marginBottom: 3 }}>
+                        {s.name}: <b>{names[l[0]] || l[0]}</b>
+                        {l.length > 1 && <span style={{ color: P.gray }}> + {l.slice(1).map(p => names[p] || p).join(", ")} (Asst.)</span>}
+                      </div>
+                    );
                   })}
                 </td>
                 <td style={tdStyle}>{unassigned.length === 0 ? "—" : unassigned.map(s => s.name).join(", ")}</td>
@@ -39474,6 +39728,62 @@ function AssignmentsSummary({ sections, subjectNames }) {
 
 
 === END_FILE: .\src\sections\SectionsSetupWizard.jsx ===
+
+
+=== START_FILE: .\src\sections\subjectUtils.js ===
+
+// src/sections/subjectUtils.js
+// Small helpers for a section's subjects. A subject keeps an ordered list of
+// faculty phones: the first is the Main faculty (the only one who marks
+// attendance and enters marks, through the long-standing `facultyPhone`
+// field), the rest are Assisting faculty who only share the timetable load.
+
+export const SUBJECT_TYPES = ["Theory", "Lab", "Drawing"];
+
+// Ordered faculty phones for a subject, Main first. Older subjects only have facultyPhone.
+export function facultyListOf(sub) {
+  if (sub && Array.isArray(sub.faculty) && sub.faculty.length) return sub.faculty.filter(Boolean);
+  return sub && sub.facultyPhone ? [sub.facultyPhone] : [];
+}
+
+export function sameList(a, b) {
+  return a.length === b.length && a.every((x, i) => x === b[i]);
+}
+
+// Returns a copy of the subject carrying this faculty list, with facultyPhone kept equal to the Main faculty.
+export function withFaculty(sub, list) {
+  const clean = [];
+  (list || []).forEach(p => { if (p && !clean.includes(p)) clean.push(p); });
+  return { ...sub, faculty: clean, facultyPhone: clean[0] || "" };
+}
+
+const SMALL_WORDS = new Set(["and", "the", "for", "a", "an", "&"]);
+
+// "Mechanics of Solids" -> "MOS", "ThermoDynamics" -> "TD", "Fluid Mechanics Lab" -> "FM LAB".
+export function suggestShort(name) {
+  let n = String(name || "").trim();
+  if (!n) return "";
+  const isLab = /\blab(oratory)?$/i.test(n);
+  if (isLab) n = n.replace(/\s*\blab(oratory)?$/i, "").trim();
+  const words = n.replace(/([a-z])([A-Z])/g, "$1 $2").split(/[\s\-/]+/).filter(w => w && !SMALL_WORDS.has(w.toLowerCase()));
+  let short = words.length > 1 ? words.map(w => w[0]).join("") : (words[0] || "").slice(0, 4);
+  short = short.toUpperCase();
+  return isLab ? (short + " LAB").trim() : short;
+}
+
+export function shortOf(sub) {
+  return (sub && sub.short && sub.short.trim()) || suggestShort(sub && sub.name);
+}
+
+export function guessType(name) {
+  const n = String(name || "");
+  if (/\blab(oratory)?\b/i.test(n)) return "Lab";
+  if (/drawing|graphics/i.test(n)) return "Drawing";
+  return "Theory";
+}
+
+
+=== END_FILE: .\src\sections\subjectUtils.js ===
 
 
 === START_FILE: .\src\timetable\FacultyWorkload.jsx ===
@@ -40698,5 +41008,929 @@ export default function TimetablePage({ user }) {
 
 
 === END_FILE: .\src\timetable\TimetablePage.jsx ===
+
+
+=== START_FILE: .\src\timetableUpload\overlapCheck.js ===
+
+// src/timetableUpload/overlapCheck.js
+// Works on "blocks": runs of back-to-back periods with the same class in one section on one day.
+//   block = { id, sectionId, sectionName, day, start, end, token, subject, type, faculty, combo, periods, source }
+// A faculty member is double-booked when two of their blocks overlap in real clock time on the same day,
+// unless the two blocks carry the same clubbed-class code (C1, C2 ...) in different sections.
+
+import { DAY_NAMES, fmtRange } from "./timeUtils";
+
+export function groupBlocks(entries, source) {
+  const sorted = entries.slice().sort((a, b) =>
+    a.sectionId.localeCompare(b.sectionId) || a.day - b.day || a.token.localeCompare(b.token) || a.start - b.start);
+  const blocks = [];
+  sorted.forEach(e => {
+    const last = blocks[blocks.length - 1];
+    const sameFaculty = last && last.faculty.map(f => f.key).join("|") === e.faculty.map(f => f.key).join("|");
+    if (last && last.sectionId === e.sectionId && last.day === e.day && last.token === e.token && last.combo === e.combo && sameFaculty && e.start <= last.end) {
+      last.end = Math.max(last.end, e.end);
+      last.periods += 1;
+      return;
+    }
+    blocks.push({
+      id: e.sectionId + ":" + e.day + ":" + e.start + ":" + e.token,
+      sectionId: e.sectionId, sectionName: e.sectionName, day: e.day, start: e.start, end: e.end,
+      token: e.token, subject: e.subject, type: e.type, faculty: e.faculty, combo: e.combo, periods: 1, source,
+    });
+  });
+  return blocks;
+}
+
+const clash = (a, b) => a.start < b.end && b.start < a.end;
+const exempt = (a, b) => !!a.combo && a.combo === b.combo && a.sectionId !== b.sectionId;
+const label = b => b.sectionName + " · " + DAY_NAMES[b.day].slice(0, 3) + " " + fmtRange(b.start, b.end) + " · " + b.token;
+
+// All blocks of every faculty member, with the upload's blocks tagged so only clashes that involve them are reported.
+export function detectOverlaps(uploadBlocks, publishedBlocks) {
+  const all = uploadBlocks.map(b => ({ ...b, source: "upload" })).concat(publishedBlocks.map(b => ({ ...b, source: "published" })));
+  const byFaculty = new Map();
+  all.forEach(b => b.faculty.forEach(f => {
+    if (!byFaculty.has(f.key)) byFaculty.set(f.key, { name: f.name, blocks: [] });
+    byFaculty.get(f.key).blocks.push(b);
+  }));
+  const conflicts = [], seen = new Set();
+  byFaculty.forEach((v, key) => {
+    const list = v.blocks.slice().sort((a, b) => a.day - b.day || a.start - b.start);
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const a = list[i], b = list[j];
+        if (a.day !== b.day) break;
+        if (b.start >= a.end) break;
+        if (a.source === "published" && b.source === "published") continue;
+        if (!clash(a, b) || exempt(a, b)) continue;
+        const id = key + "|" + [a.id + a.source, b.id + b.source].sort().join("|");
+        if (seen.has(id)) continue;
+        seen.add(id);
+        conflicts.push({ key, name: v.name, day: a.day, a, b });
+      }
+    }
+  });
+  return conflicts.sort((x, y) => x.name.localeCompare(y.name) || x.day - y.day || x.a.start - y.a.start);
+}
+
+// Clubbed-class markers must pair up: the same code in 2+ sections, at the same time.
+export function checkCombos(uploadBlocks) {
+  const problems = [];
+  const byCode = new Map();
+  uploadBlocks.filter(b => b.combo).forEach(b => { if (!byCode.has(b.combo)) byCode.set(b.combo, []); byCode.get(b.combo).push(b); });
+  byCode.forEach((list, code) => {
+    const sections = new Set(list.map(b => b.sectionId));
+    if (sections.size < 2) {
+      problems.push({ level: "warn", text: "Clubbed marker (" + code + ") is used in only one section (" + list[0].sectionName + "). Use the same code in every section that is joined." });
+      return;
+    }
+    list.forEach(b => {
+      const mate = list.some(o => o.sectionId !== b.sectionId && o.day === b.day && clash(o, b));
+      if (!mate) problems.push({ level: "warn", text: "Clubbed marker (" + code + ") in " + label(b) + " has no matching class at the same time in another section." });
+    });
+  });
+  return problems;
+}
+
+// ── Suggestions ──────────────────────────────────────────────────────────────
+function freeFor(blocks, faculty, day, start, end, ignoreIds, combo, sectionId) {
+  return faculty.every(f => !blocks.some(o =>
+    !ignoreIds.includes(o.id + o.source) && o.day === day && o.start < end && start < o.end &&
+    o.faculty.some(x => x.key === f.key) && !(combo && o.combo === combo && o.sectionId !== sectionId)));
+}
+
+// Up to three conflict-free places to move `block`, then up to two swaps, all inside the same section.
+export function suggestMoves(block, sectionSlots, allBlocks) {
+  if (block.combo) return [{ text: "This is a clubbed class (" + block.combo + "). Change it in every joined section together, then upload again." }];
+  const teaching = sectionSlots.filter(s => !s.brk).sort((a, b) => a.start - b.start);
+  const secBlocks = allBlocks.filter(b => b.sectionId === block.sectionId && b.source === "upload");
+  const k = block.periods;
+  const selfId = block.id + block.source;
+
+  // which teaching slot indexes does a block of this section occupy?
+  const occupied = (d, i) => secBlocks.some(b => b.id + b.source !== selfId && b.day === d && b.start <= teaching[i].start && teaching[i].end <= b.end);
+  const runOk = (i) => { for (let x = i; x < i + k; x++) { if (!teaching[x]) return false; if (x > i && teaching[x].start !== teaching[x - 1].end) return false; } return true; };
+
+  const moves = [];
+  for (let d = 0; d < DAY_NAMES.length; d++) {
+    for (let i = 0; i + k <= teaching.length; i++) {
+      if (!runOk(i)) continue;
+      const start = teaching[i].start, end = teaching[i + k - 1].end;
+      if (d === block.day && start === block.start) continue;
+      let free = true;
+      for (let x = i; x < i + k; x++) if (occupied(d, x)) free = false;
+      if (!free) continue;
+      if (!freeFor(allBlocks, block.faculty, d, start, end, [selfId], block.combo, block.sectionId)) continue;
+      moves.push({ d, start, end, score: (d === block.day ? 0 : 1000) + Math.abs(start - block.start) });
+    }
+  }
+  moves.sort((x, y) => x.score - y.score);
+  const out = moves.slice(0, 3).map(m => ({
+    text: "Move " + block.token + " from " + DAY_NAMES[block.day].slice(0, 3) + " " + fmtRange(block.start, block.end) + " to " + DAY_NAMES[m.d].slice(0, 3) + " " + fmtRange(m.start, m.end) +
+      " — " + (block.faculty.length ? block.faculty.map(f => f.name).join(", ") + " and the section are free then." : "the section is free then."),
+  }));
+
+  if (out.length === 0) {
+    secBlocks.filter(o => o.id !== block.id && o.periods === k && !o.combo).some(o => {
+      const ignore = [selfId, o.id + o.source];
+      const xOk = freeFor(allBlocks, block.faculty, o.day, o.start, o.end, ignore, block.combo, block.sectionId);
+      const yOk = freeFor(allBlocks, o.faculty, block.day, block.start, block.end, ignore, o.combo, o.sectionId);
+      if (xOk && yOk) out.push({ text: "Swap " + block.token + " (" + DAY_NAMES[block.day].slice(0, 3) + " " + fmtRange(block.start, block.end) + ") with " + o.token + " (" + DAY_NAMES[o.day].slice(0, 3) + " " + fmtRange(o.start, o.end) + ") — both faculty are free at the new times." });
+      return out.length >= 2;
+    });
+  }
+  if (out.length === 0) out.push({ text: "No free slot in this section suits all the faculty. Try changing the other section's class, or the faculty." });
+  return out;
+}
+
+// One suggestion list per conflict: the upload's own side is moved; if both sides are in the upload, either can move.
+export function suggestionsFor(conflict, slotsBySection, allBlocks) {
+  const movable = [conflict.a, conflict.b].filter(b => b.source === "upload");
+  return movable.map(b => ({ block: b, options: suggestMoves(b, slotsBySection[b.sectionId] || [], allBlocks) }));
+}
+
+// ── Workload ─────────────────────────────────────────────────────────────────
+export function computeWorkload(blocks) {
+  const rows = new Map();
+  const counted = new Set();
+  blocks.forEach(b => {
+    if (b.type === "note") return;
+    b.faculty.forEach(f => {
+      if (b.combo) { const id = f.key + "|" + b.day + "|" + b.start + "|" + b.combo; if (counted.has(id)) return; counted.add(id); }
+      if (!rows.has(f.key)) rows.set(f.key, { key: f.key, name: f.name, phone: f.phone, external: f.external, theory: 0, lab: 0, drawing: 0, other: 0, asst: 0, perDay: [0, 0, 0, 0, 0, 0] });
+      const r = rows.get(f.key);
+      r[b.type] = (r[b.type] || 0) + b.periods;
+      r.perDay[b.day] += b.periods;
+      if (f.role === "asst") r.asst += b.periods;
+    });
+  });
+  return Array.from(rows.values()).map(r => ({ ...r, teaching: r.theory + r.lab + r.drawing, overall: r.theory + r.lab + r.drawing + r.other }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+
+=== END_FILE: .\src\timetableUpload\overlapCheck.js ===
+
+
+=== START_FILE: .\src\timetableUpload\reportBuilder.js ===
+
+// src/timetableUpload/reportBuilder.js
+// Adds the generated sheets to the coordinator's own workbook so one file carries everything:
+//   Sheet-3  every faculty member's individual timetable
+//   Sheet-4  overlaps with the suggested changes
+//   Workload Summary  teaching, other duties and overall per faculty
+
+import * as XLSX from "xlsx";
+import { DAY_NAMES, DAY_SHORT, fmtRange } from "./timeUtils";
+
+export const SHEET3 = "Sheet-3 Individual";
+export const SHEET4 = "Sheet-4 Overlaps";
+export const SHEET5 = "Workload Summary";
+
+function cellText(b, key) {
+  const f = b.faculty.find(x => x.key === key);
+  const role = f && f.role === "asst" ? " (Asst. Faculty)" : "";
+  return b.token + role + " · " + b.sectionName + (b.combo ? " (" + b.combo + ")" : "");
+}
+
+export function addReportSheets(wb, { blocks, conflicts, suggestions, workload, publishedLabel }) {
+  // ── Sheet-3 ──
+  const s3 = [];
+  workload.forEach(w => {
+    const mine = blocks.filter(b => b.type !== "note" && b.faculty.some(f => f.key === w.key));
+    const ranges = [];
+    mine.forEach(b => { if (!ranges.some(r => r.start === b.start && r.end === b.end)) ranges.push({ start: b.start, end: b.end }); });
+    ranges.sort((a, b) => a.start - b.start || a.end - b.end);
+    s3.push([w.name + (w.external ? "  (faculty from outside the portal)" : ""), "", "Teaching " + w.teaching + " · Other duties " + w.other + " · Overall " + w.overall]);
+    s3.push(["Day", ...ranges.map(r => fmtRange(r.start, r.end))]);
+    DAY_NAMES.forEach((dn, d) => {
+      const row = [dn];
+      ranges.forEach(r => {
+        const hit = mine.filter(b => b.day === d && b.start === r.start && b.end === r.end).map(b => cellText(b, w.key));
+        row.push(hit.join("  |  "));
+      });
+      s3.push(row);
+    });
+    s3.push([]);
+  });
+  if (!s3.length) s3.push(["No faculty found in the timetable."]);
+  const ws3 = XLSX.utils.aoa_to_sheet(s3);
+  ws3["!cols"] = [{ wch: 14 }, ...Array.from({ length: 9 }, () => ({ wch: 26 }))];
+
+  // ── Sheet-4 ──
+  const s4 = [["#", "Faculty", "Day", "Class A", "Time A", "Class B", "Time B", "Class B is", "Suggested changes"]];
+  conflicts.forEach((c, i) => {
+    const sug = suggestions[i] || [];
+    const lines = [];
+    sug.forEach(s => s.options.forEach(o => lines.push("• " + (sug.length > 1 ? "(" + s.block.sectionName + " " + s.block.token + ") " : "") + o.text)));
+    s4.push([
+      i + 1, c.name, DAY_NAMES[c.day],
+      c.a.sectionName + " · " + c.a.token, fmtRange(c.a.start, c.a.end),
+      c.b.sectionName + " · " + c.b.token, fmtRange(c.b.start, c.b.end),
+      c.b.source === "published" ? (publishedLabel ? publishedLabel(c.b) : "already published") : "in this upload",
+      lines.join("\n"),
+    ]);
+  });
+  if (conflicts.length === 0) s4.push(["", "No overlaps found. This timetable can be published."]);
+  const ws4 = XLSX.utils.aoa_to_sheet(s4);
+  ws4["!cols"] = [{ wch: 4 }, { wch: 24 }, { wch: 11 }, { wch: 28 }, { wch: 16 }, { wch: 28 }, { wch: 16 }, { wch: 26 }, { wch: 90 }];
+
+  // ── Summary ──
+  const s5 = [["Faculty", "In portal?", "Teaching workload", "Other duties", "Overall workload", "Of which assisting", "Theory", "Lab", "Drawing", ...DAY_SHORT]];
+  workload.forEach(w => s5.push([w.name, w.external ? "No (outside)" : "Yes", w.teaching, w.other, w.overall, w.asst, w.theory, w.lab, w.drawing, ...w.perDay]));
+  const ws5 = XLSX.utils.aoa_to_sheet(s5);
+  ws5["!cols"] = [{ wch: 28 }, { wch: 13 }, ...Array.from({ length: 13 }, () => ({ wch: 12 }))];
+
+  [[SHEET3, ws3], [SHEET4, ws4], [SHEET5, ws5]].forEach(([name, ws]) => {
+    if (wb.SheetNames.includes(name)) { delete wb.Sheets[name]; wb.SheetNames = wb.SheetNames.filter(n => n !== name); }
+    XLSX.utils.book_append_sheet(wb, ws, name);
+  });
+  return wb;
+}
+
+
+=== END_FILE: .\src\timetableUpload\reportBuilder.js ===
+
+
+=== START_FILE: .\src\timetableUpload\templateBuilder.js ===
+
+// src/timetableUpload/templateBuilder.js
+// Builds the downloadable Excel template for one year:
+//   Sheet-1  a sample timetable, the year's subjects with short names, its faculty with Employee IDs, and the instructions
+//   Sheet-2  one blank timetable block per section, each followed by a Subject -> Main / Assisting faculty table
+// Subjects and faculty come from what is already set up in the portal, so the coordinator copies names across.
+
+import * as XLSX from "xlsx";
+import { DAY_NAMES, DAY_SHORT, fmtRange24 } from "./timeUtils";
+import { facultyListOf, shortOf } from "../sections/subjectUtils";
+
+export const SHEET1 = "Sheet-1 Guide";
+export const SHEET2 = "Sheet-2 Timetable";
+export const FACULTY_COLS = 4; // Main + 3 assisting columns in the faculty table
+
+// 9:00 start, 50-minute periods, a 20-minute break after the second and a 40-minute lunch after the fifth.
+const DEFAULT_COLUMNS = [
+  { start: 540, end: 590 }, { start: 590, end: 640 }, { start: 640, end: 660, brk: "Break" },
+  { start: 660, end: 710 }, { start: 710, end: 760 }, { start: 760, end: 800, brk: "Lunch" },
+  { start: 800, end: 850 }, { start: 850, end: 900 }, { start: 900, end: 950 },
+];
+
+const INSTRUCTIONS = [
+  "HOW TO FILL THIS WORKBOOK",
+  "1. Sheet-2 has one blank timetable block for every section of this year. Fill in each block. Change any timing, break or lunch to match that section; you can add or remove columns.",
+  "2. In the timetable cells write the SHORT NAME of the subject exactly as listed on this sheet (for example TD, MOS). Do not use full names.",
+  "3. Two labs or batches running at the same time: separate them with a slash, e.g. MOS/MMS LAB means MOS LAB and MMS LAB together.",
+  "4. A class that lasts several periods: merge the cells, or write the same short name in each period.",
+  "5. Write Break or Lunch in the break columns. Anything else that is not a subject (for example LIB or SPORTS) stays on the section's timetable and is not counted as a subject.",
+  "6. Under every block is a table: SUB | MAIN FACULTY | ASSISTING 1 | ASSISTING 2 | ASSISTING 3. It is pre-filled from the faculty assigned in the portal. You can change it: copy names from the faculty list on this sheet. Spare rows at the bottom are for extra labels such as SPORTS.",
+  "7. The FIRST name in a row is the Main faculty, the others are Assisting faculty. Only the faculty written in this table get workload for that subject; a faculty member assigned in the portal but not written here gets none. Attendance and marks always stay with the Main faculty assigned in the portal.",
+  "8. A faculty member from another department who is not in the portal can be typed as they are; they appear on the section timetable but have no portal of their own.",
+  "9. Sections joined together for one class: add a marker such as (C1) after the short name in every joined section, e.g. MOS (C1). The same code at the same time in two sections is one class, so it is not an overlap and counts once for the faculty.",
+  "10. Do not rename the sheets and keep the SECTION: line above each block. Upload this file back in the portal; any overlaps are listed there before anything is published.",
+];
+
+export function buildTemplate({ year, sections, facultyByPhone }) {
+  const wb = XLSX.utils.book_new();
+
+  // ── distinct subjects and faculty for the year ──
+  const subjects = [];
+  const seen = new Map();
+  sections.forEach(sec => (sec.subjects || []).forEach(sub => {
+    const key = sub.name.trim().toLowerCase();
+    if (!seen.has(key)) { const e = { name: sub.name, short: shortOf(sub), type: sub.type || "Theory", sections: [] }; seen.set(key, e); subjects.push(e); }
+    seen.get(key).sections.push(sec.name);
+  }));
+  const phones = [];
+  sections.forEach(sec => (sec.subjects || []).forEach(sub => facultyListOf(sub).forEach(p => { if (!phones.includes(p)) phones.push(p); })));
+  const faculty = phones.map(p => facultyByPhone[p] || { name: p, employeeId: "" }).sort((a, b) => a.name.localeCompare(b.name));
+
+  // ── Sheet-1 ──
+  const s1 = [];
+  const put = (r, c, v) => { while (s1.length <= r) s1.push([]); s1[r][c] = v; };
+  put(0, 0, "Sample format of the timetable for Year " + year + " (write your own in Sheet-2)");
+  put(1, 0, "Day/Time");
+  DEFAULT_COLUMNS.forEach((col, i) => put(1, i + 1, fmtRange24(col.start, col.end)));
+  const sampleNames = subjects.filter(s => !/lab$/i.test(s.short)).map(s => s.short);
+  const pick = k => sampleNames.length ? sampleNames[k % sampleNames.length] : "SUB" + (k + 1);
+  DAY_SHORT.forEach((d, r) => {
+    put(r + 2, 0, d);
+    DEFAULT_COLUMNS.forEach((col, i) => {
+      if (col.brk) put(r + 2, i + 1, col.brk);
+      else if (i >= 6 && r % 2 === 0) put(r + 2, i + 1, i === 6 ? pick(r) + "/" + pick(r + 1) + " LAB" : "");
+      else put(r + 2, i + 1, pick(r + i));
+    });
+  });
+  const merges1 = [];
+  for (let r = 0; r < 6; r += 2) merges1.push({ s: { r: r + 2, c: 7 }, e: { r: r + 2, c: 9 } });
+
+  const SUBJ_COL = 12, FAC_COL = 17;
+  put(1, SUBJ_COL, "S.No"); put(1, SUBJ_COL + 1, "List of assigned subjects"); put(1, SUBJ_COL + 2, "Short name"); put(1, SUBJ_COL + 3, "Type"); put(1, SUBJ_COL + 4, "Sections");
+  subjects.forEach((s, i) => {
+    put(i + 2, SUBJ_COL, i + 1); put(i + 2, SUBJ_COL + 1, s.name); put(i + 2, SUBJ_COL + 2, s.short);
+    put(i + 2, SUBJ_COL + 3, s.type); put(i + 2, SUBJ_COL + 4, s.sections.join(", "));
+  });
+  put(1, FAC_COL + 4, "S.No"); put(1, FAC_COL + 5, "List of Faculty"); put(1, FAC_COL + 6, "Employee ID");
+  faculty.forEach((f, i) => { put(i + 2, FAC_COL + 4, i + 1); put(i + 2, FAC_COL + 5, f.name); put(i + 2, FAC_COL + 6, f.employeeId || ""); });
+
+  const instrRow = Math.max(10, subjects.length + 4, faculty.length + 4);
+  INSTRUCTIONS.forEach((t, i) => put(instrRow + i, 0, t));
+  const ws1 = XLSX.utils.aoa_to_sheet(s1);
+  ws1["!merges"] = merges1;
+  ws1["!cols"] = [{ wch: 10 }, ...DEFAULT_COLUMNS.map(() => ({ wch: 13 })), { wch: 3 }, { wch: 5 }, { wch: 34 }, { wch: 12 }, { wch: 9 }, { wch: 30 }, { wch: 4 }, { wch: 4 }, { wch: 6 }, { wch: 30 }, { wch: 14 }];
+  XLSX.utils.book_append_sheet(wb, ws1, SHEET1);
+
+  // ── Sheet-2: one block per section ──
+  const s2 = [];
+  const merges2 = [];
+  sections.forEach(sec => {
+    s2.push(["SECTION:", sec.name]);
+    s2.push(["Day/Time", ...DEFAULT_COLUMNS.map(c => fmtRange24(c.start, c.end))]);
+    DAY_NAMES.forEach(dn => s2.push([dn.slice(0, 3), ...DEFAULT_COLUMNS.map(c => c.brk || "")]));
+    s2.push([]);
+    s2.push(["SUB", "MAIN FACULTY", "ASSISTING 1", "ASSISTING 2", "ASSISTING 3"]);
+    (sec.subjects || []).forEach(sub => {
+      const names = facultyListOf(sub).map(p => (facultyByPhone[p] || { name: p }).name);
+      s2.push([shortOf(sub), ...Array.from({ length: FACULTY_COLS }, (_, i) => names[i] || "")]);
+    });
+    for (let k = 0; k < 3; k++) s2.push(["", "", "", "", ""]);
+    s2.push([]); s2.push([]);
+  });
+  const ws2 = XLSX.utils.aoa_to_sheet(s2);
+  ws2["!merges"] = merges2;
+  ws2["!cols"] = [{ wch: 14 }, ...DEFAULT_COLUMNS.map(() => ({ wch: 16 }))];
+  XLSX.utils.book_append_sheet(wb, ws2, SHEET2);
+  return wb;
+}
+
+
+=== END_FILE: .\src\timetableUpload\templateBuilder.js ===
+
+
+=== START_FILE: .\src\timetableUpload\timetableParser.js ===
+
+// src/timetableUpload/timetableParser.js
+// Reads the filled-in template (Sheet-2) into normalised timetable entries.
+// Nothing here talks to Firebase: it takes the workbook plus a description of what the
+// portal already knows (the year's sections, their subjects, the people) and returns
+//   { sections, entries, problems, facultyUsed }
+// An entry is one class in one period: { sectionId, sectionName, day, col, start, end, token,
+//   subject, type, faculty: [{ key, name, phone, external, role }], combo }.
+
+import * as XLSX from "xlsx";
+import { SHEET2 } from "./templateBuilder";
+import { parseRangeLoose, dayIndex, normName, editDistance, BREAK_RE, DAY_NAMES } from "./timeUtils";
+import { guessType } from "../sections/subjectUtils";
+
+const COMBO_RE = /\(\s*C\s*(\d+)\s*\)/i;
+
+function colLetter(c) {
+  let s = "", n = c + 1;
+  while (n > 0) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); }
+  return s;
+}
+
+function sheetRows(ws) {
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "", blankrows: true }).map(r => r.map(v => String(v == null ? "" : v)));
+  const ref = ws["!ref"] ? XLSX.utils.decode_range(ws["!ref"]) : { s: { r: 0, c: 0 } };
+  (ws["!merges"] || []).forEach(m => {
+    const r0 = m.s.r - ref.s.r, c0 = m.s.c - ref.s.c;
+    const v = rows[r0] && rows[r0][c0];
+    if (!v) return;
+    for (let r = m.s.r; r <= m.e.r; r++) {
+      for (let c = m.s.c; c <= m.e.c; c++) {
+        const rr = r - ref.s.r, cc = c - ref.s.c;
+        if (!rows[rr]) continue;
+        while (rows[rr].length <= cc) rows[rr].push("");
+        if (rows[rr][cc] === "") rows[rr][cc] = v;
+      }
+    }
+  });
+  return rows;
+}
+
+function findSheet(wb) {
+  if (wb.Sheets[SHEET2]) return wb.Sheets[SHEET2];
+  const hit = wb.SheetNames.find(n => /sheet\s*-?\s*2|timetable/i.test(n) && !/guide/i.test(n));
+  if (hit) return wb.Sheets[hit];
+  return wb.SheetNames.length > 1 ? wb.Sheets[wb.SheetNames[1]] : null;
+}
+
+export function parseWorkbook(wb, ctx) {
+  const problems = [];
+  const warn = (level, text, section) => problems.push({ level, text, section: section || "" });
+  const result = { sections: [], entries: [], problems, facultyUsed: {} };
+
+  const ws = findSheet(wb);
+  if (!ws) { warn("error", "Sheet-2 (the timetable sheet) was not found in this file. Download the template again and keep its sheets."); return result; }
+  const rows = sheetRows(ws);
+
+  // ── people lookup ──
+  const byName = new Map(), byEmp = new Map();
+  ctx.people.forEach(p => { byName.set(normName(p.name), p); if (p.employeeId) byEmp.set(String(p.employeeId).trim().toLowerCase(), p); });
+  const externals = new Map();
+  function resolve(raw) {
+    const name = String(raw || "").trim();
+    const hit = byName.get(normName(name)) || byEmp.get(name.toLowerCase());
+    if (hit) { const f = { key: hit.phone, name: hit.name, phone: hit.phone, external: false }; result.facultyUsed[f.key] = f; return f; }
+    const f = { key: "ext:" + normName(name), name, phone: null, external: true };
+    result.facultyUsed[f.key] = f;
+    if (!externals.has(f.key)) {
+      let best = null, bd = 99;
+      ctx.people.forEach(p => { const d = editDistance(name, p.name); if (d < bd) { bd = d; best = p; } });
+      externals.set(f.key, { name, suggestion: best && bd > 0 && bd <= Math.max(2, Math.ceil(name.length * 0.15)) ? best.name : "" });
+    }
+    return f;
+  }
+
+  // ── blocks ──
+  const starts = [];
+  rows.forEach((r, i) => { if (/^\s*section\b/i.test(r[0] || "")) starts.push(i); });
+  if (starts.length === 0) { warn("error", "No \"SECTION:\" lines were found in Sheet-2. Each timetable block must start with a SECTION: line."); return result; }
+
+  const sectionByName = new Map(ctx.sections.map(s => [normName(s.name), s]));
+  const seenSections = new Set();
+
+  starts.forEach((si, bi) => {
+    const end = bi + 1 < starts.length ? starts[bi + 1] : rows.length;
+    const head = rows[si];
+    let secName = String(head[1] || "").trim();
+    if (!secName) { const after = String(head[0] || "").split(":")[1]; secName = (after || "").trim(); }
+    const sec = sectionByName.get(normName(secName));
+    if (!sec) { warn("error", "Section \"" + (secName || "(blank)") + "\" is not one of Year " + ctx.year + "'s sections in the portal. Check the name after SECTION:."); return; }
+    if (seenSections.has(sec.id)) { warn("error", "Section " + sec.name + " appears twice in Sheet-2.", sec.name); return; }
+    seenSections.add(sec.id);
+
+    // header row with the period timings
+    let hdr = -1;
+    for (let r = si + 1; r < end; r++) if (/^\s*day\b/i.test(rows[r][0] || "")) { hdr = r; break; }
+    if (hdr < 0) { warn("error", "Section " + sec.name + ": the Day/Time row with the period timings was not found.", sec.name); return; }
+
+    const dayRows = {};
+    let r = hdr + 1;
+    for (; r < end; r++) {
+      const d = dayIndex(rows[r][0]);
+      if (d < 0 || /^\s*sub\b/i.test(rows[r][0] || "")) break;
+      dayRows[d] = rows[r];
+    }
+    const tableAt = (() => { for (let k = r; k < end; k++) if (/^\s*sub\b/i.test(rows[k][0] || "")) return k; return -1; })();
+
+    // columns: timings, break columns
+    const hRow = rows[hdr];
+    const width = Math.max(hRow.length, ...Object.values(dayRows).map(x => x.length));
+    const cols = [];
+    for (let c = 1; c < width; c++) {
+      const text = String(hRow[c] || "").trim();
+      const cells = DAY_NAMES.map((_, d) => String((dayRows[d] || [])[c] || "").trim());
+      const any = cells.filter(Boolean);
+      if (!text && any.length === 0) continue;
+      const brk = any.length > 0 && any.every(v => BREAK_RE.test(v));
+      cols.push({ c, text, range: parseRangeLoose(text), brk });
+    }
+    cols.forEach((col, i) => {
+      if (col.range) return;
+      if (col.brk) {
+        const prev = cols.slice(0, i).reverse().find(x => x.range), next = cols.slice(i + 1).find(x => x.range);
+        if (prev && next && prev.range.end < next.range.start) { col.range = { start: prev.range.end, end: next.range.start }; return; }
+      }
+      warn("error", "Section " + sec.name + ": cannot read the timing in column " + colLetter(col.c) + " (\"" + col.text + "\"). Write it like 09:00-09:50.", sec.name);
+    });
+    const slots = cols.filter(x => x.range).map(x => ({ col: x.c, start: x.range.start, end: x.range.end, brk: x.brk }));
+    result.sections.push({ id: sec.id, name: sec.name, slots });
+
+    // faculty table: label -> names in order
+    const table = new Map();
+    if (tableAt < 0) warn("warn", "Section " + sec.name + ": the SUB / MAIN FACULTY table was not found, so no faculty are attached to its classes.", sec.name);
+    else {
+      for (let k = tableAt + 1; k < end; k++) {
+        const label = String(rows[k][0] || "").trim().toUpperCase().replace(/\s+/g, " ");
+        const names = rows[k].slice(1).map(v => String(v || "").trim()).filter(Boolean);
+        if (!label && names.length === 0) continue;
+        if (!label) { warn("warn", "Section " + sec.name + ": faculty " + names.join(", ") + " have no subject written next to them in the table.", sec.name); continue; }
+        table.set(label, (table.get(label) || []).concat(names));
+      }
+    }
+
+    // subject lookup for this section
+    const known = new Map(); // UPPER short -> subject
+    (sec.subjects || []).forEach(s => { if (s.short) known.set(s.short.toUpperCase().replace(/\s+/g, " "), s); });
+    const infoSeen = new Set();
+    const noteOnce = (level, key, text) => { if (infoSeen.has(key)) return; infoSeen.add(key); warn(level, text, sec.name); };
+
+    slots.filter(s => !s.brk).forEach(slot => {
+      DAY_NAMES.forEach((_, d) => {
+        const raw = String((dayRows[d] || [])[slot.col] || "").trim();
+        if (!raw || BREAK_RE.test(raw)) return;
+        const cm = COMBO_RE.exec(raw);
+        const combo = cm ? "C" + cm[1] : "";
+        const text = raw.replace(COMBO_RE, "").replace(/\s+/g, " ").trim();
+        const hasLab = /\blab\b/i.test(text);
+        text.split("/").map(p => p.trim().toUpperCase().replace(/\s+/g, " ")).filter(Boolean).forEach(tok => {
+          let label = tok;
+          // "MOS/MMS LAB" means MOS LAB and MMS LAB: when the cell says LAB, a bare name is read as that subject's lab if one exists.
+          if (hasLab && !/\bLAB$/.test(label) && (known.has(label + " LAB") || table.has(label + " LAB"))) label = label + " LAB";
+          const subj = known.get(label);
+          const names = table.get(label) || [];
+          const faculty = names.map((n, i) => ({ ...resolve(n), role: i === 0 ? "main" : "asst" }));
+          let type = "note";
+          if (subj) type = String(subj.type || guessType(subj.name)).toLowerCase();
+          else if (names.length) type = "other";
+          if (!subj && names.length === 0) noteOnce("info", "note:" + label, "\"" + label + "\" is not in the subject list and has no faculty. It stays on the section timetable and adds to nobody's workload.");
+          if (subj && names.length === 0) {
+            const assigned = (subj.faculty || []).length > 0;
+            noteOnce(assigned ? "warn" : "info", "nofac:" + label, label + " has no faculty written in the table" + (assigned ? " although faculty are assigned in the portal" : "") + ", so it adds to nobody's workload.");
+          }
+          if (!subj && names.length) noteOnce("info", "extra:" + label, "\"" + label + "\" is not in the subject list but has faculty, so it is accepted as a duty and counted for them.");
+          result.entries.push({
+            sectionId: sec.id, sectionName: sec.name, day: d, col: slot.col, start: slot.start, end: slot.end,
+            token: label, subject: subj ? subj.name : label, type, faculty, combo,
+          });
+        });
+      });
+    });
+  });
+
+  ctx.sections.forEach(s => { if (!seenSections.has(s.id)) warn("warn", "No timetable block was found for section " + s.name + ".", s.name); });
+
+  externals.forEach(e => {
+    warn(e.suggestion ? "warn" : "info",
+      "\"" + e.name + "\" is not in the portal's faculty list, so they are treated as faculty from outside (no portal)." + (e.suggestion ? " Did you mean \"" + e.suggestion + "\"?" : ""));
+  });
+  return result;
+}
+
+
+=== END_FILE: .\src\timetableUpload\timetableParser.js ===
+
+
+=== START_FILE: .\src\timetableUpload\TimetableUploadScreen.jsx ===
+
+// src/timetableUpload/TimetableUploadScreen.jsx
+// Coordinator Duties > Timetable Upload.
+//   1. pick the year and download the Excel template (pre-filled with that year's subjects, short names and faculty)
+//   2. upload the filled workbook: it is read, checked against everything already published, and the
+//      overlaps, suggested changes and each faculty member's workload are shown here and in a downloadable report
+//   3. (next update) publish, once there are no overlaps, to put the classes into each faculty member's timetable
+
+import React, { useState, useEffect, useRef } from "react";
+import * as XLSX from "xlsx";
+import { collection, onSnapshot, getDocs, updateDoc, doc } from "firebase/firestore";
+import { db } from "../firebase";
+import { P, Btn, Card, Sel, Spinner } from "../components/UI";
+import { MASTER_ADMIN_PHONE } from "../utils";
+import { buildTemplate } from "./templateBuilder";
+import { parseWorkbook } from "./timetableParser";
+import { groupBlocks, detectOverlaps, checkCombos, suggestionsFor, computeWorkload } from "./overlapCheck";
+import { addReportSheets } from "./reportBuilder";
+import { yearOfSection, DAY_NAMES, fmtRange } from "./timeUtils";
+import { facultyListOf, shortOf } from "../sections/subjectUtils";
+
+const YEARS = ["I", "II", "III", "IV"];
+const MONO = "'IBM Plex Mono', monospace";
+const th = { textAlign: "center", fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: P.gray, padding: "7px 8px", borderBottom: "1.5px solid " + P.border, whiteSpace: "nowrap" };
+const td = { padding: "8px 8px", borderBottom: "1px solid " + P.border, textAlign: "center", fontFamily: MONO, fontSize: 13 };
+
+function Pill({ color, bg, children }) {
+  return <span style={{ display: "inline-block", fontSize: 12, fontWeight: 700, color, background: bg, padding: "4px 12px", borderRadius: 20 }}>{children}</span>;
+}
+
+function blockLabel(b) {
+  return b.sectionName + " · " + DAY_NAMES[b.day].slice(0, 3) + " " + fmtRange(b.start, b.end) + " · " + b.token;
+}
+
+export default function TimetableUploadScreen({ user }) {
+  const [sections, setSections] = useState(null);
+  const [people, setPeople] = useState(null);
+  const [published, setPublished] = useState([]);
+  const [publishedErr, setPublishedErr] = useState(false);
+  const [year, setYear] = useState("III");
+  const [fileName, setFileName] = useState("");
+  const [result, setResult] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const fileRef = useRef(null);
+  const seeAll = user.phone === MASTER_ADMIN_PHONE || user.role === "hod";
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "sections"), snap => {
+      const all = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(s => !s.deleted);
+      setSections(seeAll ? all : all.filter(s => s.adminPhone === user.phone));
+    });
+    return unsub;
+  }, [user.phone, seeAll]);
+
+  useEffect(() => {
+    let alive = true;
+    Promise.all([getDocs(collection(db, "users")), getDocs(collection(db, "facultyProfiles"))]).then(([us, ps]) => {
+      if (!alive) return;
+      const emp = {};
+      ps.forEach(d => { emp[d.id] = (d.data().bio || {}).employeeId || ""; });
+      const list = [];
+      us.forEach(d => { const u = d.data(); if (u.status === "approved") list.push({ phone: d.id, name: u.name || d.id, employeeId: emp[d.id] || u.employeeId || "" }); });
+      setPeople(list);
+    });
+    getDocs(collection(db, "masterTimetables")).then(snap => {
+      if (!alive) return;
+      setPublished(snap.docs.map(d => ({ year: d.id, ...d.data() })));
+    }).catch(() => { if (alive) setPublishedErr(true); });
+    return () => { alive = false; };
+  }, []);
+
+  if (!sections || !people) return <Spinner />;
+
+  const yearSections = sections.filter(s => yearOfSection(s) === year);
+  const noYear = sections.filter(s => !yearOfSection(s));
+  const facultyByPhone = {};
+  people.forEach(p => { facultyByPhone[p.phone] = p; });
+  const hasSubjects = yearSections.some(s => (s.subjects || []).length > 0);
+
+  function download() {
+    const wb = buildTemplate({ year, sections: yearSections, facultyByPhone });
+    XLSX.writeFile(wb, "Timetable Template - Year " + year + ".xlsx");
+  }
+
+  function analyse(wb) {
+    const ctxSections = yearSections.map(s => ({
+      id: s.id, name: s.name,
+      subjects: (s.subjects || []).map(sub => ({ name: sub.name, short: shortOf(sub), type: sub.type || "Theory", faculty: facultyListOf(sub) })),
+    }));
+    const parse = parseWorkbook(wb, { year, sections: ctxSections, people });
+    const blocks = groupBlocks(parse.entries, "upload");
+    const publishedBlocks = published.filter(p => p.year !== year).flatMap(p =>
+      (p.blocks || []).map(b => ({ ...b, source: "published", publishedBy: p.publishedByName || "", publishedYear: p.year })));
+    const conflicts = detectOverlaps(blocks, publishedBlocks);
+    const allBlocks = blocks.map(b => ({ ...b, source: "upload" })).concat(publishedBlocks);
+    const slotsBy = {};
+    parse.sections.forEach(s => { slotsBy[s.id] = s.slots; });
+    const suggestions = conflicts.map(c => suggestionsFor(c, slotsBy, allBlocks));
+    const comboProblems = checkCombos(blocks);
+    const workload = computeWorkload(blocks);
+    return { wb, parse, blocks, conflicts, suggestions, comboProblems, workload };
+  }
+
+  async function onFile(e) {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    setBusy(true); setError(""); setResult(null); setFileName(f.name);
+    try {
+      const wb = XLSX.read(await f.arrayBuffer(), { type: "array" });
+      setResult(analyse(wb));
+    } catch (err) {
+      setError("This file could not be read as an Excel workbook (" + err.message + "). Use the downloaded template and save it as .xlsx.");
+    }
+    setBusy(false);
+  }
+
+  function downloadReport() {
+    const rep = addReportSheets(result.wb, {
+      blocks: result.blocks, conflicts: result.conflicts, suggestions: result.suggestions, workload: result.workload,
+      publishedLabel: b => "already published (Year " + (b.publishedYear || "?") + (b.publishedBy ? ", by " + b.publishedBy : "") + ")",
+    });
+    XLSX.writeFile(rep, "Timetable report - Year " + year + ".xlsx");
+  }
+
+  const errors = result ? result.parse.problems.filter(p => p.level === "error") : [];
+  const notes = result ? result.parse.problems.concat(result.comboProblems).filter(p => p.level !== "error") : [];
+  const ready = result && errors.length === 0 && result.conflicts.length === 0;
+
+  return (
+    <div style={{ padding: "24px clamp(16px, 3vw, 32px) 80px", maxWidth: "min(1500px, 96vw)", margin: "0 auto", display: "grid", gap: 18 }}>
+      <Card style={{ margin: 0, padding: "18px 20px" }}>
+        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>1. Choose the year and download the template</div>
+        <div style={{ fontSize: 13, color: P.gray, marginBottom: 14, lineHeight: 1.6 }}>
+          The template has a sample, this year's subjects with short names, the faculty assigned to them, the instructions, and one blank timetable block for every section. Fill it in and upload it below.
+        </div>
+        <div style={{ display: "flex", gap: 14, alignItems: "flex-end", flexWrap: "wrap" }}>
+          <div style={{ width: 160 }}><Sel label="Year" value={year} onChange={v => { setYear(v || "III"); setResult(null); setFileName(""); }} options={YEARS.map(y => ({ value: y, label: "Year " + y }))} /></div>
+          <div style={{ marginBottom: 12 }}><Btn onClick={download} disabled={yearSections.length === 0 || !hasSubjects}>Download template (Year {year})</Btn></div>
+        </div>
+        {yearSections.length === 0 ? (
+          <div style={{ fontSize: 13, color: P.amber, background: P.amberL, borderRadius: 8, padding: "8px 12px" }}>
+            No sections found for Year {year}. Add them under Coordinator Duties › All Sections › Sections & Subjects (section names start with the year, like III-A).
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+            <span style={{ fontSize: 12.5, color: P.gray }}>Sections in Year {year}:</span>
+            {yearSections.map(s => (
+              <span key={s.id} style={{ fontFamily: MONO, fontWeight: 700, fontSize: 12.5, background: P.bg, border: "1px solid " + P.border, borderRadius: 20, padding: "4px 12px" }}>
+                {s.name} <span style={{ fontWeight: 400, color: P.gray }}>· {(s.subjects || []).length} subjects</span>
+              </span>
+            ))}
+          </div>
+        )}
+        {yearSections.length > 0 && !hasSubjects && (
+          <div style={{ fontSize: 13, color: P.amber, background: P.amberL, borderRadius: 8, padding: "8px 12px", marginTop: 10 }}>
+            These sections have no subjects yet. Add subjects and faculty first (Sections & Subjects), then download the template.
+          </div>
+        )}
+      </Card>
+
+      {noYear.length > 0 && (
+        <Card style={{ margin: 0, padding: "16px 20px" }}>
+          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Sections whose name doesn't show a year</div>
+          <div style={{ fontSize: 13, color: P.gray, marginBottom: 12 }}>Tell the portal which year each one belongs to so it appears in the right template.</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "6px 18px" }}>
+            {noYear.map(s => (
+              <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ flex: 1, fontWeight: 600, fontSize: 13.5 }}>{s.name}</span>
+                <select aria-label={"Year of " + s.name} defaultValue="" onChange={e => e.target.value && updateDoc(doc(db, "sections", s.id), { year: e.target.value })}
+                  style={{ border: "1px solid " + P.border, borderRadius: 8, padding: "7px 10px", fontSize: 13.5, fontFamily: "inherit", background: "#fff" }}>
+                  <option value="">Year…</option>
+                  {YEARS.map(y => <option key={y} value={y}>Year {y}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      <Card style={{ margin: 0, padding: "18px 20px" }}>
+        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>2. Upload the filled workbook</div>
+        <div style={{ fontSize: 13, color: P.gray, marginBottom: 14, lineHeight: 1.6 }}>
+          The sheet is read straight away. Nothing is saved or sent to any faculty member at this stage, and the check includes every timetable already published for the other years.
+        </div>
+        <input ref={fileRef} type="file" accept=".xlsx,.xlsm,.xls" onChange={onFile} style={{ display: "none" }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <Btn onClick={() => fileRef.current && fileRef.current.click()} disabled={busy || yearSections.length === 0}>{busy ? "Reading…" : "Choose Excel file"}</Btn>
+          {fileName && <span style={{ fontSize: 13, color: P.gray }}>{fileName}</span>}
+        </div>
+        {publishedErr && <div style={{ fontSize: 12.5, color: P.amber, marginTop: 10 }}>Published timetables of other years could not be loaded, so overlaps with them can't be checked yet.</div>}
+        {error && <div style={{ fontSize: 13, color: P.red, background: P.redL, borderRadius: 8, padding: "8px 12px", marginTop: 10 }}>{error}</div>}
+      </Card>
+
+      {result && (
+        <>
+          <Card style={{ margin: 0, padding: "16px 20px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>What was read</div>
+                <div style={{ fontSize: 13.5, color: P.gray }}>
+                  <b style={{ color: "#1a2230" }}>{result.parse.sections.length}</b> section{result.parse.sections.length === 1 ? "" : "s"} ·{" "}
+                  <b style={{ color: "#1a2230" }}>{result.blocks.length}</b> classes ·{" "}
+                  <b style={{ color: "#1a2230" }}>{result.workload.length}</b> faculty with workload
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                {errors.length > 0 && <Pill color={P.red} bg={P.redL}>{errors.length} problem{errors.length === 1 ? "" : "s"} to fix</Pill>}
+                {result.conflicts.length > 0 && <Pill color={P.red} bg={P.redL}>{result.conflicts.length} overlap{result.conflicts.length === 1 ? "" : "s"} to clear</Pill>}
+                {ready && <Pill color={P.green} bg={P.greenL}>No overlaps — ready to publish</Pill>}
+                <Btn small variant="outline" onClick={downloadReport}>Download report (Excel)</Btn>
+                <Btn small disabled>Publish (coming in the next update)</Btn>
+              </div>
+            </div>
+          </Card>
+
+          {errors.length > 0 && (
+            <Card style={{ margin: 0, padding: "16px 20px", borderColor: P.red }}>
+              <div style={{ fontWeight: 700, fontSize: 15, color: P.red, marginBottom: 8 }}>Problems that must be fixed</div>
+              {errors.map((p, i) => <div key={i} style={{ fontSize: 13.5, padding: "4px 0" }}>• {p.text}</div>)}
+            </Card>
+          )}
+
+          <Card style={{ margin: 0, padding: "16px 20px" }}>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Overlaps</div>
+            <div style={{ fontSize: 12.5, color: P.gray, marginBottom: 12 }}>A faculty member has two classes at overlapping times. Each one lists changes that clear it without creating a new clash. Fix them in the sheet and upload again.</div>
+            {result.conflicts.length === 0 ? (
+              <div style={{ fontSize: 13.5, color: P.green }}>No overlaps found.</div>
+            ) : result.conflicts.map((c, i) => (
+              <div key={i} style={{ border: "1px solid " + P.border, borderRadius: 10, padding: "12px 14px", marginBottom: 10 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>{c.name} · {DAY_NAMES[c.day]}</div>
+                <div style={{ fontSize: 13, color: "#1a2230", marginBottom: 2 }}>A: {blockLabel(c.a)}</div>
+                <div style={{ fontSize: 13, color: "#1a2230", marginBottom: 8 }}>
+                  B: {blockLabel(c.b)}
+                  {c.b.source === "published" && <span style={{ color: P.amber }}> (already published for Year {c.b.publishedYear || "?"}{c.b.publishedBy ? " by " + c.b.publishedBy : ""})</span>}
+                </div>
+                {result.suggestions[i].map((s, k) => (
+                  <div key={k} style={{ background: P.bg, borderRadius: 8, padding: "8px 12px", marginBottom: 6 }}>
+                    {result.suggestions[i].length > 1 && <div style={{ fontSize: 11.5, fontWeight: 700, color: P.gray, marginBottom: 3, textTransform: "uppercase" }}>If you change {s.block.sectionName} · {s.block.token}</div>}
+                    {s.options.map((o, j) => <div key={j} style={{ fontSize: 13, padding: "2px 0" }}>• {o.text}</div>)}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </Card>
+
+          {notes.length > 0 && (
+            <Card style={{ margin: 0, padding: "16px 20px" }}>
+              <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8 }}>Notes</div>
+              {notes.map((p, i) => (
+                <div key={i} style={{ fontSize: 13, padding: "3px 0", color: p.level === "warn" ? P.amber : P.gray }}>
+                  {p.level === "warn" ? "⚠ " : "• "}{p.text}
+                </div>
+              ))}
+            </Card>
+          )}
+
+          <Card style={{ margin: 0, padding: "16px 20px" }}>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Workload from this timetable</div>
+            <div style={{ fontSize: 12.5, color: P.gray, marginBottom: 10 }}>Only faculty named in the sheet's faculty tables get workload. Assisting faculty are counted too (shown under "of which assisting").</div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 900 }}>
+                <thead>
+                  <tr>
+                    <th style={{ ...th, textAlign: "left" }}>Faculty</th>
+                    <th style={th}>Teaching</th><th style={th}>Other duties</th><th style={{ ...th, color: P.blue }}>Overall</th><th style={th}>Of which assisting</th>
+                    <th style={th}>Theory</th><th style={th}>Lab</th><th style={th}>Drawing</th>
+                    {DAY_NAMES.map(d => <th key={d} style={th}>{d.slice(0, 3)}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.workload.map(w => (
+                    <tr key={w.key}>
+                      <td style={{ ...td, textAlign: "left", fontFamily: "inherit", fontWeight: 600 }}>{w.name}{w.external && <span style={{ fontWeight: 400, color: P.gray, fontSize: 12 }}> (outside portal)</span>}</td>
+                      <td style={td}>{w.teaching}</td><td style={td}>{w.other}</td><td style={{ ...td, fontWeight: 700, color: P.blue }}>{w.overall}</td><td style={td}>{w.asst}</td>
+                      <td style={td}>{w.theory}</td><td style={td}>{w.lab}</td><td style={td}>{w.drawing}</td>
+                      {w.perDay.map((n, i) => <td key={i} style={td}>{n}</td>)}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {result.workload.length === 0 && <div style={{ fontSize: 13, color: P.gray, padding: "10px 4px" }}>No faculty were found in the timetable.</div>}
+          </Card>
+        </>
+      )}
+    </div>
+  );
+}
+
+
+=== END_FILE: .\src\timetableUpload\TimetableUploadScreen.jsx ===
+
+
+=== START_FILE: .\src\timetableUpload\timeUtils.js ===
+
+// src/timetableUpload/timeUtils.js
+// Small helpers shared by the timetable template, parser and overlap checker.
+
+export const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+export const DAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+// Hours 1-7 are afternoon (a college day runs about 8:30 to 4:30), so "1:20" means 13:20.
+function hour24(h) { return h >= 1 && h <= 7 ? h + 12 : h; }
+
+// "9:00", "09.00", "0900" and the typo-prone "1240" all read as clock times.
+export function parseTimeToken(tok) {
+  const m = /^\s*(\d{1,2})\s*[:.]?\s*(\d{2})\s*$/.exec(String(tok || ""));
+  if (!m) return null;
+  const h = Number(m[1]), min = Number(m[2]);
+  if (h > 23 || min > 59) return null;
+  return hour24(h) * 60 + min;
+}
+
+// "09:00-09:50", "9:00 – 9:50", "11:50-1240" → { start, end } in minutes, or null.
+export function parseRangeLoose(text) {
+  const parts = String(text || "").split(/\s*(?:-|–|—|\bto\b)\s*/i).filter(p => p !== "");
+  if (parts.length !== 2) return null;
+  const a = parseTimeToken(parts[0]), b = parseTimeToken(parts[1]);
+  if (a === null || b === null || b <= a) return null;
+  return { start: a, end: b };
+}
+
+export function fmtClock(total) {
+  const t = Math.round(total);
+  const h = Math.floor(t / 60) % 24, m = t % 60;
+  return (h % 12 || 12) + ":" + String(m).padStart(2, "0");
+}
+export function fmtRange(start, end) { return fmtClock(start) + "–" + fmtClock(end); }
+export function fmt24(total) {
+  const t = Math.round(total);
+  return String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0");
+}
+export function fmtRange24(start, end) { return fmt24(start) + "-" + fmt24(end); }
+
+// "Mon", "monday", "MON." → 0..5, or -1
+export function dayIndex(text) {
+  const t = String(text || "").trim().toLowerCase().slice(0, 3);
+  return DAY_SHORT.findIndex(d => d.toLowerCase() === t);
+}
+
+export function normName(s) {
+  return String(s || "").toLowerCase().replace(/[.,]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+export function editDistance(a, b) {
+  a = normName(a); b = normName(b);
+  const dp = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= b.length; j++) dp[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+  }
+  return dp[a.length][b.length];
+}
+
+// "III YR I SEM SL-1" and "III-A" start with year III; "SL-2" has none.
+export function yearFromName(sectionName) {
+  const m = /^\s*(IV|III|II|I)(?![A-Za-z])/i.exec(sectionName || "");
+  return m ? m[1].toUpperCase() : "";
+}
+export function yearOfSection(sec) { return (sec && sec.year) || yearFromName(sec && sec.name); }
+
+export const BREAK_RE = /^\s*(break|lunch|tea|interval|recess)\s*$/i;
+
+
+=== END_FILE: .\src\timetableUpload\timeUtils.js ===
 
 

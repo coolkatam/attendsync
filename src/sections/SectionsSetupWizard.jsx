@@ -16,6 +16,7 @@ import { MASTER_ADMIN_PHONE } from "../utils";
 import FacultyListEditor, { cleanList } from "./FacultyListEditor";
 import { facultyListOf, sameList, withFaculty, suggestShort, guessType, shortOf, SUBJECT_TYPES } from "./subjectUtils";
 
+const newId = () => "sub-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
 const YEARS = ["I", "II", "III", "IV"];
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
@@ -54,7 +55,6 @@ export default function SectionsSetupWizard({ user, onBack }) {
   // subjects: [{ name, short, type }]. A subject already in a section (same name) is not added twice,
   // but picks up its short name if it didn't have one.
   async function saveSubjectsToSections(subjects, sectionIds) {
-    let seq = 0;
     for (const secId of sectionIds) {
       const sec = sections.find(s => s.id === secId);
       if (!sec) continue;
@@ -65,7 +65,7 @@ export default function SectionsSetupWizard({ user, onBack }) {
         if (hit) {
           if (!hit.short) { hit.short = inc.short; changed = true; }
         } else {
-          list.push({ id: "sub-" + Date.now() + "-" + (seq++), name: inc.name.trim(), short: inc.short, type: inc.type, facultyPhone: "", faculty: [], batches: [] });
+          list.push({ id: newId(), name: inc.name.trim(), short: inc.short, type: inc.type, facultyPhone: "", faculty: [], batches: [] });
           changed = true;
         }
       });

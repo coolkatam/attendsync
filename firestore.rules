@@ -76,6 +76,14 @@ service cloud.firestore {
       allow write: if isSignedIn() && request.auth.uid == phone;
     }
 
+    // ── MASTER TIMETABLES (published per year from the coordinator's uploaded sheet) ──
+    // Anyone signed in can read them (the overlap check compares a new upload against these);
+    // admins, HoD and the master admin publish.
+    match /masterTimetables/{year} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
     // ── EMPLOYEE ROSTER (for background ID verification at signup) ──
     // Only admins/HoD/master admin can read or manage this list.
     // The actual registration-time check does NOT read this directly —
