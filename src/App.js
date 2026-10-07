@@ -416,7 +416,6 @@ function LoginScreen({ onLogin }) {
             <Fld label="Full name *" value={form.name} onChange={v => setForm(f => ({...f, name: v}))} placeholder="Your full name" />
             <Fld label="Designation *" value={form.designation} onChange={v => setForm(f => ({...f, designation: v}))} placeholder="e.g. Assistant Professor" />
             <Fld label="Department / Branch" value={form.branch} onChange={v => setForm(f => ({...f, branch: v}))} placeholder="e.g. Mechanical Engineering" />
-            <Fld label="Subjects you handle" value={form.subjects} onChange={v => setForm(f => ({...f, subjects: v}))} placeholder="e.g. Thermodynamics, Fluid Mechanics" />
             {invitedBy && (
               <div style={{ fontSize: 12, color: P.green, background: P.greenL, borderRadius: 8, padding: "8px 10px", marginBottom: 14 }}>
                 ✓ Joining via your admin's invite link
