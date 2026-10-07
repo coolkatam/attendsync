@@ -18809,7 +18809,10 @@ service firebase.storage {
       "Bash(npx firebase *)",
       "Bash(node -e ' *)",
       "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/C--Users-aruni-attendsync/3b90c489-7d4d-4efc-b7c1-68135f417da3/scratchpad/apply-layout.js\")",
-      "Bash(grep -i -E \"^esbuild$|^sucrase$|^babel-node$\")"
+      "Bash(grep -i -E \"^esbuild$|^sucrase$|^babel-node$\")",
+      "Bash(powershell.exe -NoProfile -File bundle_codebase.ps1)",
+      "Bash(git commit -q -m 'Update entire_codebase.txt *)",
+      "Bash(git push *)"
     ]
   }
 }
