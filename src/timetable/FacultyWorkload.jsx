@@ -6,17 +6,15 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { collection, onSnapshot } from "firebase/firestore";
-import { computeWorkload } from "../timetableUpload/overlapCheck";
-import { DAY_NAMES, fmtRange } from "../timetableUpload/timeUtils";
 import { db } from "../firebase";
 import { P, Card, Btn, Spinner } from "../components/UI";
-import TimetableGrid from "./TimetableGrid";
+import WeekCards from "./WeekCards";
 import PrintShell from "./PrintShell";
 import { exportWorkloadXLSX } from "./timetableExport";
-import { DAYS, blankModel, fromStore, stats } from "./timetableModel";
+import { DAYS, DAY_CAP, itemsFromStore, buildWeek, stats, conflictCount } from "./timetableModel";
 
 const MONO = "'IBM Plex Mono', monospace";
-const COLS = 14; // faculty + 3 workload + 3 split + free + 6 days
+const COLS = 13; // faculty + 3 workload + 3 split + 6 days
 const th = { textAlign: "center", fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: P.gray, padding: "7px 8px", borderBottom: "1.5px solid " + P.border, whiteSpace: "nowrap" };
 const td = { padding: "9px 8px", borderBottom: "1px solid " + P.border, verticalAlign: "middle", textAlign: "center", fontFamily: MONO };
 const sep = { borderLeft: "1.5px solid " + P.border };
@@ -34,14 +32,12 @@ function WorkloadTable({ list, openPhone, onToggle, printMode }) {
           <th style={{ ...th, borderBottom: 0 }} />
           <th colSpan={3} style={grp}>Weekly workload (periods)</th>
           <th colSpan={3} style={{ ...grp, ...sep }}>Teaching split</th>
-          <th style={{ ...th, ...sep, borderBottom: 0 }} />
           <th colSpan={6} style={{ ...grp, ...sep }}>Periods per day</th>
         </tr>
         <tr>
           <th style={{ ...th, textAlign: "left", width: 270 }}>Faculty</th>
           <th style={th}>Teaching</th><th style={th}>Other duties</th><th style={{ ...th, color: P.blue }}>Overall</th>
           <th style={{ ...th, ...sep }}>Theory</th><th style={th}>Lab</th><th style={th}>Drawing</th>
-          <th style={{ ...th, ...sep }}>Free slots</th>
           {DAYS.map((d, i) => <th key={d[0]} style={{ ...th, ...(i === 0 ? sep : null) }}>{d[0]}</th>)}
         </tr>
       </thead>
@@ -83,10 +79,9 @@ function WorkloadTable({ list, openPhone, onToggle, printMode }) {
                     <td style={{ ...td, ...sep }}>{f.s.counts.theory}</td>
                     <td style={td}>{f.s.counts.lab}</td>
                     <td style={td}>{f.s.counts.drawing}</td>
-                    <td style={{ ...td, ...sep }}>{f.s.free}</td>
                     {f.s.perDay.map((n, d) => (
                       <td key={d} style={{ ...td, ...(d === 0 ? sep : null) }}>
-                        <span style={{ display: "inline-block", minWidth: 30, padding: "4px 0", borderRadius: 6, fontSize: 12.5, background: "rgba(44,92,148," + (n / f.s.dayCap * 0.55).toFixed(2) + ")" }}>{n}</span>
+                        <span style={{ display: "inline-block", minWidth: 30, padding: "4px 0", borderRadius: 6, fontSize: 12.5, background: "rgba(44,92,148," + (Math.min(n / DAY_CAP, 1) * 0.55).toFixed(2) + ")" }}>{n}</span>
                       </td>
                     ))}
                   </>
@@ -95,18 +90,7 @@ function WorkloadTable({ list, openPhone, onToggle, printMode }) {
               {isOpen && (
                 <tr>
                   <td colSpan={COLS} style={{ background: P.bg, padding: "10px 12px 14px" }}>
-                    {f.hasOwn && <TimetableGrid model={f.model} editable={false} compact />}
-                    {f.pub.length > 0 && (
-                      <div style={{ fontFamily: "inherit", fontSize: 13, textAlign: "left", marginTop: f.hasOwn ? 12 : 0 }}>
-                        <b>Published classes</b> (from the uploaded timetable)
-                        {f.pub.slice().sort((a, b) => a.day - b.day || a.start - b.start).map(b => (
-                          <div key={b.id + b.publishedYear} style={{ padding: "2px 0", color: "#1a2230" }}>
-                            {DAY_NAMES[b.day].slice(0, 3)} {fmtRange(b.start, b.end)} · {b.token} · {b.sectionName}
-                            {(b.faculty.find(x => x.key === f.phone) || {}).role === "asst" ? " (Asst. Faculty)" : ""}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <WeekCards week={f.week} editable={false} compact />
                   </td>
                 </tr>
               )}
@@ -116,31 +100,6 @@ function WorkloadTable({ list, openPhone, onToggle, printMode }) {
       </tbody>
     </table>
   );
-}
-
-// Workload of one faculty member = their published classes + whatever they filled in themselves that doesn't
-// clash in time with a published class (a published class replaces a colliding entry of their own).
-function combine(model, hasOwn, mine, pubRow, pubCap) {
-  const base = stats(model);
-  if (!mine.length) return base;
-  const counts = { theory: 0, lab: 0, drawing: 0, other: 0 };
-  const perDay = [0, 0, 0, 0, 0, 0];
-  if (hasOwn) {
-    model.cells.forEach((cells, d) => cells.forEach((c, i) => {
-      if (!c || c.type === "lunch") return;
-      const last = model.slots[Math.min(i + c.span - 1, model.slots.length - 1)];
-      const a = model.slots[i].start, b = last.start + last.dur;
-      if (mine.some(x => x.day === d && x.start < b && x.end > a)) return;
-      counts[c.type] += c.span; perDay[d] += c.span;
-    }));
-  }
-  if (pubRow) {
-    Object.keys(counts).forEach(k => { counts[k] += pubRow[k] || 0; });
-    pubRow.perDay.forEach((n, d) => { perDay[d] += n; });
-  }
-  const total = counts.theory + counts.lab + counts.drawing + counts.other;
-  const dayCap = Math.max(hasOwn ? base.dayCap : 0, pubCap, 1);
-  return { counts, total, lunch: base.lunch, perDay, free: Math.max(0, dayCap * 6 - total), cap: dayCap * 6, dayCap };
 }
 
 const SORTS = {
@@ -175,20 +134,16 @@ export default function FacultyWorkload() {
   useEffect(() => {
     if (!src.users || !src.tts) return;
     const tts = {};
-    src.tts.forEach(d => { const m = fromStore(d); if (m) tts[d.id] = { model: m, term: d.term || "" }; });
+    src.tts.forEach(d => { tts[d.id] = d; });
     const pubBlocks = src.pub.flatMap(p => (p.blocks || []).map(b => ({ ...b, publishedYear: p.year })));
-    const pubRows = {};
-    computeWorkload(pubBlocks).forEach(r => { pubRows[r.key] = r; });
-    const pubCap = Math.max(0, ...src.pub.flatMap(p => (p.sections || []).map(x => (x.slots || []).filter(k => !k.brk).length)));
     const rows = [];
     src.users.forEach(u => {
       if (u.status !== "approved") return;
       const t = tts[u.id];
-      const model = t ? t.model : blankModel(["—"]);
-      const mine = pubBlocks.filter(b => b.type !== "note" && b.faculty.some(f => f.key === u.id));
-      const s = combine(model, !!t, mine, pubRows[u.id], pubCap);
-      const teach = s.counts.theory + s.counts.lab + s.counts.drawing;
-      rows.push({ phone: u.id, name: u.name || u.id, desig: u.designation || "", model, hasOwn: !!t && stats(model).total > 0, pub: mine, term: t ? t.term : "", s, teach, other: s.counts.other, none: s.total === 0 });
+      const week = buildWeek(t ? itemsFromStore(t) : [], pubBlocks, u.id);
+      const st = stats(week);
+      const teach = st.counts.theory + st.counts.lab + st.counts.drawing;
+      rows.push({ phone: u.id, name: u.name || u.id, desig: u.designation || "", week, s: st, teach, other: st.counts.other, bad: conflictCount(week), none: st.total === 0 && conflictCount(week) === 0 });
     });
     setList(rows);
   }, [src]);
@@ -261,7 +216,7 @@ export default function FacultyWorkload() {
         </div>
         {shown.length === 0 && <div style={{ color: P.gray, padding: "14px 4px" }}>No faculty match your search.</div>}
         <p style={{ fontSize: 12.5, color: P.gray, margin: "10px 0 0", maxWidth: "100ch" }}>
-          <b>Teaching</b> is theory + lab + drawing periods. <b>Other duties</b> are mentoring, disciplinary duties, NCC, NSS, sports and other duties. <b>Overall</b> is both together. Lunch and free slots are not counted. Click a name to see that faculty's timetable.
+          <b>Teaching</b> is theory + lab + drawing periods. <b>Other duties</b> are mentoring, disciplinary duties, NCC, NSS, sports and other duties. <b>Overall</b> is both together. Published classes and the faculty member's own duties are both counted; an own entry that overlaps a published class is flagged and not counted. Click a name to see that faculty's week.
         </p>
       </Card>
 
