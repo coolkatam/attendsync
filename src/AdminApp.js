@@ -26,6 +26,7 @@ import { P, Btn, Card, Badge, Fld, Sel, TopBar, GPill, ARow, Spinner, PeriodPick
 import TimetablePage from "./timetable/TimetablePage";
 import FacultyWorkload from "./timetable/FacultyWorkload";
 import TimetableUploadScreen from "./timetableUpload/TimetableUploadScreen";
+import RosterCheck from "./roster/RosterCheck";
 import { IconAttendance, IconSections, IconMarks, IconMentor, IconSearch, IconUsers, IconTrash, IconUserCircle, IconIdCard, IconPhone, IconCalendar, IconWorkload, IconBuilding } from "./components/Icons";
 import { today, calcPct, parseCSV, downloadTemplate, exportXLS, makeKey, parseKey, groupByDateBatched, rowColor, MASTER_ADMIN_PHONE, fmtDate, validateBatches, studentsInBatch, readStatus, batchSlotKey } from "./utils";
 
@@ -939,6 +940,7 @@ export function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReje
   const [showRoster, setShowRoster] = useState(false);
   const [rosterMsg, setRosterMsg] = useState("");
   const [rosterCount, setRosterCount] = useState(null);
+  const [rosterVer, setRosterVer] = useState(0);
   const [photos, setPhotos] = useState({}); // phone -> cache-busted photoURL
   const canManageRoster = isMaster || currentUser.role === "hod";
 
@@ -995,6 +997,7 @@ export function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReje
           });
         }
         setRosterCount(prev => (prev || 0) + entries.length);
+        setRosterVer(v => v + 1);
         setRosterMsg("✅ Uploaded " + entries.length + " employee IDs successfully.");
       } catch (err) {
         setRosterMsg("Could not read that file. Please use the downloaded template format.");
@@ -1073,6 +1076,7 @@ export function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReje
                 {rosterMsg && (
                   <div style={{ fontSize: 13, color: "#78350f", background: "#fef3c7", borderRadius: 8, padding: "8px 12px" }}>{rosterMsg}</div>
                 )}
+                <RosterCheck allUsers={allUsers} version={rosterVer} />
               </div>
             )}
           </div>
