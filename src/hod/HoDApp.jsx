@@ -20,7 +20,7 @@ import { approveUser, rejectUser, makeAdmin, makeFaculty, makeHod, deleteUser, r
 import { P, TopBar } from "../components/UI";
 import TimetablePage from "../timetable/TimetablePage";
 import FacultyWorkload from "../timetable/FacultyWorkload";
-import TimetableUploadScreen from "../timetableUpload/TimetableUploadScreen";
+import TimetableEntry from "../timetableUpload/TimetableEntry";
 import { IconAttendance, IconSearch, IconUsers, IconUserCircle, IconMarks, IconCalendar, IconWorkload } from "../components/Icons";
 
 export default function HoDApp({ user, onLogout }) {
@@ -62,7 +62,7 @@ export default function HoDApp({ user, onLogout }) {
             label: "Department oversight",
             tiles: [
               { id: "studentData", title: "Student Data", desc: "Look up any student's SGPA, CGPA, backlogs and attendance trend.", icon: IconSearch, color: "green" },
-              { id: "timetableUpload", title: "Timetable Upload", desc: "Download the year's timetable template, upload it, clear overlaps and see each faculty member's workload.", icon: IconCalendar, color: "indigo" },
+              { id: "timetableUpload", title: "Timetable", desc: "Upload a timetable, or have the portal design one, then clear overlaps and publish.", icon: IconCalendar, color: "indigo" },
               { id: "workload", title: "Faculty Workload", desc: "Weekly periods for every faculty member, from their timetables.", icon: IconWorkload, color: "indigo" },
               { id: "allSectionsMarks", title: "All Sections Internal Marks", desc: "Monitor every original section's marks — see who's locked, drafted or not started.", icon: IconMarks, color: "amber" },
               { id: "profiles", title: "Faculty Profiles", desc: "Directory of every faculty member's bio, publications and research.", icon: IconUsers, color: "rose" },
@@ -83,7 +83,7 @@ export default function HoDApp({ user, onLogout }) {
     myMarks: "My Subject Internal Marks",
     timetable: "My Timetable",
     workload: "Faculty Workload",
-    timetableUpload: "Timetable Upload",
+    timetableUpload: "Timetable",
     profiles: "Faculty Profiles",
     users: "Users",
     profile: "My Profile",
@@ -108,7 +108,7 @@ export default function HoDApp({ user, onLogout }) {
 
       {tab === "workload" && <FacultyWorkload />}
 
-      {tab === "timetableUpload" && <TimetableUploadScreen user={user} />}
+      {tab === "timetableUpload" && <TimetableEntry user={user} />}
 
       {tab === "profiles" && (
         <div style={{ padding: "24px 24px 80px", maxWidth: "min(1700px, 92vw)", margin: "0 auto" }}>

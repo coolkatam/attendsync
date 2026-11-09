@@ -25,7 +25,7 @@ import MentorPage from "./mentor/MentorPage";
 import { P, Btn, Card, Badge, Fld, Sel, TopBar, GPill, ARow, Spinner, PeriodPicker } from "./components/UI";
 import TimetablePage from "./timetable/TimetablePage";
 import FacultyWorkload from "./timetable/FacultyWorkload";
-import TimetableUploadScreen from "./timetableUpload/TimetableUploadScreen";
+import TimetableEntry from "./timetableUpload/TimetableEntry";
 import RosterCheck from "./roster/RosterCheck";
 import { IconAttendance, IconSections, IconMarks, IconMentor, IconSearch, IconUsers, IconTrash, IconUserCircle, IconIdCard, IconPhone, IconCalendar, IconWorkload, IconBuilding } from "./components/Icons";
 import { today, calcPct, parseCSV, downloadTemplate, exportXLS, makeKey, parseKey, groupByDateBatched, rowColor, MASTER_ADMIN_PHONE, fmtDate, validateBatches, studentsInBatch, readStatus, batchSlotKey } from "./utils";
@@ -34,7 +34,7 @@ import { today, calcPct, parseCSV, downloadTemplate, exportXLS, makeKey, parseKe
 const COORD_TILES = [
   { id: "allSections", title: "All Sections", desc: "Rosters, subjects and attendance for every section you administer.", icon: IconSections, color: "teal" },
   { id: "allSectionsMarks", title: "All Sections Internal Marks", desc: "Monitor every original section's marks — see who's locked, drafted or not started.", icon: IconMarks, color: "amber" },
-  { id: "timetableUpload", title: "Timetable Upload", desc: "Download the year's timetable template, upload it, clear overlaps and see each faculty member's workload.", icon: IconCalendar, color: "indigo" },
+  { id: "timetableUpload", title: "Timetable", desc: "Upload a timetable, or have the portal design one, then clear overlaps and publish.", icon: IconCalendar, color: "indigo" },
   { id: "users", title: "Users", desc: "Approve registrations, promote faculty, manage the employee ID roster.", icon: IconUsers, color: "slate" },
 ];
 
@@ -264,9 +264,9 @@ export default function AdminApp({ user, onLogout }) {
   if (screen === "timetableUpload") {
     return (
       <div style={{ background: P.bg, minHeight: "100vh" }}>
-        <TopBar title="Timetable Upload" subtitle={user.name}
+        <TopBar title="Timetable" subtitle={user.name}
           right={<button onClick={() => setScreen(inCoord ? "coordinator" : "home")} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>← Back</button>} />
-        <TimetableUploadScreen user={user} />
+        <TimetableEntry user={user} />
       </div>
     );
   }

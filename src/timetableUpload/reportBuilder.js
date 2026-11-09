@@ -57,7 +57,7 @@ class Grid {
   }
 }
 
-function subjectColours(blocks) {
+export function subjectColours(blocks) {
   const map = new Map();
   Array.from(new Set(blocks.map(b => b.token))).sort().forEach((t, i) => map.set(t, PALETTE[i % PALETTE.length]));
   return t => map.get(t) || PALETTE[0];
@@ -93,7 +93,7 @@ function placeBlocks(list, cols) {
 }
 
 // ── Sheet-3: one green grid per faculty member ──
-function facultySheet(blocks, workload, sections, colourOf) {
+export function facultySheet(blocks, workload, sections, colourOf, days = 6) {
   const g = new Grid();
   const cols = globalColumns(sections);
   const n = Math.max(cols.length, 1);
@@ -109,7 +109,7 @@ function facultySheet(blocks, workload, sections, colourOf) {
     cols.forEach((c, i) => g.set(r, i + 1, "P" + (i + 1) + " (" + fmtRange24(c.start, c.end) + ")", st({ bg: "2E7D4F", fg: WHITE, bold: true })));
     g.rows[r] = { hpt: 22 };
     r++;
-    DAY_NAMES.forEach((dn, d) => {
+    DAY_NAMES.slice(0, days).forEach((dn, d) => {
       const zebra = d % 2 === 1 ? ZEBRA : WHITE;
       g.set(r, 0, dn, st({ bg: "E3EFE7", bold: true, h: "left" }));
       const taken = new Array(n).fill(false);
@@ -136,7 +136,7 @@ function facultySheet(blocks, workload, sections, colourOf) {
 }
 
 // ── Sheet-3B: one blue grid per section ──
-function sectionSheet(blocks, sections, colourOf) {
+export function sectionSheet(blocks, sections, colourOf, days = 6) {
   const g = new Grid();
   const widest = Math.max(1, ...sections.map(s => s.slots.length));
   g.cols = [{ wch: 13 }, ...Array.from({ length: widest }, () => ({ wch: 20 }))];
@@ -150,7 +150,7 @@ function sectionSheet(blocks, sections, colourOf) {
     g.set(r, 0, "Day", st({ bg: BLUE, fg: WHITE, bold: true }));
     let period = 0;
     sec.slots.forEach((s, i) => {
-      if (s.brk) g.set(r, i + 1, s.start >= 690 ? "Lunch" : "Break", st({ bg: "8A6D1D", fg: WHITE, bold: true }));
+      if (s.brk) g.set(r, i + 1, s.label || (s.start >= 690 ? "Lunch" : "Break"), st({ bg: "8A6D1D", fg: WHITE, bold: true }));
       else { period++; g.set(r, i + 1, "Period " + period + "\n" + fmtRange24(s.start, s.end), st({ bg: BLUE, fg: WHITE, bold: true })); }
     });
     g.rows[r] = { hpt: 32 };
@@ -158,11 +158,11 @@ function sectionSheet(blocks, sections, colourOf) {
     const first = r;
     // break / lunch columns run down every day as one vertical block
     sec.slots.forEach((s, i) => {
-      if (s.brk) g.merge(first, i + 1, first + 5, i + 1, s.start >= 690 ? "L U N C H" : "B R E A K", st({ bg: "F1E6C4", fg: "6B4E16", bold: true, size: 11, rot: 90 }));
+      if (s.brk) g.merge(first, i + 1, first + days - 1, i + 1, (s.label || (s.start >= 690 ? "Lunch" : "Break")).toUpperCase().split("").join(" "), st({ bg: "F1E6C4", fg: "6B4E16", bold: true, size: 11, rot: 90 }));
     });
     const dataCols = sec.slots.map((s, i) => ({ ...s, i })).filter(s => !s.brk);
     const secBlocks = blocks.filter(b => b.sectionId === sec.id);
-    DAY_NAMES.forEach((dn, d) => {
+    DAY_NAMES.slice(0, days).forEach((dn, d) => {
       g.set(r, 0, dn, st({ bg: "DCE6F2", bold: true, h: "left" }));
       const taken = new Set();
       const colsForPlace = dataCols.map(s => ({ start: s.start, end: s.end }));
