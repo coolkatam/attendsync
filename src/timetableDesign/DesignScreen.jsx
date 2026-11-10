@@ -183,7 +183,7 @@ export default function DesignScreen({ user, onBack }) {
       });
       return changed ? { ...prev, loads } : prev;
     });
-  }, [ctx.subjects]);
+  }, [ctx.subjects, a.loads]);
 
   const calc = useMemo(() => {
     const mine = new Set(ctx.selectedIds);
@@ -199,6 +199,12 @@ export default function DesignScreen({ user, onBack }) {
     return next;
   });
   const changeYear = y => { setYear(y); setA(loadDraft(user.phone, y)); setSets([]); setSpecUsed(null); sigs.current = []; };
+  const startAgain = () => {
+    if (!window.confirm("Start again from the beginning? Your answers and any versions designed on this screen are cleared. Nothing that is already published is changed.")) return;
+    try { localStorage.removeItem(draftKey(user.phone, year)); } catch (e) { /* storage off */ }
+    setA(defaultAnswers()); setSets([]); setSpecUsed(null); sigs.current = []; setStep(0); setConfirmN(0); setPubMsg({ ok: true, text: "" });
+    window.scrollTo(0, 0);
+  };
   const chooseSections = ids => { set({ sectionIds: ids }); setSets([]); setSpecUsed(null); sigs.current = []; setPubMsg({ ok: true, text: "" }); };
 
   const hasSubjects = ctx.yearSections.some(s => s.subjects.length > 0);
@@ -246,6 +252,7 @@ export default function DesignScreen({ user, onBack }) {
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <Btn small variant="ghost" onClick={onBack}>← Back</Btn>
         <div style={{ fontWeight: 800, fontSize: 20 }}>Design a timetable</div>
+        <div style={{ marginLeft: "auto" }}><Btn small variant="outline" onClick={startAgain}>Start again</Btn></div>
       </div>
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>

@@ -2,7 +2,7 @@
 // Saves a year's timetable as the master timetable (masterTimetables/{year}). Used when an uploaded sheet is published,
 // when a designed version is published, and when a published timetable is edited on screen.
 
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, deleteDoc } from "firebase/firestore";
 import { db } from "../firebase";
 
 export function masterData({ year, blocks, sections, user, fileName = "", keepFrom = null, edited = false }) {
@@ -44,4 +44,13 @@ export function mergeSections(existing, blocks, sections) {
     blocks: (existing.blocks || []).filter(b => !ids.has(b.sectionId)).concat(blocks),
     sections: (existing.sections || []).filter(x => !ids.has(x.id)).concat(sections),
   };
+}
+
+// Takes some sections out of a published year. If none are left, the year's timetable is withdrawn altogether.
+export async function removeSections({ year, existing, sectionIds, user }) {
+  const ids = new Set(sectionIds);
+  const blocks = (existing.blocks || []).filter(b => !ids.has(b.sectionId));
+  const sections = (existing.sections || []).filter(x => !ids.has(x.id));
+  if (sections.length === 0) { await deleteDoc(doc(db, "masterTimetables", year)); return null; }
+  return publishMaster({ year, blocks, sections, user, edited: true, keepFrom: existing });
 }

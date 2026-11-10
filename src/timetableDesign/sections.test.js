@@ -112,3 +112,17 @@ test("a section never has two lab sessions on one day, in any version", () => {
     Object.values(perDay).forEach(n => expect(n).toBe(1));
   });
 });
+
+test("Start again clears the answers and returns to the first tab", async () => {
+  localStorage.clear();
+  window.confirm = jest.fn(() => true);
+  window.scrollTo = jest.fn();
+  render(<DesignScreen user={{ phone: "9", role: "hod", name: "T" }} onBack={() => {}} />);
+  await screen.findByText("Which section?");
+  fireEvent.click(screen.getByText("2. Days and periods"));
+  expect(screen.getByText("Here are the timings")).toBeTruthy();
+  fireEvent.click(screen.getByText("Start again"));
+  expect(window.confirm).toHaveBeenCalled();
+  await screen.findByText("Which section?");
+  expect(localStorage.getItem("ttdesign-v1:9:III")).not.toMatch(/timingsConfirmed":true/);
+});

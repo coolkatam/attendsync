@@ -18855,7 +18855,8 @@ service firebase.storage {
       "Bash(sed -i 's/  localStorage.clear\\(\\);\\\\n  render/XX/' src/timetableDesign/DesignScreen.test.js)",
       "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_lab.js\")",
       "Bash(grep -n \"slots.map\\(\\(s, i\\) => {\" src/timetableUpload/PublishedEditor.jsx)",
-      "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_editor_grid.js\")"
+      "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_editor_grid.js\")",
+      "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_reset.js\")"
     ]
   }
 }
@@ -43589,7 +43590,7 @@ export default function DesignScreen({ user, onBack }) {
       });
       return changed ? { ...prev, loads } : prev;
     });
-  }, [ctx.subjects]);
+  }, [ctx.subjects, a.loads]);
 
   const calc = useMemo(() => {
     const mine = new Set(ctx.selectedIds);
@@ -43605,6 +43606,12 @@ export default function DesignScreen({ user, onBack }) {
     return next;
   });
   const changeYear = y => { setYear(y); setA(loadDraft(user.phone, y)); setSets([]); setSpecUsed(null); sigs.current = []; };
+  const startAgain = () => {
+    if (!window.confirm("Start again from the beginning? Your answers and any versions designed on this screen are cleared. Nothing that is already published is changed.")) return;
+    try { localStorage.removeItem(draftKey(user.phone, year)); } catch (e) { /* storage off */ }
+    setA(defaultAnswers()); setSets([]); setSpecUsed(null); sigs.current = []; setStep(0); setConfirmN(0); setPubMsg({ ok: true, text: "" });
+    window.scrollTo(0, 0);
+  };
   const chooseSections = ids => { set({ sectionIds: ids }); setSets([]); setSpecUsed(null); sigs.current = []; setPubMsg({ ok: true, text: "" }); };
 
   const hasSubjects = ctx.yearSections.some(s => s.subjects.length > 0);
@@ -43652,6 +43659,7 @@ export default function DesignScreen({ user, onBack }) {
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <Btn small variant="ghost" onClick={onBack}>← Back</Btn>
         <div style={{ fontWeight: 800, fontSize: 20 }}>Design a timetable</div>
+        <div style={{ marginLeft: "auto" }}><Btn small variant="outline" onClick={startAgain}>Start again</Btn></div>
       </div>
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -44839,6 +44847,61 @@ test("the editor shows the timetable, refuses a clashing move and accepts a safe
 === END_FILE: .\src\timetableDesign\PublishedEditor.test.js ===
 
 
+=== START_FILE: .\src\timetableDesign\removeTimetable.test.js ===
+
+import React from "react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+
+const mockSetDoc = jest.fn(async () => {});
+const mockDeleteDoc = jest.fn(async () => {});
+const mockYear = { id: "III", data: () => ({
+  publishedBy: "9", publishedByName: "T", publishedAt: new Date().toISOString(),
+  sections: [{ id: "s1", name: "III-A", slots: [] }, { id: "s2", name: "III-B", slots: [] }],
+  blocks: [
+    { id: "a", sectionId: "s1", sectionName: "III-A", day: 0, start: 540, end: 590, token: "T1", subject: "T1", type: "theory", periods: 1, faculty: [] },
+    { id: "b", sectionId: "s2", sectionName: "III-B", day: 0, start: 540, end: 590, token: "T1", subject: "T1", type: "theory", periods: 1, faculty: [] },
+  ],
+}) };
+jest.mock("../firebase", () => ({ db: {} }));
+jest.mock("firebase/firestore", () => ({
+  collection: (_db, name) => ({ __name: name }),
+  doc: (_db, name, id) => ({ __name: name, __id: id }),
+  onSnapshot: (ref, cb) => { cb({ docs: ref.__name === "masterTimetables" ? [mockYear] : [], forEach: () => {} }); return () => {}; },
+  getDocs: async () => ({ forEach: () => {} }),
+  getDoc: async () => ({ exists: () => false }),
+  setDoc: (...a) => mockSetDoc(...a),
+  deleteDoc: (...a) => mockDeleteDoc(...a),
+}));
+
+const TimetableEntry = require("../timetableUpload/TimetableEntry").default;
+
+test("one section's timetable can be removed and the rest stays", async () => {
+  render(<TimetableEntry user={{ phone: "9", name: "T", role: "hod" }} />);
+  await screen.findByText("Published timetables");
+  fireEvent.click(screen.getByLabelText("Remove III-A's timetable"));
+  expect(screen.getByText("Remove III-A?")).toBeTruthy();
+  fireEvent.click(screen.getByText("Yes, remove"));
+  await waitFor(() => expect(mockSetDoc).toHaveBeenCalled());
+  const saved = mockSetDoc.mock.calls[0][1];
+  expect(saved.sections.map(s => s.id)).toEqual(["s2"]);
+  expect(saved.blocks.map(b => b.id)).toEqual(["b"]);
+  expect(mockDeleteDoc).not.toHaveBeenCalled();
+});
+
+test("the whole year can be removed", async () => {
+  mockSetDoc.mockClear();
+  render(<TimetableEntry user={{ phone: "9", name: "T", role: "hod" }} />);
+  await screen.findByText("Published timetables");
+  fireEvent.click(screen.getByText("Remove the whole year"));
+  fireEvent.click(screen.getByText("Yes, remove"));
+  await waitFor(() => expect(mockDeleteDoc).toHaveBeenCalled());
+  expect(mockSetDoc).not.toHaveBeenCalled();
+});
+
+
+=== END_FILE: .\src\timetableDesign\removeTimetable.test.js ===
+
+
 === START_FILE: .\src\timetableDesign\roundtrip.test.js ===
 
 import * as XLSXS from "xlsx-js-style";
@@ -45016,6 +45079,20 @@ test("a section never has two lab sessions on one day, in any version", () => {
     v.blocks.filter(b => b.type === "lab").forEach(b => { perDay[b.day] = (perDay[b.day] || 0) + 1; });
     Object.values(perDay).forEach(n => expect(n).toBe(1));
   });
+});
+
+test("Start again clears the answers and returns to the first tab", async () => {
+  localStorage.clear();
+  window.confirm = jest.fn(() => true);
+  window.scrollTo = jest.fn();
+  render(<DesignScreen user={{ phone: "9", role: "hod", name: "T" }} onBack={() => {}} />);
+  await screen.findByText("Which section?");
+  fireEvent.click(screen.getByText("2. Days and periods"));
+  expect(screen.getByText("Here are the timings")).toBeTruthy();
+  fireEvent.click(screen.getByText("Start again"));
+  expect(window.confirm).toHaveBeenCalled();
+  await screen.findByText("Which section?");
+  expect(localStorage.getItem("ttdesign-v1:9:III")).not.toMatch(/timingsConfirmed":true/);
 });
 
 
@@ -46204,7 +46281,7 @@ function AddPanel({ cell, section, portalSection, people, facObj, blocks, apply 
 // Saves a year's timetable as the master timetable (masterTimetables/{year}). Used when an uploaded sheet is published,
 // when a designed version is published, and when a published timetable is edited on screen.
 
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, deleteDoc } from "firebase/firestore";
 import { db } from "../firebase";
 
 export function masterData({ year, blocks, sections, user, fileName = "", keepFrom = null, edited = false }) {
@@ -46246,6 +46323,15 @@ export function mergeSections(existing, blocks, sections) {
     blocks: (existing.blocks || []).filter(b => !ids.has(b.sectionId)).concat(blocks),
     sections: (existing.sections || []).filter(x => !ids.has(x.id)).concat(sections),
   };
+}
+
+// Takes some sections out of a published year. If none are left, the year's timetable is withdrawn altogether.
+export async function removeSections({ year, existing, sectionIds, user }) {
+  const ids = new Set(sectionIds);
+  const blocks = (existing.blocks || []).filter(b => !ids.has(b.sectionId));
+  const sections = (existing.sections || []).filter(x => !ids.has(x.id));
+  if (sections.length === 0) { await deleteDoc(doc(db, "masterTimetables", year)); return null; }
+  return publishMaster({ year, blocks, sections, user, edited: true, keepFrom: existing });
 }
 
 
@@ -46967,6 +47053,7 @@ import { P, Btn } from "../components/UI";
 import TimetableUploadScreen from "./TimetableUploadScreen";
 import DesignScreen from "../timetableDesign/DesignScreen";
 import PublishedEditor from "./PublishedEditor";
+import { removeSections } from "./publishMaster";
 
 function Choice({ title, text, action, onClick, accent }) {
   return (
@@ -46984,6 +47071,9 @@ export default function TimetableEntry({ user }) {
   const [mode, setMode] = useState(null);       // null | "upload" | "design" | "edit"
   const [editYear, setEditYear] = useState("");
   const [published, setPublished] = useState([]);
+  const [ask, setAsk] = useState(null);      // { year, ids, label } waiting for "Yes, remove"
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState({ ok: true, text: "" });
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "masterTimetables"), snap => {
@@ -46991,6 +47081,17 @@ export default function TimetableEntry({ user }) {
     }, () => {});
     return unsub;
   }, []);
+
+  async function doRemove() {
+    const doc = published.find(p => p.year === ask.year);
+    setBusy(true);
+    try {
+      await removeSections({ year: ask.year, existing: doc, sectionIds: ask.ids, user });
+      setNote({ ok: true, text: ask.label + " removed. Faculty no longer see those classes, and other timetables are no longer checked against them." });
+      setAsk(null);
+    } catch (err) { setNote({ ok: false, text: "Could not remove it (" + err.message + "). Nothing was changed." }); }
+    setBusy(false);
+  }
 
   if (mode === "design") return <DesignScreen user={user} onBack={() => setMode(null)} />;
   if (mode === "edit") return <PublishedEditor year={editYear} user={user} onBack={() => setMode(null)} />;
@@ -47017,14 +47118,38 @@ export default function TimetableEntry({ user }) {
         <div style={{ marginTop: 34 }}>
           <div style={{ fontSize: 17, fontWeight: 800, marginBottom: 4 }}>Published timetables</div>
           <div style={{ fontSize: 13.5, color: P.gray, marginBottom: 12 }}>Need a change after publishing? Edit it here, on screen. Each change is checked for overlaps before it is accepted.</div>
+          {note.text && <div style={{ fontSize: 13.5, color: note.ok ? P.green : P.red, background: note.ok ? P.greenL : P.redL, borderRadius: 10, padding: "10px 14px", marginBottom: 10, fontWeight: 600 }}>{note.text}</div>}
           {published.map(p => (
-            <div key={p.year} style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", background: "#fff", border: "1px solid " + P.border, borderRadius: 12, padding: "12px 16px", marginBottom: 8 }}>
-              <span style={{ fontWeight: 800, fontSize: 15, minWidth: 70 }}>Year {p.year}</span>
-              <span style={{ flex: 1, minWidth: 220, fontSize: 13, color: P.gray }}>
-                {(p.sections || []).map(x => x.name).join(", ")} · {(p.blocks || []).length} classes · published by {p.publishedByName || "—"}{p.publishedAt ? " on " + new Date(p.publishedAt).toLocaleDateString() : ""}
-                {p.lastEditedAt ? " · edited by " + (p.lastEditedByName || "—") + " on " + new Date(p.lastEditedAt).toLocaleDateString() : ""}
-              </span>
-              <Btn small onClick={() => { setEditYear(p.year); setMode("edit"); }}>Edit on screen</Btn>
+            <div key={p.year} style={{ background: "#fff", border: "1px solid " + P.border, borderRadius: 12, padding: "12px 16px", marginBottom: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+                <span style={{ fontWeight: 800, fontSize: 15, minWidth: 70 }}>Year {p.year}</span>
+                <span style={{ flex: 1, minWidth: 220, fontSize: 13, color: P.gray }}>
+                  {(p.blocks || []).length} classes · published by {p.publishedByName || "—"}{p.publishedAt ? " on " + new Date(p.publishedAt).toLocaleDateString() : ""}
+                  {p.lastEditedAt ? " · edited by " + (p.lastEditedByName || "—") + " on " + new Date(p.lastEditedAt).toLocaleDateString() : ""}
+                </span>
+                <Btn small onClick={() => { setEditYear(p.year); setMode("edit"); }}>Edit on screen</Btn>
+                <Btn small variant="outline" onClick={() => { setNote({ ok: true, text: "" }); setAsk({ year: p.year, ids: (p.sections || []).map(x => x.id), label: "The whole Year " + p.year + " timetable" }); }}>Remove the whole year</Btn>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                {(p.sections || []).map(x => (
+                  <span key={x.id} style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 12.5, fontWeight: 600, background: P.bg, border: "1px solid " + P.border, borderRadius: 20, padding: "4px 6px 4px 12px" }}>
+                    {x.name}
+                    <button onClick={() => { setNote({ ok: true, text: "" }); setAsk({ year: p.year, ids: [x.id], label: x.name }); }} title={"Remove " + x.name + "'s timetable"} aria-label={"Remove " + x.name + "'s timetable"} style={{ border: "none", background: "#e6e9ed", color: P.gray, borderRadius: "50%", width: 20, height: 20, cursor: "pointer", fontSize: 12, lineHeight: 1 }}>×</button>
+                  </span>
+                ))}
+              </div>
+              {ask && ask.year === p.year && (
+                <div style={{ marginTop: 12, background: P.redL, border: "1px solid " + P.red, borderRadius: 10, padding: "12px 14px" }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: P.red, marginBottom: 4 }}>Remove {ask.label}?</div>
+                  <div style={{ fontSize: 13, marginBottom: 10, lineHeight: 1.55 }}>
+                    Faculty will no longer see these classes in My Timetable, and the Faculty Workload figures drop with them. You can design or upload the timetable again afterwards. Attendance and marks are not affected.
+                  </div>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <Btn small variant="danger" onClick={doRemove} disabled={busy}>{busy ? "Removing…" : "Yes, remove"}</Btn>
+                    <Btn small variant="outline" onClick={() => setAsk(null)} disabled={busy}>Keep it</Btn>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
