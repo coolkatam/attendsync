@@ -23,7 +23,7 @@ const mk = (id, name) => ({
 
 test("a designed workbook is read back into the same classes with the same faculty", () => {
   const sections = [mk("s1", "III YR I SEM SL-1"), mk("s2", "III YR I SEM AL-1")];
-  const a = defaultAnswers();
+  const a = defaultAnswers(); a.allowBlank = true;
   ["S&GPS", "DMM", "AIML"].forEach(n => { a.loads[n] = { periods: 4, block: 1 }; });
   ["Thermal Lab", "Metrology Lab"].forEach(n => { a.loads[n] = { periods: 3, block: 3 }; });
   a.parallel = [["Thermal Lab", "Metrology Lab"]];

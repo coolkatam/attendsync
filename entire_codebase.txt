@@ -18844,7 +18844,18 @@ service firebase.storage {
       "Bash(timeout 100 powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"C:\\\\Users\\\\aruni\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\e86fee27736f60df\\\\2ec7c05b-9c97-4a02-8313-5f7ec08f34dd\\\\scratchpad\\\\make_pdf.ps1\")",
       "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_gen.js\")",
       "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_steps.js\")",
-      "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_design.js\")"
+      "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_design.js\")",
+      "Bash(grep -n \"pubBusy\\\\|facDay\\\\[key\\\\]\\\\[d\\\\].forEach\\\\|runOk\\(key, d, u, p, ignore\\) {\\\\|const row = this.fac\\\\[key\\\\]\\\\[d\\\\];\\\\|c += tot \\\\* 3\\\\|const per = {};\\\\|const free = d =>\\\\|capTotal +=\\\\|Object.values\\(per\\).forEach\\\\|const counted = new Set\\(\\);\" src/timetableDesign/generator.js)",
+      "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_gen2.js\")",
+      "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_upload2.js\")",
+      "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_blank.js\")",
+      "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_total.js\")",
+      "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_sections.js\")",
+      "Bash(sed -i 's/const a = defaultAnswers\\(\\);/const a = defaultAnswers\\(\\); a.allowBlank = true;/' src/timetableDesign/generator.test.js src/timetableDesign/roundtrip.test.js src/timetableDesign/autofix.test.js src/timetableDesign/editChecks.test.js)",
+      "Bash(sed -i 's/  localStorage.clear\\(\\);\\\\n  render/XX/' src/timetableDesign/DesignScreen.test.js)",
+      "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_lab.js\")",
+      "Bash(grep -n \"slots.map\\(\\(s, i\\) => {\" src/timetableUpload/PublishedEditor.jsx)",
+      "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_editor_grid.js\")"
     ]
   }
 }
@@ -43200,7 +43211,7 @@ test("autoFix clears a clash it is given without creating another", () => {
   const people = [1, 2, 3, 4].map(i => ({ phone: "p" + i, name: "Dr " + i }));
   const mk = (id, name) => ({ id, name, subjects: ["T1", "T2", "T3"].map((n, i) => ({ name: n, token: n, type: "Theory", faculty: ["p" + (i + 1)] })) });
   const sections = [mk("s1", "III-A"), mk("s2", "III-B"), mk("s3", "III-C")];
-  const a = defaultAnswers();
+  const a = defaultAnswers(); a.allowBlank = true;
   ["T1", "T2", "T3"].forEach(n => { a.loads[n] = { periods: 4, block: 1 }; });
   const { spec } = buildSpec({ year: "III", a, sections, people, published: [] });
   const res = designVersions(spec, people, { count: 1, seed: 3 });
@@ -43287,6 +43298,7 @@ export function defaultAnswers() {
     labBlock: 3,             // periods in one lab session
     labPref: "any",          // any | morning | afternoon
     repeatSameDay: false,    // may the same subject appear twice in a day for a section
+    labOnceADay: true,       // at most one lab/drawing session a day for a section
     loads: {},               // subject name -> { periods, block, avoidFirst, avoidLast, perSection: { [sectionId]: n } }
     parallel: [],            // [[subjectName, ...]] lab subjects that run together as batches
     joint: [],               // [{ subject, sections: [sectionId, ...] }] one class for several sections together
@@ -43300,6 +43312,8 @@ export function defaultAnswers() {
     availability: [],        // [{ phone, mode: "blocked" | "only", cells: { "d-p": true } }]
     extras: [],              // see newExtra()
     notes: "",
+    sectionIds: [],          // sections being designed; empty = the first section of the year
+    allowBlank: false,       // a timetable may not have blank periods (only tests switch this on)
   };
 }
 
@@ -43408,7 +43422,7 @@ import { facultyListOf, guessType } from "../sections/subjectUtils";
 import { defaultAnswers, periodsOn, DAY_ABBR } from "./designModel";
 import { buildSpec, designVersions } from "./generator";
 import { writeDesignWorkbook, sectionsOf } from "./designExport";
-import { publishMaster } from "../timetableUpload/publishMaster";
+import { publishMaster, mergeSections } from "../timetableUpload/publishMaster";
 import { Q, StepYear, StepTimings, StepTogether, StepLimits, StepAvailability } from "./steps";
 import StepSubjects from "./StepSubjects";
 
@@ -43448,18 +43462,28 @@ function SectionGrid({ spec, blocks, sectionId, colourOf }) {
           {Array.from({ length: days }, (_, d) => (
             <tr key={d}>
               <td style={{ fontSize: 12, fontWeight: 700, paddingRight: 8 }}>{DAY_ABBR[d]}</td>
-              {slots.map((s, i) => {
-                if (s.brk) return <td key={i} style={{ background: "#f6efdc", borderRadius: 5, width: 18 }} />;
-                const hit = mine.filter(b => b.day === d && b.start <= s.start && s.end <= b.end);
-                if (d === 5 && s.n > periodsOn(spec.a, 5)) return <td key={i} style={{ background: "#f3f4f6", borderRadius: 5 }} />;
-                if (hit.length === 0) return <td key={i} style={{ background: "#fafafa", border: "1px dashed " + P.border, borderRadius: 5, textAlign: "center", color: "#c3c9d0", fontSize: 12 }}>-</td>;
-                const [bg, fg] = colourOf(hit[0].token);
-                return (
-                  <td key={i} title={hit.map(b => b.token + " - " + (b.faculty.map(f => f.name).join(", ") || "no faculty")).join("\n")} style={{ background: "#" + bg, color: "#" + fg, borderRadius: 5, padding: "5px 6px", textAlign: "center", fontSize: 11.5, fontWeight: 700, minWidth: 74 }}>
-                    {hit.map(b => b.token).join(" / ")}
-                  </td>
-                );
-              })}
+              {(() => {
+                const cells = [];
+                let i = 0;
+                while (i < slots.length) {
+                  const s = slots[i];
+                  if (s.brk) { cells.push(<td key={i} style={{ background: "#f6efdc", borderRadius: 5, width: 18 }} />); i++; continue; }
+                  if (d === 5 && s.n > periodsOn(spec.a, 5)) { cells.push(<td key={i} style={{ background: "#f3f4f6", borderRadius: 5 }} />); i++; continue; }
+                  const starts = mine.filter(b => b.day === d && b.start === s.start);
+                  if (!starts.length) { cells.push(<td key={i} style={{ background: "#fafafa", border: "1px dashed " + P.border, borderRadius: 5, textAlign: "center", color: "#c3c9d0", fontSize: 12 }}>-</td>); i++; continue; }
+                  const end = Math.max(...starts.map(b => b.end));
+                  let j = i;
+                  while (j + 1 < slots.length && slots[j + 1].end <= end) j++;
+                  const [bg, fg] = colourOf(starts[0].token);
+                  cells.push(
+                    <td key={i} colSpan={j - i + 1} title={starts.map(b => b.token + " - " + (b.faculty.map(f => f.name).join(", ") || "no faculty")).join("\n")} style={{ background: "#" + bg, color: "#" + fg, borderRadius: 5, padding: "6px 8px", textAlign: "center", fontSize: 11.5, fontWeight: 700, minWidth: 74 }}>
+                      {starts.map(b => <div key={b.id}>{b.token}</div>)}
+                    </td>
+                  );
+                  i = j + 1;
+                }
+                return cells;
+              })()}
             </tr>
           ))}
         </tbody>
@@ -43486,7 +43510,7 @@ function VersionCard({ spec, v, n, colourOf, onPublish }) {
           <div style={{ fontSize: 12.5, color: P.gray, padding: "6px 0 0 14px" }}>{v.relaxed.map((t, i) => <div key={i}>• {t}</div>)}</div>
         </details>
       ) : <div style={{ fontSize: 13, color: P.green, marginBottom: 10 }}>Every preference you gave is kept.</div>}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+      <div style={{ display: spec.sections.length > 1 ? "flex" : "none", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
         {spec.sections.map(s => (
           <button key={s.id} onClick={() => setSec(s.id)} style={{ padding: "5px 12px", borderRadius: 20, fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", border: "1.5px solid " + (sec === s.id ? P.blue : P.border), background: sec === s.id ? P.blue : "#fff", color: sec === s.id ? "#fff" : P.navy }}>{s.name}</button>
         ))}
@@ -43536,20 +43560,23 @@ export default function DesignScreen({ user, onBack }) {
   useEffect(() => { try { localStorage.setItem(draftKey(user.phone, year), JSON.stringify(a)); } catch (e) { /* storage off */ } }, [a, user.phone, year]);
 
   const ctx = useMemo(() => {
-    const yearSections = (sections || []).filter(s => yearOfSection(s) === year).map(s => ({
+    const allSections = (sections || []).filter(s => yearOfSection(s) === year).map(s => ({
       id: s.id, name: s.name,
       subjects: (s.subjects || []).map(sub => ({
         name: sub.name, token: String(sub.short || sub.name || "").toUpperCase().replace(/\s+/g, " "),
         type: sub.type || guessType(sub.name), faculty: facultyListOf(sub),
       })),
     }));
+    // one section at a time is the usual way; tick more to design them together
+    const chosen = allSections.filter(s => (a.sectionIds || []).includes(s.id));
+    const yearSections = chosen.length ? chosen : allSections.slice(0, 1);
     const byName = new Map();
     yearSections.forEach(s => s.subjects.forEach(sub => {
       if (!byName.has(sub.name)) byName.set(sub.name, { name: sub.name, type: sub.type, sections: [] });
       byName.get(sub.name).sections.push({ id: s.id, name: s.name });
     }));
-    return { yearSections, subjects: Array.from(byName.values()), people: people || [] };
-  }, [sections, people, year]);
+    return { yearSections, allSections, selectedIds: yearSections.map(s => s.id), subjects: Array.from(byName.values()), people: people || [] };
+  }, [sections, people, year, a.sectionIds]);
 
   // every subject gets a starting number; nothing already typed is overwritten
   useEffect(() => {
@@ -43565,7 +43592,8 @@ export default function DesignScreen({ user, onBack }) {
   }, [ctx.subjects]);
 
   const calc = useMemo(() => {
-    const other = published.filter(p => p.year !== year).flatMap(p => (p.blocks || []).map(b => ({ ...b, source: "published", publishedYear: p.year, publishedBy: p.publishedByName || "" })));
+    const mine = new Set(ctx.selectedIds);
+    const other = published.flatMap(p => (p.blocks || []).filter(b => p.year !== year || !mine.has(b.sectionId)).map(b => ({ ...b, source: "published", publishedYear: p.year, publishedBy: p.publishedByName || "" })));
     return buildSpec({ year, a, sections: ctx.yearSections, people: ctx.people, published: other });
   }, [year, a, ctx, published]);
 
@@ -43577,6 +43605,7 @@ export default function DesignScreen({ user, onBack }) {
     return next;
   });
   const changeYear = y => { setYear(y); setA(loadDraft(user.phone, y)); setSets([]); setSpecUsed(null); sigs.current = []; };
+  const chooseSections = ids => { set({ sectionIds: ids }); setSets([]); setSpecUsed(null); sigs.current = []; setPubMsg({ ok: true, text: "" }); };
 
   const hasSubjects = ctx.yearSections.some(s => s.subjects.length > 0);
   const sid = STEPS[step].id;
@@ -43604,8 +43633,9 @@ export default function DesignScreen({ user, onBack }) {
     const v = sets[showSet].versions[n - 1];
     setPubBusy(true); setPubMsg({ ok: true, text: "" });
     try {
-      await publishMaster({ year, blocks: v.blocks, sections: sectionsOf(specUsed), user, fileName: "Designed in the portal (version " + n + ")" });
-      setPubMsg({ ok: true, text: "Year " + year + " timetable published from Version " + n + ": " + specUsed.sections.length + " sections, " + v.blocks.length + " classes. Faculty now see their classes in My Timetable." });
+      const merged = mergeSections(published.find(p => p.year === year), v.blocks, sectionsOf(specUsed));
+      await publishMaster({ year, blocks: merged.blocks, sections: merged.sections, user, fileName: "Designed in the portal (version " + n + ")" });
+      setPubMsg({ ok: true, text: specUsed.sections.map(x => x.name).join(", ") + " published from Version " + n + " (" + v.blocks.length + " classes) in the Year " + year + " timetable. Faculty now see their classes in My Timetable." });
       setConfirmN(0);
     } catch (err) {
       setPubMsg({ ok: false, text: "Could not publish (" + err.message + "). Nothing was changed." });
@@ -43632,7 +43662,7 @@ export default function DesignScreen({ user, onBack }) {
 
       <Card style={{ margin: 0, padding: "10px 22px 18px" }}>
           <div style={{ fontWeight: 800, fontSize: 17, padding: "12px 0 0" }}>{STEPS[step].title}</div>
-          {sid === "year" && <StepYear ctx={ctx} year={year} setYear={changeYear} />}
+          {sid === "year" && <StepYear ctx={ctx} year={year} setYear={changeYear} setSelected={chooseSections} published={published} />}
           {sid === "time" && <StepTimings a={a} set={set} />}
           {sid === "subj" && <StepSubjects a={a} set={set} ctx={ctx} calc={calc} />}
           {sid === "tog" && <StepTogether a={a} set={set} ctx={ctx} />}
@@ -43700,7 +43730,7 @@ export default function DesignScreen({ user, onBack }) {
                     <div style={{ fontSize: 13, color: P.gray, marginTop: 2 }}>The Excel file has {current.versions.length * 2} sheets: {current.versions.map((_, i) => "TT-" + (i + 1) + ", Ind-" + (i + 1)).join(", ")}. TT is every section's timetable, Ind is every faculty member's own.{current.versions.length < 3 ? " Only " + current.versions.length + " genuinely different arrangement" + (current.versions.length === 1 ? "" : "s") + " fit your rules." : ""}</div>
                   </div>
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <Btn onClick={() => writeDesignWorkbook(specUsed, current.versions, "Timetable designs - Year " + year + (sets.length > 1 ? " (set " + (showSet + 1) + ")" : "") + ".xlsx")}>Download Excel</Btn>
+                    <Btn onClick={() => writeDesignWorkbook(specUsed, current.versions, "Timetable designs - " + (specUsed.sections.length === 1 ? specUsed.sections[0].name : "Year " + year + " (" + specUsed.sections.length + " sections)").replace(/[\\/:*?"<>|]/g, "") + (sets.length > 1 ? " (set " + (showSet + 1) + ")" : "") + ".xlsx")}>Download Excel</Btn>
                     <Btn variant="outline" disabled={busy} onClick={() => design(true)}>Design another set</Btn>
                   </div>
                 </div>
@@ -43710,8 +43740,16 @@ export default function DesignScreen({ user, onBack }) {
                 <Card style={{ margin: 0, padding: "16px 20px", borderColor: P.blue }}>
                   <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>Publish Version {confirmN} as the Year {year} timetable?</div>
                   <div style={{ fontSize: 13.5, lineHeight: 1.6, marginBottom: 12 }}>
-                    It has no overlaps. {specUsed.sections.length} sections and {current.versions[confirmN - 1].blocks.length} classes will be saved as the master timetable.
-                    {alreadyPublished && <> <b style={{ color: P.amber }}>This replaces the Year {year} timetable already published by {alreadyPublished.publishedByName || "someone"}.</b></>}
+                    It has no overlaps. {specUsed.sections.map(x => x.name).join(", ")} ({current.versions[confirmN - 1].blocks.length} classes) will be saved in the Year {year} timetable.
+                    {alreadyPublished && (() => {
+                      const ids = new Set(specUsed.sections.map(x => x.id));
+                      const replaced = (alreadyPublished.sections || []).filter(x => ids.has(x.id)).map(x => x.name);
+                      const kept = (alreadyPublished.sections || []).filter(x => !ids.has(x.id)).map(x => x.name);
+                      return <>
+                        {replaced.length > 0 && <> <b style={{ color: P.amber }}>This replaces the published timetable of {replaced.join(", ")}.</b></>}
+                        {kept.length > 0 && <> Other sections stay as they are: {kept.join(", ")}.</>}
+                      </>;
+                    })()}
                   </div>
                   <div style={{ display: "flex", gap: 10 }}>
                     <Btn onClick={() => publishVersion(confirmN)} disabled={pubBusy}>{pubBusy ? "Publishing…" : "Yes, publish"}</Btn>
@@ -43780,9 +43818,10 @@ test("the entry screen offers Upload and Design", () => {
 
 test("a coordinator can answer the questions and get versions", async () => {
   localStorage.clear();
+  localStorage.setItem("ttdesign-v1:9:III", JSON.stringify({ allowBlank: true }));
   render(<DesignScreen user={{ phone: "9", role: "hod", name: "T" }} onBack={() => {}} />);
   const next = () => fireEvent.click(screen.getByText("Next →"));
-  await screen.findByText("What the portal has for Year III");
+  await screen.findByText(/What the portal has for Year III/);
   next();                                                    // -> timings
   expect(screen.getByText("Here are the timings")).toBeTruthy();
   expect(screen.getByText("Period 7")).toBeTruthy();
@@ -43791,7 +43830,7 @@ test("a coordinator can answer the questions and get versions", async () => {
   expect(screen.getByText("How many periods a week for each subject?")).toBeTruthy();
   expect(screen.getByText(/Other periods in the timetable/)).toBeTruthy();
   expect(screen.getByText("Library")).toBeTruthy();
-  expect(screen.getAllByText(/periods used/).length).toBeGreaterThan(0);
+  expect(screen.getAllByText(/Total periods covered/).length).toBeGreaterThan(0);
   next(); next(); next(); next();                           // -> together, limits, availability, review
   await screen.findByText("Before I design");
   fireEvent.click(screen.getByText("Design the timetables"));
@@ -43817,7 +43856,7 @@ test("the workbook has TT and Ind sheets in order", () => {
 test("every tab can be opened directly, and a problem points to the tab that fixes it", async () => {
   localStorage.clear();
   render(<DesignScreen user={{ phone: "9", role: "hod", name: "T" }} onBack={() => {}} />);
-  await screen.findByText("What the portal has for Year III");
+  await screen.findByText(/What the portal has for Year III/);
   fireEvent.click(screen.getByText("7. Review"));
   await screen.findByText("Before I design");
   // timings were never ticked, so the review says so and offers a way there
@@ -43841,7 +43880,7 @@ function setup() {
   const people = [1, 2, 3, 4].map(i => ({ phone: "p" + i, name: "Dr " + i }));
   const mk = (id, name) => ({ id, name, subjects: ["T1", "T2", "T3"].map((n, i) => ({ name: n, token: n, type: "Theory", faculty: ["p" + (i + 1)] })) });
   const sections = [mk("s1", "III-A"), mk("s2", "III-B")];
-  const a = defaultAnswers();
+  const a = defaultAnswers(); a.allowBlank = true;
   ["T1", "T2", "T3"].forEach(n => { a.loads[n] = { periods: 4, block: 1 }; });
   const { spec } = buildSpec({ year: "III", a, sections, people, published: [] });
   const res = designVersions(spec, people, { count: 1, seed: 11 });
@@ -44100,8 +44139,19 @@ export function buildSpec({ year, a, sections, people, published = [] }) {
   const pubBusy = {};
   published.forEach(b => (b.faculty || []).forEach(f => { (pubBusy[f.key] = pubBusy[f.key] || P.map(() => [])); if (b.day < D) pubBusy[f.key][b.day].push([b.start, b.end]); }));
 
+  // ...and how much of their day that already takes, so the daily limits count it too
+  const pubUnits = {};
+  const pubCounted = new Set();
+  published.forEach(b => (b.faculty || []).forEach(f => {
+    if (f.external || b.type === "note" || b.day >= D) return;
+    if (b.combo) { const id = f.key + "|" + b.day + "|" + b.start + "|" + b.combo; if (pubCounted.has(id)) return; pubCounted.add(id); }
+    const cells = [];
+    timings.periods.forEach((pr, i) => { if (i < P[b.day] && pr.start < b.end && b.start < pr.end) cells.push(i); });
+    (pubUnits[f.key] = pubUnits[f.key] || P.map(() => [])); pubUnits[f.key][b.day].push({ cells, teaching: b.type !== "other", size: b.periods || Math.max(1, cells.length), type: b.type, pub: true });
+  }));
+
   const spec = {
-    year, a, timings, D, P, units, dayCap, blocked, pubBusy,
+    year, a, timings, D, P, units, dayCap, blocked, pubBusy, pubUnits,
     sections: sections.map(s => ({ id: s.id, name: s.name })),
     publishedBlocks: published,
     limits: { maxTotal, maxTheory, maxLab, maxRun },
@@ -44120,7 +44170,10 @@ function precheck(spec, problems, people) {
   spec.sections.forEach(s => {
     const need = units.filter(u => u.sectionIds.includes(s.id)).reduce((t, u) => t + u.size, 0);
     const have = P.reduce((t, n) => t + n, 0);
+    const labSessions = units.filter(u => u.sectionIds.includes(s.id) && (u.type === "lab" || u.type === "drawing")).length;
+    if (a.labOnceADay !== false && labSessions > D) problems.push({ level: "error", step: "subj", text: s.name + " has " + labSessions + " lab sessions a week but only " + D + " days, and a section may have just one lab session a day. Reduce the lab sessions, or untick \"One lab session a day\" in Subjects and periods." });
     if (need > have) problems.push({ level: "error", step: "subj", text: s.name + " needs " + need + " periods a week but the week has only " + have + ". Reduce some subjects' periods (Subjects and periods), or add periods or a working day (Days and periods)." });
+    else if (need < have && !a.allowBlank) problems.push({ level: "error", step: "subj", text: s.name + " has " + (have - need) + " blank period" + (have - need === 1 ? "" : "s") + " in the week (" + need + " of " + have + " are filled). A timetable can't have blank periods: add " + (have - need) + " more period" + (have - need === 1 ? "" : "s") + " in Subjects and periods (more periods for a subject, or Library, Tutorials, Sports, Club activities)." });
   });
 
   // faculty: weekly demand against what the daily limits and availability allow
@@ -44134,10 +44187,16 @@ function precheck(spec, problems, people) {
   Object.keys(per).forEach(key => {
     const free = d => { let n = 0; for (let p = 0; p < P[d]; p++) if (!(blocked[key] && blocked[key][d][p])) n++; return n; };
     let capTotal = 0, capTheory = 0, capLab = 0;
-    for (let d = 0; d < D; d++) { const f = free(d); capTotal += Math.min(limits.maxTotal, f); capTheory += Math.min(limits.maxTheory, f); capLab += Math.min(limits.maxLab, f); }
+    for (let d = 0; d < D; d++) {
+      let f = free(d), pt = 0, pth = 0, pl = 0, pc = 0;
+      ((spec.pubUnits[key] || [])[d] || []).forEach(o => { pc += o.cells.length; if (!o.teaching) return; pt += o.size; if (o.type === "theory") pth += o.size; else pl += 1; });
+      f = Math.max(0, f - pc);
+      capTotal += Math.max(0, Math.min(limits.maxTotal - pt, f)); capTheory += Math.max(0, Math.min(limits.maxTheory - pth, f)); capLab += Math.max(0, Math.min(limits.maxLab - pl, f));
+    }
     const nm = nameOf.get(key) || key, r = per[key];
     const days = Math.max(1, D);
-    const away = Array.from({ length: D }, (_, d) => P[d] - free(d)).reduce((t, n) => t + n, 0) > 0 ? " and the slots they are unavailable" : "";
+    const hasPub = Object.keys(spec.pubUnits[key] ? { x: 1 } : {}).length > 0 && (spec.pubUnits[key] || []).some(l => l.length);
+    const away = (Array.from({ length: D }, (_, d) => P[d] - free(d)).reduce((t, n) => t + n, 0) > 0 ? " and the slots they are unavailable" : "") + (hasPub ? " (counting the classes they already have in published timetables)" : "");
     if (r.total > capTotal) problems.push({ level: "error", step: "lim", text: nm + " has " + r.total + " periods to teach in a week, but with at most " + limits.maxTotal + " periods a day" + away + ", only " + capTotal + " fit. To fix it: raise \"Most periods in a day\" in Faculty limits to at least " + Math.ceil(r.total / days) + ", or give some of " + nm + "'s subjects or sections to another faculty (Sections & Subjects), or reduce their periods." });
     else if (r.theory > capTheory) problems.push({ level: "error", step: "lim", text: nm + " teaches " + r.theory + " theory periods a week, but with at most " + limits.maxTheory + " theory periods a day" + away + ", only " + capTheory + " fit. To fix it: raise \"Most theory periods in a day\" in Faculty limits to at least " + Math.ceil(r.theory / days) + ", or give some of " + nm + "'s theory classes to another faculty, or reduce their periods." });
     else if (r.lab > capLab) problems.push({ level: "error", step: "lim", text: nm + " has " + r.lab + " lab sessions a week, but with at most " + limits.maxLab + " a day" + away + ", only " + capLab + " fit. To fix it: raise \"Most lab sessions in a day\" in Faculty limits to at least " + Math.ceil(r.lab / days) + ", or give a lab to another faculty." });
@@ -44173,7 +44232,6 @@ function precheck(spec, problems, people) {
   });
   if (D < 1) problems.push({ level: "error", step: "time", text: "There are no working days." });
   if (units.length === 0) problems.push({ level: "error", step: "subj", text: "There is nothing to place: no subject has any periods per week." });
-  void a;
 }
 
 // ── plan ─────────────────────────────────────────────────────────────────────────────────
@@ -44226,9 +44284,17 @@ class Plan {
         this.facRow(key);
         let th = 0, lab = 0, tot = 0;
         this.facDay[key][d].forEach(o => { if (ignore.has(o) || !o.teaching) return; tot += o.size; if (o.type === "theory") th += o.size; else lab += 1; });
+        ((this.s.pubUnits[key] || [])[d] || []).forEach(o => { if (!o.teaching) return; tot += o.size; if (o.type === "theory") th += o.size; else lab += 1; });
         tot += u.size; if (u.type === "theory") th += u.size; else lab += 1;
         if (th > L.maxTheory || lab > L.maxLab || tot > L.maxTotal) return false;
         if (!this.runOk(key, d, u, p, ignore)) return false;
+      }
+    }
+    if ((u.type === "lab" || u.type === "drawing") && this.s.a.labOnceADay !== false) {
+      for (const sid of u.sectionIds) {
+        let labs = 0;
+        this.secDay[sid][d].forEach(o => { if (!ignore.has(o) && (o.type === "lab" || o.type === "drawing")) labs++; });
+        if (labs > 0) return false;
       }
     }
     for (const b of u.blocks) {
@@ -44242,6 +44308,7 @@ class Plan {
   runOk(key, d, u, p, ignore) {
     const n = this.P[d], occ = new Array(n).fill(null), row = this.fac[key][d];
     for (let q = 0; q < n; q++) { const o = row[q]; if (o && !ignore.has(o) && o.teaching) occ[q] = o; }
+    ((this.s.pubUnits[key] || [])[d] || []).forEach(o => { if (o.teaching) o.cells.forEach(q => { if (!occ[q]) occ[q] = o; }); });
     for (let q = p; q < p + u.size; q++) occ[q] = u;
     let chain = 0, prev = null;
     for (let q = 0; q < n; q++) {
@@ -44271,6 +44338,7 @@ class Plan {
       this.facRow(key);
       let tot = 0;
       this.facDay[key][d].forEach(o => { if (o.teaching) tot += o.size; });
+      ((this.s.pubUnits[key] || [])[d] || []).forEach(o => { if (o.teaching) tot += o.size; });
       c += tot * 3;
     }
     if (u.type === "lab" || u.type === "drawing") {
@@ -44453,6 +44521,26 @@ export function verify(spec, blocks) {
       if (b.type === "theory") r.th += b.periods; else r.lab += 1;
     });
   });
+  if (spec.a.labOnceADay !== false) {
+    const labDays = {};
+    blocks.forEach(b => {
+      if (b.type !== "lab" && b.type !== "drawing") return;
+      const k = b.sectionId + "|" + b.day + "|" + b.start + "|" + b.end;       // batches that run together share one slot
+      (labDays[b.sectionId + "|" + b.day] = labDays[b.sectionId + "|" + b.day] || new Set()).add(k);
+    });
+    Object.keys(labDays).forEach(k => { if (labDays[k].size > 1) { const [sid, d] = k.split("|"); const nm = (blocks.find(b => b.sectionId === sid) || {}).sectionName || sid; issues.push(nm + " has more than one lab session on " + DAY_LONG[Number(d)] + "."); } });
+  }
+  const touched = new Set(Object.keys(per));
+  const pubDone = new Set();
+  spec.publishedBlocks.forEach(b => (b.faculty || []).forEach(f => {
+    if (f.external || b.type === "other" || b.type === "note") return;
+    const k = f.key + "|" + b.day;
+    if (!touched.has(k)) return;
+    if (b.combo) { const id = f.key + "|" + b.day + "|" + b.start + "|" + b.combo; if (pubDone.has(id)) return; pubDone.add(id); }
+    const r = per[k];
+    r.tot += b.periods || 1;
+    if (b.type === "theory") r.th += b.periods || 1; else r.lab += 1;
+  }));
   Object.values(per).forEach(r => {
     if (r.th > L.maxTheory) issues.push(r.name + " has " + r.th + " theory periods on " + DAY_LONG[r.day] + ".");
     if (r.lab > L.maxLab) issues.push(r.name + " has " + r.lab + " lab sessions on " + DAY_LONG[r.day] + ".");
@@ -44556,7 +44644,7 @@ function scenario(extra) {
     ],
   });
   const sections = [mk("s1", "III YR I SEM SL-1"), mk("s2", "III YR I SEM AL-1"), mk("s3", "III YR I SEM SL-2")];
-  const a = defaultAnswers();
+  const a = defaultAnswers(); a.allowBlank = true;
   ["S&GPS", "DMM", "AIML", "MTM", "IIR"].forEach(n => { a.loads[n] = { periods: 4, block: 1 }; });
   ["Thermal Lab", "Metrology Lab"].forEach(n => { a.loads[n] = { periods: 3, block: 3 }; });
   if (extra) extra(a, sections);
@@ -44640,7 +44728,7 @@ test("tight load: six sections, shared faculty, full week", () => {
       { name: "Draw", token: "DR", type: "Drawing", faculty: ["q" + (8 + (k % 3))] },
     ],
   }));
-  const a = defaultAnswers();
+  const a = defaultAnswers(); a.allowBlank = true;
   a.days = 6; a.satHalf = false;           // 42 periods a week
   ["T1", "T2", "T3", "T4"].forEach(n => { a.loads[n] = { periods: 6, block: 1, avoidFirst: n === "T1", avoidLast: n === "T2" }; });
   a.loads.Lab1 = { periods: 3, block: 3 }; a.loads.Draw = { periods: 3, block: 3 };
@@ -44778,7 +44866,7 @@ const mk = (id, name) => ({
 
 test("a designed workbook is read back into the same classes with the same faculty", () => {
   const sections = [mk("s1", "III YR I SEM SL-1"), mk("s2", "III YR I SEM AL-1")];
-  const a = defaultAnswers();
+  const a = defaultAnswers(); a.allowBlank = true;
   ["S&GPS", "DMM", "AIML"].forEach(n => { a.loads[n] = { periods: 4, block: 1 }; });
   ["Thermal Lab", "Metrology Lab"].forEach(n => { a.loads[n] = { periods: 3, block: 3 }; });
   a.parallel = [["Thermal Lab", "Metrology Lab"]];
@@ -44811,6 +44899,127 @@ test("a designed workbook is read back into the same classes with the same facul
 
 
 === END_FILE: .\src\timetableDesign\roundtrip.test.js ===
+
+
+=== START_FILE: .\src\timetableDesign\sections.test.js ===
+
+import React from "react";
+import { render, screen, fireEvent } from "@testing-library/react";
+import { buildSpec, designVersions, verify } from "./generator";
+import { defaultAnswers } from "./designModel";
+import { mergeSections } from "../timetableUpload/publishMaster";
+
+const mockUsers = ["p1", "p2", "p3"].map((id, i) => ({ id, data: () => ({ name: "Dr Person " + (i + 1), status: "approved" }) }));
+const mkSec = (id, name) => ({
+  id, data: () => ({
+    name, adminPhone: "9", periodsPerDay: 7,
+    subjects: [
+      { id: "a", name: "Thermodynamics", short: "TD", type: "Theory", faculty: ["p1"], facultyPhone: "p1" },
+      { id: "b", name: "Fluid Mechanics", short: "FM", type: "Theory", faculty: ["p2"], facultyPhone: "p2" },
+    ],
+  }),
+});
+const mockSections = [mkSec("s1", "III YR I SEM SL-1"), mkSec("s2", "III YR I SEM AL-1")];
+jest.mock("../firebase", () => ({ db: {} }));
+jest.mock("firebase/firestore", () => {
+  const snap = name => { const docs = name === "sections" ? mockSections : name === "users" ? mockUsers : []; return { docs, forEach: fn => docs.forEach(fn) }; };
+  return { collection: (_db, name) => ({ __name: name }), onSnapshot: (ref, cb) => { cb(snap(ref.__name)); return () => {}; }, getDocs: async ref => snap(ref.__name) };
+});
+const DesignScreen = require("./DesignScreen").default;
+
+const people = [1, 2, 3, 4].map(i => ({ phone: "p" + i, name: "Dr " + i }));
+const mk = (id, name) => ({ id, name, subjects: ["T1", "T2", "T3"].map((n, i) => ({ name: n, token: n, type: "Theory", faculty: ["p" + (i + 1)] })) });
+
+test("a section with blank periods is refused, and the message says how many", () => {
+  const a = defaultAnswers();
+  ["T1", "T2", "T3"].forEach(n => { a.loads[n] = { periods: 4, block: 1 }; });
+  const { problems } = buildSpec({ year: "III", a, sections: [mk("s1", "III-A")], people, published: [] });
+  const e = problems.find(p => /blank period/.test(p.text));
+  expect(e).toBeTruthy();
+  expect(e.step).toBe("subj");
+  expect(e.text).toMatch(/12 of 39 are filled/);   // six days: five of 7 periods and a 4-period Saturday
+});
+
+test("a completely filled week is accepted", () => {
+  const a = defaultAnswers();
+  a.days = 5; a.periodsPerDay = 7;                  // 35 periods
+  ["T1", "T2", "T3"].forEach(n => { a.loads[n] = { periods: 4, block: 1 }; });
+  a.extras = [{ ...require("./designModel").newExtra("Library"), periods: 23 }];
+  const { problems } = buildSpec({ year: "III", a, sections: [mk("s1", "III-A")], people, published: [] });
+  expect(problems.filter(p => /blank period|too many|needs/.test(p.text))).toEqual([]);
+});
+
+test("designing one section keeps clear of the same faculty's classes in a section already published", () => {
+  const a = defaultAnswers(); a.allowBlank = true;
+  ["T1", "T2", "T3"].forEach(n => { a.loads[n] = { periods: 4, block: 1 }; });
+  // III-B is already published: the same teacher p1 teaches T1 in it on Monday period 1 and 2
+  const periods = buildSpec({ year: "III", a, sections: [mk("s1", "III-A")], people, published: [] }).spec.timings.periods;
+  const published = [0, 1].map(i => ({ id: "s2:0:" + periods[i].start + ":T1", sectionId: "s2", sectionName: "III-B", day: 0, start: periods[i].start, end: periods[i].end, token: "T1", subject: "T1", type: "theory", combo: "", periods: 1, faculty: [{ key: "p1", name: "Dr 1", phone: "p1", external: false, role: "main" }], source: "published", publishedYear: "III" }));
+  const { spec } = buildSpec({ year: "III", a, sections: [mk("s1", "III-A")], people, published });
+  const res = designVersions(spec, people, { count: 2, seed: 4 });
+  expect(res.versions.length).toBeGreaterThan(0);
+  res.versions.forEach(v => {
+    expect(verify(spec, v.blocks)).toEqual([]);
+    const mon = v.blocks.filter(b => b.day === 0 && b.token === "T1");
+    mon.forEach(b => expect(b.start >= periods[2].start).toBe(true));     // not in the two periods p1 already has
+  });
+});
+
+test("the daily limit counts classes the faculty already has in published sections", () => {
+  const a = defaultAnswers(); a.allowBlank = true; a.days = 5; a.maxTotalPerDay = 4; a.maxTheoryPerDay = 4;
+  ["T1", "T2", "T3"].forEach(n => { a.loads[n] = { periods: 5, block: 1 }; });
+  const periods = buildSpec({ year: "III", a, sections: [mk("s1", "III-A")], people, published: [] }).spec.timings.periods;
+  // p1 already has 4 periods on every day in published sections: no room for T1
+  const published = [];
+  for (let d = 0; d < 5; d++) for (let i = 0; i < 4; i++) published.push({ id: "s2:" + d + ":" + periods[i].start + ":T9", sectionId: "s2", sectionName: "III-B", day: d, start: periods[i].start, end: periods[i].end, token: "T9", subject: "T9", type: "theory", combo: "", periods: 1, faculty: [{ key: "p1", name: "Dr 1", phone: "p1", external: false, role: "main" }], source: "published", publishedYear: "III" });
+  const { problems } = buildSpec({ year: "III", a, sections: [mk("s1", "III-A")], people, published });
+  expect(problems.some(p => p.step === "lim" && /Dr 1/.test(p.text) && /already have in published/.test(p.text))).toBe(true);
+});
+
+test("publishing some sections keeps the year's other sections", () => {
+  const existing = { blocks: [{ id: "x1", sectionId: "s1" }, { id: "x2", sectionId: "s2" }], sections: [{ id: "s1", name: "A", slots: [] }, { id: "s2", name: "B", slots: [] }] };
+  const out = mergeSections(existing, [{ id: "n1", sectionId: "s1" }, { id: "n2", sectionId: "s1" }], [{ id: "s1", name: "A", slots: [1] }]);
+  expect(out.blocks.map(b => b.id).sort()).toEqual(["n1", "n2", "x2"]);
+  expect(out.sections.map(s => s.id).sort()).toEqual(["s1", "s2"]);
+  expect(out.sections.find(s => s.id === "s1").slots).toEqual([1]);
+  expect(mergeSections(null, [1], [2])).toEqual({ blocks: [1], sections: [2] });
+});
+
+test("the Year tab lets you pick the section or sections to design", async () => {
+  localStorage.clear();
+  render(<DesignScreen user={{ phone: "9", role: "hod", name: "T" }} onBack={() => {}} />);
+  await screen.findByText("Which section?");
+  const boxes = screen.getAllByRole("checkbox");
+  expect(boxes.length).toBe(2);
+  expect(boxes[0].checked).toBe(true);        // the first section by default
+  expect(boxes[1].checked).toBe(false);
+  fireEvent.click(boxes[1]);                  // add the second
+  expect(screen.getAllByRole("checkbox")[1].checked).toBe(true);
+  fireEvent.click(screen.getByText("Only the first"));
+  expect(screen.getAllByRole("checkbox")[1].checked).toBe(false);
+});
+
+test("a section never has two lab sessions on one day, in any version", () => {
+  const a = defaultAnswers(); a.allowBlank = true;
+  const sec = { id: "s1", name: "III-A", subjects: [
+    { name: "T1", token: "T1", type: "Theory", faculty: ["p1"] }, { name: "T2", token: "T2", type: "Theory", faculty: ["p2"] },
+    { name: "Lab A", token: "LA", type: "Lab", faculty: ["p3"] }, { name: "Lab B", token: "LB", type: "Lab", faculty: ["p4"] }, { name: "Lab C", token: "LC", type: "Lab", faculty: ["p1"] },
+  ] };
+  ["T1", "T2"].forEach(n => { a.loads[n] = { periods: 4, block: 1 }; });
+  ["Lab A", "Lab B", "Lab C"].forEach(n => { a.loads[n] = { periods: 3, block: 3 }; });
+  const { spec, problems } = buildSpec({ year: "III", a, sections: [sec], people, published: [] });
+  expect(problems.filter(p => p.level === "error")).toEqual([]);
+  const res = designVersions(spec, people, { count: 3, seed: 21 });
+  expect(res.versions.length).toBeGreaterThan(0);
+  res.versions.forEach(v => {
+    const perDay = {};
+    v.blocks.filter(b => b.type === "lab").forEach(b => { perDay[b.day] = (perDay[b.day] || 0) + 1; });
+    Object.values(perDay).forEach(n => expect(n).toBe(1));
+  });
+});
+
+
+=== END_FILE: .\src\timetableDesign\sections.test.js ===
 
 
 === START_FILE: .\src\timetableDesign\steps.jsx ===
@@ -44859,7 +45068,11 @@ export function NumIn({ value, onChange, width = 80, min = 0, max, placeholder }
 
 
 // ── Step: year ───────────────────────────────────────────────────────────────────────────
-export function StepYear({ ctx, year, setYear }) {
+export function StepYear({ ctx, year, setYear, setSelected, published = [] }) {
+  const pubDoc = published.find(p => p.year === year);
+  const isPublished = id => !!pubDoc && (pubDoc.blocks || []).some(b => b.sectionId === id);
+  const chosen = ctx.selectedIds || [];
+  const toggle = id => setSelected(chosen.includes(id) ? chosen.filter(x => x !== id) : chosen.concat(id));
   return (
     <>
       <Q title="Which year is this timetable for?" hint="The portal already knows that year's sections, subjects and faculty, so you won't be asked for them again.">
@@ -44869,11 +45082,33 @@ export function StepYear({ ctx, year, setYear }) {
           ))}
         </div>
       </Q>
+      {ctx.allSections.length > 0 && (
+        <Q title="Which section?" hint="Design one section at a time, which is the usual way. Tick more than one only if you want them designed together (needed for a class taken by several sections jointly).">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10 }}>
+            {ctx.allSections.map(s => {
+              const on = chosen.includes(s.id);
+              return (
+                <label key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "11px 14px", borderRadius: 10, border: "1.5px solid " + (on ? P.blue : P.border), background: on ? P.blueL : "#fff" }}>
+                  <input type="checkbox" checked={on} onChange={() => toggle(s.id)} style={{ accentColor: P.blue, width: 17, height: 17 }} />
+                  <span style={{ flex: 1 }}>
+                    <b style={{ fontFamily: MONO, fontSize: 13.5 }}>{s.name}</b>
+                    <span style={{ display: "block", fontSize: 12, color: P.gray }}>{s.subjects.length} subjects{isPublished(s.id) ? " · timetable already published" : ""}</span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <Btn small variant="ghost" onClick={() => setSelected(ctx.allSections.map(s => s.id))}>Select all</Btn>
+            <Btn small variant="ghost" onClick={() => setSelected(ctx.allSections.slice(0, 1).map(s => s.id))}>Only the first</Btn>
+          </div>
+        </Q>
+      )}
       {ctx.yearSections.length === 0 ? (
         <div style={{ fontSize: 13, color: P.amber, background: P.amberL, borderRadius: 8, padding: "10px 12px" }}>No sections found for Year {year}. Add them under Coordinator Duties › All Sections › Sections & Subjects (section names start with the year, like III-A).</div>
       ) : (
         <div style={{ ...small }}>
-          <div style={{ fontWeight: 700, color: P.navy, marginBottom: 6 }}>What the portal has for Year {year}</div>
+          <div style={{ fontWeight: 700, color: P.navy, marginBottom: 6 }}>What the portal has for Year {year}{ctx.yearSections.length ? ", for the section" + (ctx.yearSections.length === 1 ? "" : "s") + " you are designing" : ""}</div>
           {ctx.yearSections.map(s => (
             <div key={s.id} style={{ padding: "3px 0" }}><b style={{ fontFamily: MONO, color: "#1a2230" }}>{s.name}</b> · {s.subjects.length} subjects, {s.subjects.filter(x => x.faculty.length === 0).length === 0 ? "all with faculty" : s.subjects.filter(x => x.faculty.length === 0).length + " without faculty"}</div>
           ))}
@@ -44981,6 +45216,7 @@ export function StepTogether({ a, set, ctx }) {
         {labs.length < 2 ? <div style={small}>This year has fewer than two lab subjects, so there is nothing to group.</div> : <Btn small variant="outline" onClick={() => set({ parallel: [...a.parallel, []] })}>+ Add a group of labs</Btn>}
       </Q>
       <Q title="Classes taken by several sections together" hint="An elective or a combined class that two or more sections attend at the same time with the same faculty. Pick the subject and the sections that join.">
+        {ctx.yearSections.length < 2 && <div style={{ ...small, marginBottom: 8 }}>You are designing one section, so there is nothing to join. To design a joint class, go to the Year tab and tick two or more sections.</div>}
         {a.joint.map((j, ji) => {
           const subj = ctx.subjects.find(s => s.name === j.subject);
           const setJ = patch => set({ joint: a.joint.map((x, k) => (k === ji ? { ...x, ...patch } : x)) });
@@ -45133,6 +45369,28 @@ function SlotsEditor({ a, sections, countOf, fixed, onChange }) {
   );
 }
 
+function TotalLine({ totals, big }) {
+  if (!totals.length) return null;
+  return (
+    <div style={{ display: "grid", gap: big ? 6 : 4, justifyItems: "end", textAlign: "right" }}>
+      {totals.map(t => {
+        const diff = t.have - t.need, ok = diff === 0;
+        return (
+          <div key={t.s.id}>
+            <div style={{ fontWeight: 800, fontSize: big ? 22 : 17, color: ok ? P.green : P.red }}>
+              {totals.length > 1 && <span style={{ fontFamily: MONO, fontSize: big ? 15 : 13, marginRight: 10 }}>{t.s.name}</span>}
+              Total periods covered: {t.need} out of {t.have}
+            </div>
+            <div style={{ fontSize: 13, color: ok ? P.green : P.red, fontWeight: 600 }}>
+              {ok ? "Every period is filled." : diff > 0 ? diff + " more period" + (diff === 1 ? "" : "s") + " to allot: a timetable can't have blank periods." : -diff + " period" + (diff === -1 ? "" : "s") + " too many: reduce something."}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function StepSubjects({ a, set, ctx, calc }) {
   const [open, setOpen] = useState({});
   const [custom, setCustom] = useState("");
@@ -45171,7 +45429,9 @@ export default function StepSubjects({ a, set, ctx, calc }) {
                 <option value="1">Single periods</option><option value="2">Double periods (2 together)</option>
               </select>
             ) : (
-              <span style={{ fontSize: 13 }}><NumIn value={l.block} onChange={v => setLoad(s.name, { block: v })} width={60} min={1} max={6} /> <span style={small}>periods per session</span></span>
+              <span style={{ fontSize: 13 }}><NumIn value={l.block} onChange={v => setLoad(s.name, { block: v })} width={60} min={1} max={6} /> <span style={small}>periods per session</span>
+                {(() => { const per = num(l.periods, 0), b = Math.max(1, num(l.block, 3)); if (!per) return null; const full = Math.floor(per / b), rem = per % b; return <div style={{ fontSize: 11.5, marginTop: 3, color: rem ? P.amber : P.green, fontWeight: 600 }}>= {full ? full + " session" + (full === 1 ? "" : "s") + " of " + b : ""}{full && rem ? " + " : ""}{rem ? "1 shorter session of " + rem : ""} a week</div>; })()}
+              </span>
             )}
           </td>
           <td style={td}><Check checked={l.avoidFirst} onChange={v => setLoad(s.name, { avoidFirst: v })}>avoid</Check></td>
@@ -45255,21 +45515,9 @@ export default function StepSubjects({ a, set, ctx, calc }) {
   return (
     <>
       <div style={{ position: "sticky", top: 0, zIndex: 5, background: "#fff", padding: "12px 0 10px", borderBottom: "1px solid " + P.border, margin: "0 0 4px" }}>
-        <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 6 }}>Periods used in the week, with the numbers below</div>
-        {totals.length === 0 ? (
-          <div style={small}>A week has {haveDefault || "?"} periods in each section. Fix the timings in Days and periods to see the totals.</div>
-        ) : (
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            {totals.map(t => {
-              const over = t.need > t.have, free = t.have - t.need;
-              return (
-                <span key={t.s.id} style={{ fontSize: 13, background: over ? P.redL : free === 0 ? P.greenL : P.bg, color: over ? P.red : "#1a2230", border: "1px solid " + (over ? P.red : P.border), borderRadius: 20, padding: "6px 14px" }}>
-                  <b style={{ fontFamily: MONO }}>{t.s.name}</b> · {t.need} of {t.have} periods used · {over ? (t.need - t.have) + " too many" : free === 0 ? "week is full" : free + " still free"}
-                </span>
-              );
-            })}
-          </div>
-        )}
+        {totals.length === 0
+          ? <div style={small}>A week has {haveDefault || "?"} periods in each section. Fix the timings in Days and periods to see the totals.</div>
+          : <TotalLine totals={totals} />}
       </div>
 
       <Q title="How many periods a week for each subject?" hint="One number per subject applies to every section that has it. Use Options to give one section a different number, or to fix its days and periods. By “hours” I always mean periods. I've filled in usual values: change what is different.">
@@ -45279,7 +45527,10 @@ export default function StepSubjects({ a, set, ctx, calc }) {
             <tbody>{ctx.subjects.map(subjectRow)}</tbody>
           </table>
         </div>
-        <div style={{ ...small, marginTop: 8 }}>“Avoid” is a wish, not a rule: if the timetable can't be built without it, I'll bend it and tell you where.</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap", marginTop: 10 }}>
+          <div style={{ ...small, maxWidth: 520 }}>“Avoid” is a wish, not a rule: if the timetable can't be built without it, I'll bend it and tell you where.</div>
+          <TotalLine totals={totals} big />
+        </div>
       </Q>
 
       <Q title="Other periods in the timetable" hint="Activities that are not subjects in the portal. Put the periods a week for each section; leave 0 if there are none. Use Options if one trainer takes all sections, or if the slots are fixed.">
@@ -45299,6 +45550,7 @@ export default function StepSubjects({ a, set, ctx, calc }) {
       </Q>
 
       <Q title="Labs and drawing">
+        <Check checked={a.labOnceADay !== false} onChange={v => set({ labOnceADay: v })}>One lab session a day for a section (labs that run together as batches count as one)</Check>
         <Check checked={a.labAcrossBreak} onChange={v => set({ labAcrossBreak: v })}>A lab session may continue across a break</Check>
         <div style={{ marginTop: 8 }}><span style={lbl}>Preferred time for labs</span>
           <select value={a.labPref} onChange={e => set({ labPref: e.target.value })} style={{ ...inp, width: 220 }}>
@@ -45808,25 +46060,39 @@ export default function PublishedEditor({ year, user, onBack }) {
               {Array.from({ length: days }, (_, d) => (
                 <tr key={d}>
                   <td style={{ fontSize: 12, fontWeight: 700, paddingRight: 8 }}>{DAY_NAMES[d].slice(0, 3)}</td>
-                  {slots.map((s, i) => {
-                    if (s.brk) return <td key={i} style={{ background: "#f6efdc", borderRadius: 5, width: 18 }} />;
-                    const hit = blocks.filter(b => b.sectionId === (section && section.id) && b.day === d && b.start <= s.start && s.end <= b.end);
-                    if (!hit.length) {
-                      const on = pick && pick.kind === "cell" && pick.day === d && pick.start === s.start;
-                      return <td key={i}><button onClick={() => { setPick({ kind: "cell", day: d, start: s.start }); setMsg(null); }} style={{ width: "100%", minWidth: 74, height: 34, background: on ? P.blueL : "#fafafa", border: "1.5px dashed " + (on ? P.blue : P.border), borderRadius: 5, cursor: "pointer", color: "#b6bdc6", fontSize: 14 }} aria-label={"Add a class on " + DAY_NAMES[d] + " " + fmtRange(s.start, s.end)}>+</button></td>;
+                  {(() => {
+                    const cells = [];
+                    const mine = blocks.filter(b => b.sectionId === (section && section.id) && b.day === d);
+                    let i = 0;
+                    while (i < slots.length) {
+                      const s = slots[i];
+                      if (s.brk) { cells.push(<td key={i} style={{ background: "#f6efdc", borderRadius: 5, width: 18 }} />); i++; continue; }
+                      const starts = mine.filter(b => b.start === s.start);
+                      const cover = mine.filter(b => b.start < s.start && s.end <= b.end);
+                      const hit = starts.length ? starts : cover;
+                      if (!hit.length) {
+                        const on = pick && pick.kind === "cell" && pick.day === d && pick.start === s.start;
+                        cells.push(<td key={i}><button onClick={() => { setPick({ kind: "cell", day: d, start: s.start }); setMsg(null); }} style={{ width: "100%", minWidth: 74, height: 34, background: on ? P.blueL : "#fafafa", border: "1.5px dashed " + (on ? P.blue : P.border), borderRadius: 5, cursor: "pointer", color: "#b6bdc6", fontSize: 14 }} aria-label={"Add a class on " + DAY_NAMES[d] + " " + fmtRange(s.start, s.end)}>+</button></td>);
+                        i++; continue;
+                      }
+                      // a class of several periods is one block across them
+                      let j = i;
+                      if (starts.length) { const end = Math.max(...starts.map(b => b.end)); while (j + 1 < slots.length && slots[j + 1].end <= end) j++; }
+                      cells.push(
+                        <td key={i} colSpan={j - i + 1}>
+                          <div style={{ display: "grid", gap: 2 }}>
+                            {hit.map(b => {
+                              const [bg, fg] = colourOf(b.token);
+                              const on = pick && pick.kind === "block" && pick.id === b.id;
+                              return <button key={b.id} onClick={() => { setPick({ kind: "block", id: b.id }); setMsg(null); }} title={b.faculty.map(f => f.name).join(", ") || "no faculty"} style={{ background: "#" + bg, color: "#" + fg, border: on ? "2.5px solid " + P.navy : "2.5px solid transparent", borderRadius: 5, padding: "6px 6px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", minWidth: 74 }}>{b.token}</button>;
+                            })}
+                          </div>
+                        </td>
+                      );
+                      i = j + 1;
                     }
-                    return (
-                      <td key={i}>
-                        <div style={{ display: "grid", gap: 2 }}>
-                          {hit.map(b => {
-                            const [bg, fg] = colourOf(b.token);
-                            const on = pick && pick.kind === "block" && pick.id === b.id;
-                            return <button key={b.id} onClick={() => { setPick({ kind: "block", id: b.id }); setMsg(null); }} title={b.faculty.map(f => f.name).join(", ") || "no faculty"} style={{ background: "#" + bg, color: "#" + fg, border: on ? "2.5px solid " + P.navy : "2.5px solid transparent", borderRadius: 5, padding: "6px 6px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", minWidth: 74 }}>{b.token}</button>;
-                          })}
-                        </div>
-                      </td>
-                    );
-                  })}
+                    return cells;
+                  })()}
                 </tr>
               ))}
             </tbody>
@@ -45969,6 +46235,17 @@ export async function publishMaster(args) {
   if (JSON.stringify(data).length > 900000) throw new Error("this timetable is too large to store in one piece");
   await setDoc(doc(db, "masterTimetables", args.year), data);
   return data;
+}
+
+// Publishing some sections of a year keeps the year's other sections as they are: the sections given replace their
+// own classes and timings, everything else in the existing year is carried over.
+export function mergeSections(existing, blocks, sections) {
+  if (!existing) return { blocks, sections };
+  const ids = new Set(sections.map(x => x.id));
+  return {
+    blocks: (existing.blocks || []).filter(b => !ids.has(b.sectionId)).concat(blocks),
+    sections: (existing.sections || []).filter(x => !ids.has(x.id)).concat(sections),
+  };
 }
 
 
@@ -46782,7 +47059,7 @@ import WeekCards from "../timetable/WeekCards";
 import { DAYS } from "../timetable/timetableModel";
 import { groupBlocks, detectOverlaps, checkCombos, suggestionsFor, computeWorkload, autoFix } from "./overlapCheck";
 import { addReportSheets, writeReport, newReportWorkbook } from "./reportBuilder";
-import { publishMaster } from "./publishMaster";
+import { publishMaster, mergeSections } from "./publishMaster";
 import { yearOfSection, DAY_NAMES, fmtRange } from "./timeUtils";
 import { facultyListOf, shortOf } from "../sections/subjectUtils";
 
@@ -46884,8 +47161,9 @@ export default function TimetableUploadScreen({ user }) {
     }));
     const parse = parseSmart(wb, { year, sections: ctxSections, people, sheets: sheet ? [sheet] : undefined }, res);
     const blocks = groupBlocks(parse.entries, "upload");
-    const publishedBlocks = published.filter(p => p.year !== year).flatMap(p =>
-      (p.blocks || []).map(b => ({ ...b, source: "published", publishedBy: p.publishedByName || "", publishedYear: p.year })));
+    const inFile = new Set(parse.sections.map(x => x.id));
+    const publishedBlocks = published.flatMap(p =>
+      (p.blocks || []).filter(b => p.year !== year || !inFile.has(b.sectionId)).map(b => ({ ...b, source: "published", publishedBy: p.publishedByName || "", publishedYear: p.year })));
     const conflicts = detectOverlaps(blocks, publishedBlocks);
     const allBlocks = blocks.map(b => ({ ...b, source: "upload" })).concat(publishedBlocks);
     const slotsBy = {};
@@ -46952,7 +47230,8 @@ export default function TimetableUploadScreen({ user }) {
   async function publishNow() {
     setPublishing(true); setError(""); setNotice("");
     try {
-      const data = await publishMaster({ year, blocks: result.blocks, sections: result.parse.sections, user, fileName: fileName || "" });
+      const merged = mergeSections(published.find(p => p.year === year), result.blocks, result.parse.sections);
+      const data = await publishMaster({ year, blocks: merged.blocks, sections: merged.sections, user, fileName: fileName || "" });
       setNotice("Year " + year + " timetable published: " + data.sections.length + " sections, " + data.blocks.length + " classes. Later uploads for other years are now checked against it.");
       setResult(null); setFix(null); setSheetChoices([]); setFileName(""); setConfirming(false);
     } catch (err) {
@@ -47081,8 +47360,16 @@ export default function TimetableUploadScreen({ user }) {
         <Card style={{ margin: 0, padding: "16px 20px", borderColor: P.blue }}>
           <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>Publish the Year {year} timetable?</div>
           <div style={{ fontSize: 13.5, lineHeight: 1.6, marginBottom: 12 }}>
-            {result.parse.sections.length} sections and {result.blocks.length} classes will be saved as the master timetable for Year {year}.
-            {alreadyPublished && <> <b style={{ color: P.amber }}>This replaces the Year {year} timetable already published by {alreadyPublished.publishedByName || "someone"}.</b></>}
+            {result.parse.sections.length} section{result.parse.sections.length === 1 ? "" : "s"} ({result.parse.sections.map(x => x.name).join(", ")}) and {result.blocks.length} classes will be saved in the Year {year} timetable.
+            {alreadyPublished && (() => {
+              const ids = new Set(result.parse.sections.map(x => x.id));
+              const replaced = (alreadyPublished.sections || []).filter(x => ids.has(x.id)).map(x => x.name);
+              const kept = (alreadyPublished.sections || []).filter(x => !ids.has(x.id)).map(x => x.name);
+              return <>
+                {replaced.length > 0 && <> <b style={{ color: P.amber }}>This replaces the published timetable of {replaced.join(", ")}.</b></>}
+                {kept.length > 0 && <> Other sections stay as they are: {kept.join(", ")}.</>}
+              </>;
+            })()}
             {" "}Attendance and marks stay with each subject's Main faculty; Assisting faculty are shown on the timetable only.
           </div>
           <div style={{ display: "flex", gap: 10 }}>

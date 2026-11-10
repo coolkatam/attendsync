@@ -43,9 +43,10 @@ test("the entry screen offers Upload and Design", () => {
 
 test("a coordinator can answer the questions and get versions", async () => {
   localStorage.clear();
+  localStorage.setItem("ttdesign-v1:9:III", JSON.stringify({ allowBlank: true }));
   render(<DesignScreen user={{ phone: "9", role: "hod", name: "T" }} onBack={() => {}} />);
   const next = () => fireEvent.click(screen.getByText("Next →"));
-  await screen.findByText("What the portal has for Year III");
+  await screen.findByText(/What the portal has for Year III/);
   next();                                                    // -> timings
   expect(screen.getByText("Here are the timings")).toBeTruthy();
   expect(screen.getByText("Period 7")).toBeTruthy();
@@ -54,7 +55,7 @@ test("a coordinator can answer the questions and get versions", async () => {
   expect(screen.getByText("How many periods a week for each subject?")).toBeTruthy();
   expect(screen.getByText(/Other periods in the timetable/)).toBeTruthy();
   expect(screen.getByText("Library")).toBeTruthy();
-  expect(screen.getAllByText(/periods used/).length).toBeGreaterThan(0);
+  expect(screen.getAllByText(/Total periods covered/).length).toBeGreaterThan(0);
   next(); next(); next(); next();                           // -> together, limits, availability, review
   await screen.findByText("Before I design");
   fireEvent.click(screen.getByText("Design the timetables"));
@@ -80,7 +81,7 @@ test("the workbook has TT and Ind sheets in order", () => {
 test("every tab can be opened directly, and a problem points to the tab that fixes it", async () => {
   localStorage.clear();
   render(<DesignScreen user={{ phone: "9", role: "hod", name: "T" }} onBack={() => {}} />);
-  await screen.findByText("What the portal has for Year III");
+  await screen.findByText(/What the portal has for Year III/);
   fireEvent.click(screen.getByText("7. Review"));
   await screen.findByText("Before I design");
   // timings were never ticked, so the review says so and offers a way there

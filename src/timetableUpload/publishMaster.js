@@ -34,3 +34,14 @@ export async function publishMaster(args) {
   await setDoc(doc(db, "masterTimetables", args.year), data);
   return data;
 }
+
+// Publishing some sections of a year keeps the year's other sections as they are: the sections given replace their
+// own classes and timings, everything else in the existing year is carried over.
+export function mergeSections(existing, blocks, sections) {
+  if (!existing) return { blocks, sections };
+  const ids = new Set(sections.map(x => x.id));
+  return {
+    blocks: (existing.blocks || []).filter(b => !ids.has(b.sectionId)).concat(blocks),
+    sections: (existing.sections || []).filter(x => !ids.has(x.id)).concat(sections),
+  };
+}

@@ -19,7 +19,7 @@ function scenario(extra) {
     ],
   });
   const sections = [mk("s1", "III YR I SEM SL-1"), mk("s2", "III YR I SEM AL-1"), mk("s3", "III YR I SEM SL-2")];
-  const a = defaultAnswers();
+  const a = defaultAnswers(); a.allowBlank = true;
   ["S&GPS", "DMM", "AIML", "MTM", "IIR"].forEach(n => { a.loads[n] = { periods: 4, block: 1 }; });
   ["Thermal Lab", "Metrology Lab"].forEach(n => { a.loads[n] = { periods: 3, block: 3 }; });
   if (extra) extra(a, sections);
@@ -103,7 +103,7 @@ test("tight load: six sections, shared faculty, full week", () => {
       { name: "Draw", token: "DR", type: "Drawing", faculty: ["q" + (8 + (k % 3))] },
     ],
   }));
-  const a = defaultAnswers();
+  const a = defaultAnswers(); a.allowBlank = true;
   a.days = 6; a.satHalf = false;           // 42 periods a week
   ["T1", "T2", "T3", "T4"].forEach(n => { a.loads[n] = { periods: 6, block: 1, avoidFirst: n === "T1", avoidLast: n === "T2" }; });
   a.loads.Lab1 = { periods: 3, block: 3 }; a.loads.Draw = { periods: 3, block: 3 };

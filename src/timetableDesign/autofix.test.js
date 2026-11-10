@@ -7,7 +7,7 @@ test("autoFix clears a clash it is given without creating another", () => {
   const people = [1, 2, 3, 4].map(i => ({ phone: "p" + i, name: "Dr " + i }));
   const mk = (id, name) => ({ id, name, subjects: ["T1", "T2", "T3"].map((n, i) => ({ name: n, token: n, type: "Theory", faculty: ["p" + (i + 1)] })) });
   const sections = [mk("s1", "III-A"), mk("s2", "III-B"), mk("s3", "III-C")];
-  const a = defaultAnswers();
+  const a = defaultAnswers(); a.allowBlank = true;
   ["T1", "T2", "T3"].forEach(n => { a.loads[n] = { periods: 4, block: 1 }; });
   const { spec } = buildSpec({ year: "III", a, sections, people, published: [] });
   const res = designVersions(spec, people, { count: 1, seed: 3 });

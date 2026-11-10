@@ -16,7 +16,7 @@ import { facultyListOf, guessType } from "../sections/subjectUtils";
 import { defaultAnswers, periodsOn, DAY_ABBR } from "./designModel";
 import { buildSpec, designVersions } from "./generator";
 import { writeDesignWorkbook, sectionsOf } from "./designExport";
-import { publishMaster } from "../timetableUpload/publishMaster";
+import { publishMaster, mergeSections } from "../timetableUpload/publishMaster";
 import { Q, StepYear, StepTimings, StepTogether, StepLimits, StepAvailability } from "./steps";
 import StepSubjects from "./StepSubjects";
 
@@ -56,18 +56,28 @@ function SectionGrid({ spec, blocks, sectionId, colourOf }) {
           {Array.from({ length: days }, (_, d) => (
             <tr key={d}>
               <td style={{ fontSize: 12, fontWeight: 700, paddingRight: 8 }}>{DAY_ABBR[d]}</td>
-              {slots.map((s, i) => {
-                if (s.brk) return <td key={i} style={{ background: "#f6efdc", borderRadius: 5, width: 18 }} />;
-                const hit = mine.filter(b => b.day === d && b.start <= s.start && s.end <= b.end);
-                if (d === 5 && s.n > periodsOn(spec.a, 5)) return <td key={i} style={{ background: "#f3f4f6", borderRadius: 5 }} />;
-                if (hit.length === 0) return <td key={i} style={{ background: "#fafafa", border: "1px dashed " + P.border, borderRadius: 5, textAlign: "center", color: "#c3c9d0", fontSize: 12 }}>-</td>;
-                const [bg, fg] = colourOf(hit[0].token);
-                return (
-                  <td key={i} title={hit.map(b => b.token + " - " + (b.faculty.map(f => f.name).join(", ") || "no faculty")).join("\n")} style={{ background: "#" + bg, color: "#" + fg, borderRadius: 5, padding: "5px 6px", textAlign: "center", fontSize: 11.5, fontWeight: 700, minWidth: 74 }}>
-                    {hit.map(b => b.token).join(" / ")}
-                  </td>
-                );
-              })}
+              {(() => {
+                const cells = [];
+                let i = 0;
+                while (i < slots.length) {
+                  const s = slots[i];
+                  if (s.brk) { cells.push(<td key={i} style={{ background: "#f6efdc", borderRadius: 5, width: 18 }} />); i++; continue; }
+                  if (d === 5 && s.n > periodsOn(spec.a, 5)) { cells.push(<td key={i} style={{ background: "#f3f4f6", borderRadius: 5 }} />); i++; continue; }
+                  const starts = mine.filter(b => b.day === d && b.start === s.start);
+                  if (!starts.length) { cells.push(<td key={i} style={{ background: "#fafafa", border: "1px dashed " + P.border, borderRadius: 5, textAlign: "center", color: "#c3c9d0", fontSize: 12 }}>-</td>); i++; continue; }
+                  const end = Math.max(...starts.map(b => b.end));
+                  let j = i;
+                  while (j + 1 < slots.length && slots[j + 1].end <= end) j++;
+                  const [bg, fg] = colourOf(starts[0].token);
+                  cells.push(
+                    <td key={i} colSpan={j - i + 1} title={starts.map(b => b.token + " - " + (b.faculty.map(f => f.name).join(", ") || "no faculty")).join("\n")} style={{ background: "#" + bg, color: "#" + fg, borderRadius: 5, padding: "6px 8px", textAlign: "center", fontSize: 11.5, fontWeight: 700, minWidth: 74 }}>
+                      {starts.map(b => <div key={b.id}>{b.token}</div>)}
+                    </td>
+                  );
+                  i = j + 1;
+                }
+                return cells;
+              })()}
             </tr>
           ))}
         </tbody>
@@ -94,7 +104,7 @@ function VersionCard({ spec, v, n, colourOf, onPublish }) {
           <div style={{ fontSize: 12.5, color: P.gray, padding: "6px 0 0 14px" }}>{v.relaxed.map((t, i) => <div key={i}>• {t}</div>)}</div>
         </details>
       ) : <div style={{ fontSize: 13, color: P.green, marginBottom: 10 }}>Every preference you gave is kept.</div>}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+      <div style={{ display: spec.sections.length > 1 ? "flex" : "none", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
         {spec.sections.map(s => (
           <button key={s.id} onClick={() => setSec(s.id)} style={{ padding: "5px 12px", borderRadius: 20, fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", border: "1.5px solid " + (sec === s.id ? P.blue : P.border), background: sec === s.id ? P.blue : "#fff", color: sec === s.id ? "#fff" : P.navy }}>{s.name}</button>
         ))}
@@ -144,20 +154,23 @@ export default function DesignScreen({ user, onBack }) {
   useEffect(() => { try { localStorage.setItem(draftKey(user.phone, year), JSON.stringify(a)); } catch (e) { /* storage off */ } }, [a, user.phone, year]);
 
   const ctx = useMemo(() => {
-    const yearSections = (sections || []).filter(s => yearOfSection(s) === year).map(s => ({
+    const allSections = (sections || []).filter(s => yearOfSection(s) === year).map(s => ({
       id: s.id, name: s.name,
       subjects: (s.subjects || []).map(sub => ({
         name: sub.name, token: String(sub.short || sub.name || "").toUpperCase().replace(/\s+/g, " "),
         type: sub.type || guessType(sub.name), faculty: facultyListOf(sub),
       })),
     }));
+    // one section at a time is the usual way; tick more to design them together
+    const chosen = allSections.filter(s => (a.sectionIds || []).includes(s.id));
+    const yearSections = chosen.length ? chosen : allSections.slice(0, 1);
     const byName = new Map();
     yearSections.forEach(s => s.subjects.forEach(sub => {
       if (!byName.has(sub.name)) byName.set(sub.name, { name: sub.name, type: sub.type, sections: [] });
       byName.get(sub.name).sections.push({ id: s.id, name: s.name });
     }));
-    return { yearSections, subjects: Array.from(byName.values()), people: people || [] };
-  }, [sections, people, year]);
+    return { yearSections, allSections, selectedIds: yearSections.map(s => s.id), subjects: Array.from(byName.values()), people: people || [] };
+  }, [sections, people, year, a.sectionIds]);
 
   // every subject gets a starting number; nothing already typed is overwritten
   useEffect(() => {
@@ -173,7 +186,8 @@ export default function DesignScreen({ user, onBack }) {
   }, [ctx.subjects]);
 
   const calc = useMemo(() => {
-    const other = published.filter(p => p.year !== year).flatMap(p => (p.blocks || []).map(b => ({ ...b, source: "published", publishedYear: p.year, publishedBy: p.publishedByName || "" })));
+    const mine = new Set(ctx.selectedIds);
+    const other = published.flatMap(p => (p.blocks || []).filter(b => p.year !== year || !mine.has(b.sectionId)).map(b => ({ ...b, source: "published", publishedYear: p.year, publishedBy: p.publishedByName || "" })));
     return buildSpec({ year, a, sections: ctx.yearSections, people: ctx.people, published: other });
   }, [year, a, ctx, published]);
 
@@ -185,6 +199,7 @@ export default function DesignScreen({ user, onBack }) {
     return next;
   });
   const changeYear = y => { setYear(y); setA(loadDraft(user.phone, y)); setSets([]); setSpecUsed(null); sigs.current = []; };
+  const chooseSections = ids => { set({ sectionIds: ids }); setSets([]); setSpecUsed(null); sigs.current = []; setPubMsg({ ok: true, text: "" }); };
 
   const hasSubjects = ctx.yearSections.some(s => s.subjects.length > 0);
   const sid = STEPS[step].id;
@@ -212,8 +227,9 @@ export default function DesignScreen({ user, onBack }) {
     const v = sets[showSet].versions[n - 1];
     setPubBusy(true); setPubMsg({ ok: true, text: "" });
     try {
-      await publishMaster({ year, blocks: v.blocks, sections: sectionsOf(specUsed), user, fileName: "Designed in the portal (version " + n + ")" });
-      setPubMsg({ ok: true, text: "Year " + year + " timetable published from Version " + n + ": " + specUsed.sections.length + " sections, " + v.blocks.length + " classes. Faculty now see their classes in My Timetable." });
+      const merged = mergeSections(published.find(p => p.year === year), v.blocks, sectionsOf(specUsed));
+      await publishMaster({ year, blocks: merged.blocks, sections: merged.sections, user, fileName: "Designed in the portal (version " + n + ")" });
+      setPubMsg({ ok: true, text: specUsed.sections.map(x => x.name).join(", ") + " published from Version " + n + " (" + v.blocks.length + " classes) in the Year " + year + " timetable. Faculty now see their classes in My Timetable." });
       setConfirmN(0);
     } catch (err) {
       setPubMsg({ ok: false, text: "Could not publish (" + err.message + "). Nothing was changed." });
@@ -240,7 +256,7 @@ export default function DesignScreen({ user, onBack }) {
 
       <Card style={{ margin: 0, padding: "10px 22px 18px" }}>
           <div style={{ fontWeight: 800, fontSize: 17, padding: "12px 0 0" }}>{STEPS[step].title}</div>
-          {sid === "year" && <StepYear ctx={ctx} year={year} setYear={changeYear} />}
+          {sid === "year" && <StepYear ctx={ctx} year={year} setYear={changeYear} setSelected={chooseSections} published={published} />}
           {sid === "time" && <StepTimings a={a} set={set} />}
           {sid === "subj" && <StepSubjects a={a} set={set} ctx={ctx} calc={calc} />}
           {sid === "tog" && <StepTogether a={a} set={set} ctx={ctx} />}
@@ -308,7 +324,7 @@ export default function DesignScreen({ user, onBack }) {
                     <div style={{ fontSize: 13, color: P.gray, marginTop: 2 }}>The Excel file has {current.versions.length * 2} sheets: {current.versions.map((_, i) => "TT-" + (i + 1) + ", Ind-" + (i + 1)).join(", ")}. TT is every section's timetable, Ind is every faculty member's own.{current.versions.length < 3 ? " Only " + current.versions.length + " genuinely different arrangement" + (current.versions.length === 1 ? "" : "s") + " fit your rules." : ""}</div>
                   </div>
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <Btn onClick={() => writeDesignWorkbook(specUsed, current.versions, "Timetable designs - Year " + year + (sets.length > 1 ? " (set " + (showSet + 1) + ")" : "") + ".xlsx")}>Download Excel</Btn>
+                    <Btn onClick={() => writeDesignWorkbook(specUsed, current.versions, "Timetable designs - " + (specUsed.sections.length === 1 ? specUsed.sections[0].name : "Year " + year + " (" + specUsed.sections.length + " sections)").replace(/[\\/:*?"<>|]/g, "") + (sets.length > 1 ? " (set " + (showSet + 1) + ")" : "") + ".xlsx")}>Download Excel</Btn>
                     <Btn variant="outline" disabled={busy} onClick={() => design(true)}>Design another set</Btn>
                   </div>
                 </div>
@@ -318,8 +334,16 @@ export default function DesignScreen({ user, onBack }) {
                 <Card style={{ margin: 0, padding: "16px 20px", borderColor: P.blue }}>
                   <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>Publish Version {confirmN} as the Year {year} timetable?</div>
                   <div style={{ fontSize: 13.5, lineHeight: 1.6, marginBottom: 12 }}>
-                    It has no overlaps. {specUsed.sections.length} sections and {current.versions[confirmN - 1].blocks.length} classes will be saved as the master timetable.
-                    {alreadyPublished && <> <b style={{ color: P.amber }}>This replaces the Year {year} timetable already published by {alreadyPublished.publishedByName || "someone"}.</b></>}
+                    It has no overlaps. {specUsed.sections.map(x => x.name).join(", ")} ({current.versions[confirmN - 1].blocks.length} classes) will be saved in the Year {year} timetable.
+                    {alreadyPublished && (() => {
+                      const ids = new Set(specUsed.sections.map(x => x.id));
+                      const replaced = (alreadyPublished.sections || []).filter(x => ids.has(x.id)).map(x => x.name);
+                      const kept = (alreadyPublished.sections || []).filter(x => !ids.has(x.id)).map(x => x.name);
+                      return <>
+                        {replaced.length > 0 && <> <b style={{ color: P.amber }}>This replaces the published timetable of {replaced.join(", ")}.</b></>}
+                        {kept.length > 0 && <> Other sections stay as they are: {kept.join(", ")}.</>}
+                      </>;
+                    })()}
                   </div>
                   <div style={{ display: "flex", gap: 10 }}>
                     <Btn onClick={() => publishVersion(confirmN)} disabled={pubBusy}>{pubBusy ? "Publishing…" : "Yes, publish"}</Btn>

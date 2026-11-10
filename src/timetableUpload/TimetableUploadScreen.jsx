@@ -18,7 +18,7 @@ import WeekCards from "../timetable/WeekCards";
 import { DAYS } from "../timetable/timetableModel";
 import { groupBlocks, detectOverlaps, checkCombos, suggestionsFor, computeWorkload, autoFix } from "./overlapCheck";
 import { addReportSheets, writeReport, newReportWorkbook } from "./reportBuilder";
-import { publishMaster } from "./publishMaster";
+import { publishMaster, mergeSections } from "./publishMaster";
 import { yearOfSection, DAY_NAMES, fmtRange } from "./timeUtils";
 import { facultyListOf, shortOf } from "../sections/subjectUtils";
 
@@ -120,8 +120,9 @@ export default function TimetableUploadScreen({ user }) {
     }));
     const parse = parseSmart(wb, { year, sections: ctxSections, people, sheets: sheet ? [sheet] : undefined }, res);
     const blocks = groupBlocks(parse.entries, "upload");
-    const publishedBlocks = published.filter(p => p.year !== year).flatMap(p =>
-      (p.blocks || []).map(b => ({ ...b, source: "published", publishedBy: p.publishedByName || "", publishedYear: p.year })));
+    const inFile = new Set(parse.sections.map(x => x.id));
+    const publishedBlocks = published.flatMap(p =>
+      (p.blocks || []).filter(b => p.year !== year || !inFile.has(b.sectionId)).map(b => ({ ...b, source: "published", publishedBy: p.publishedByName || "", publishedYear: p.year })));
     const conflicts = detectOverlaps(blocks, publishedBlocks);
     const allBlocks = blocks.map(b => ({ ...b, source: "upload" })).concat(publishedBlocks);
     const slotsBy = {};
@@ -188,7 +189,8 @@ export default function TimetableUploadScreen({ user }) {
   async function publishNow() {
     setPublishing(true); setError(""); setNotice("");
     try {
-      const data = await publishMaster({ year, blocks: result.blocks, sections: result.parse.sections, user, fileName: fileName || "" });
+      const merged = mergeSections(published.find(p => p.year === year), result.blocks, result.parse.sections);
+      const data = await publishMaster({ year, blocks: merged.blocks, sections: merged.sections, user, fileName: fileName || "" });
       setNotice("Year " + year + " timetable published: " + data.sections.length + " sections, " + data.blocks.length + " classes. Later uploads for other years are now checked against it.");
       setResult(null); setFix(null); setSheetChoices([]); setFileName(""); setConfirming(false);
     } catch (err) {
@@ -317,8 +319,16 @@ export default function TimetableUploadScreen({ user }) {
         <Card style={{ margin: 0, padding: "16px 20px", borderColor: P.blue }}>
           <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>Publish the Year {year} timetable?</div>
           <div style={{ fontSize: 13.5, lineHeight: 1.6, marginBottom: 12 }}>
-            {result.parse.sections.length} sections and {result.blocks.length} classes will be saved as the master timetable for Year {year}.
-            {alreadyPublished && <> <b style={{ color: P.amber }}>This replaces the Year {year} timetable already published by {alreadyPublished.publishedByName || "someone"}.</b></>}
+            {result.parse.sections.length} section{result.parse.sections.length === 1 ? "" : "s"} ({result.parse.sections.map(x => x.name).join(", ")}) and {result.blocks.length} classes will be saved in the Year {year} timetable.
+            {alreadyPublished && (() => {
+              const ids = new Set(result.parse.sections.map(x => x.id));
+              const replaced = (alreadyPublished.sections || []).filter(x => ids.has(x.id)).map(x => x.name);
+              const kept = (alreadyPublished.sections || []).filter(x => !ids.has(x.id)).map(x => x.name);
+              return <>
+                {replaced.length > 0 && <> <b style={{ color: P.amber }}>This replaces the published timetable of {replaced.join(", ")}.</b></>}
+                {kept.length > 0 && <> Other sections stay as they are: {kept.join(", ")}.</>}
+              </>;
+            })()}
             {" "}Attendance and marks stay with each subject's Main faculty; Assisting faculty are shown on the timetable only.
           </div>
           <div style={{ display: "flex", gap: 10 }}>

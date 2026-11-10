@@ -140,25 +140,39 @@ export default function PublishedEditor({ year, user, onBack }) {
               {Array.from({ length: days }, (_, d) => (
                 <tr key={d}>
                   <td style={{ fontSize: 12, fontWeight: 700, paddingRight: 8 }}>{DAY_NAMES[d].slice(0, 3)}</td>
-                  {slots.map((s, i) => {
-                    if (s.brk) return <td key={i} style={{ background: "#f6efdc", borderRadius: 5, width: 18 }} />;
-                    const hit = blocks.filter(b => b.sectionId === (section && section.id) && b.day === d && b.start <= s.start && s.end <= b.end);
-                    if (!hit.length) {
-                      const on = pick && pick.kind === "cell" && pick.day === d && pick.start === s.start;
-                      return <td key={i}><button onClick={() => { setPick({ kind: "cell", day: d, start: s.start }); setMsg(null); }} style={{ width: "100%", minWidth: 74, height: 34, background: on ? P.blueL : "#fafafa", border: "1.5px dashed " + (on ? P.blue : P.border), borderRadius: 5, cursor: "pointer", color: "#b6bdc6", fontSize: 14 }} aria-label={"Add a class on " + DAY_NAMES[d] + " " + fmtRange(s.start, s.end)}>+</button></td>;
+                  {(() => {
+                    const cells = [];
+                    const mine = blocks.filter(b => b.sectionId === (section && section.id) && b.day === d);
+                    let i = 0;
+                    while (i < slots.length) {
+                      const s = slots[i];
+                      if (s.brk) { cells.push(<td key={i} style={{ background: "#f6efdc", borderRadius: 5, width: 18 }} />); i++; continue; }
+                      const starts = mine.filter(b => b.start === s.start);
+                      const cover = mine.filter(b => b.start < s.start && s.end <= b.end);
+                      const hit = starts.length ? starts : cover;
+                      if (!hit.length) {
+                        const on = pick && pick.kind === "cell" && pick.day === d && pick.start === s.start;
+                        cells.push(<td key={i}><button onClick={() => { setPick({ kind: "cell", day: d, start: s.start }); setMsg(null); }} style={{ width: "100%", minWidth: 74, height: 34, background: on ? P.blueL : "#fafafa", border: "1.5px dashed " + (on ? P.blue : P.border), borderRadius: 5, cursor: "pointer", color: "#b6bdc6", fontSize: 14 }} aria-label={"Add a class on " + DAY_NAMES[d] + " " + fmtRange(s.start, s.end)}>+</button></td>);
+                        i++; continue;
+                      }
+                      // a class of several periods is one block across them
+                      let j = i;
+                      if (starts.length) { const end = Math.max(...starts.map(b => b.end)); while (j + 1 < slots.length && slots[j + 1].end <= end) j++; }
+                      cells.push(
+                        <td key={i} colSpan={j - i + 1}>
+                          <div style={{ display: "grid", gap: 2 }}>
+                            {hit.map(b => {
+                              const [bg, fg] = colourOf(b.token);
+                              const on = pick && pick.kind === "block" && pick.id === b.id;
+                              return <button key={b.id} onClick={() => { setPick({ kind: "block", id: b.id }); setMsg(null); }} title={b.faculty.map(f => f.name).join(", ") || "no faculty"} style={{ background: "#" + bg, color: "#" + fg, border: on ? "2.5px solid " + P.navy : "2.5px solid transparent", borderRadius: 5, padding: "6px 6px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", minWidth: 74 }}>{b.token}</button>;
+                            })}
+                          </div>
+                        </td>
+                      );
+                      i = j + 1;
                     }
-                    return (
-                      <td key={i}>
-                        <div style={{ display: "grid", gap: 2 }}>
-                          {hit.map(b => {
-                            const [bg, fg] = colourOf(b.token);
-                            const on = pick && pick.kind === "block" && pick.id === b.id;
-                            return <button key={b.id} onClick={() => { setPick({ kind: "block", id: b.id }); setMsg(null); }} title={b.faculty.map(f => f.name).join(", ") || "no faculty"} style={{ background: "#" + bg, color: "#" + fg, border: on ? "2.5px solid " + P.navy : "2.5px solid transparent", borderRadius: 5, padding: "6px 6px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", minWidth: 74 }}>{b.token}</button>;
-                          })}
-                        </div>
-                      </td>
-                    );
-                  })}
+                    return cells;
+                  })()}
                 </tr>
               ))}
             </tbody>

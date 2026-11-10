@@ -42,7 +42,11 @@ export function NumIn({ value, onChange, width = 80, min = 0, max, placeholder }
 
 
 // ── Step: year ───────────────────────────────────────────────────────────────────────────
-export function StepYear({ ctx, year, setYear }) {
+export function StepYear({ ctx, year, setYear, setSelected, published = [] }) {
+  const pubDoc = published.find(p => p.year === year);
+  const isPublished = id => !!pubDoc && (pubDoc.blocks || []).some(b => b.sectionId === id);
+  const chosen = ctx.selectedIds || [];
+  const toggle = id => setSelected(chosen.includes(id) ? chosen.filter(x => x !== id) : chosen.concat(id));
   return (
     <>
       <Q title="Which year is this timetable for?" hint="The portal already knows that year's sections, subjects and faculty, so you won't be asked for them again.">
@@ -52,11 +56,33 @@ export function StepYear({ ctx, year, setYear }) {
           ))}
         </div>
       </Q>
+      {ctx.allSections.length > 0 && (
+        <Q title="Which section?" hint="Design one section at a time, which is the usual way. Tick more than one only if you want them designed together (needed for a class taken by several sections jointly).">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10 }}>
+            {ctx.allSections.map(s => {
+              const on = chosen.includes(s.id);
+              return (
+                <label key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "11px 14px", borderRadius: 10, border: "1.5px solid " + (on ? P.blue : P.border), background: on ? P.blueL : "#fff" }}>
+                  <input type="checkbox" checked={on} onChange={() => toggle(s.id)} style={{ accentColor: P.blue, width: 17, height: 17 }} />
+                  <span style={{ flex: 1 }}>
+                    <b style={{ fontFamily: MONO, fontSize: 13.5 }}>{s.name}</b>
+                    <span style={{ display: "block", fontSize: 12, color: P.gray }}>{s.subjects.length} subjects{isPublished(s.id) ? " · timetable already published" : ""}</span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <Btn small variant="ghost" onClick={() => setSelected(ctx.allSections.map(s => s.id))}>Select all</Btn>
+            <Btn small variant="ghost" onClick={() => setSelected(ctx.allSections.slice(0, 1).map(s => s.id))}>Only the first</Btn>
+          </div>
+        </Q>
+      )}
       {ctx.yearSections.length === 0 ? (
         <div style={{ fontSize: 13, color: P.amber, background: P.amberL, borderRadius: 8, padding: "10px 12px" }}>No sections found for Year {year}. Add them under Coordinator Duties › All Sections › Sections & Subjects (section names start with the year, like III-A).</div>
       ) : (
         <div style={{ ...small }}>
-          <div style={{ fontWeight: 700, color: P.navy, marginBottom: 6 }}>What the portal has for Year {year}</div>
+          <div style={{ fontWeight: 700, color: P.navy, marginBottom: 6 }}>What the portal has for Year {year}{ctx.yearSections.length ? ", for the section" + (ctx.yearSections.length === 1 ? "" : "s") + " you are designing" : ""}</div>
           {ctx.yearSections.map(s => (
             <div key={s.id} style={{ padding: "3px 0" }}><b style={{ fontFamily: MONO, color: "#1a2230" }}>{s.name}</b> · {s.subjects.length} subjects, {s.subjects.filter(x => x.faculty.length === 0).length === 0 ? "all with faculty" : s.subjects.filter(x => x.faculty.length === 0).length + " without faculty"}</div>
           ))}
@@ -164,6 +190,7 @@ export function StepTogether({ a, set, ctx }) {
         {labs.length < 2 ? <div style={small}>This year has fewer than two lab subjects, so there is nothing to group.</div> : <Btn small variant="outline" onClick={() => set({ parallel: [...a.parallel, []] })}>+ Add a group of labs</Btn>}
       </Q>
       <Q title="Classes taken by several sections together" hint="An elective or a combined class that two or more sections attend at the same time with the same faculty. Pick the subject and the sections that join.">
+        {ctx.yearSections.length < 2 && <div style={{ ...small, marginBottom: 8 }}>You are designing one section, so there is nothing to join. To design a joint class, go to the Year tab and tick two or more sections.</div>}
         {a.joint.map((j, ji) => {
           const subj = ctx.subjects.find(s => s.name === j.subject);
           const setJ = patch => set({ joint: a.joint.map((x, k) => (k === ji ? { ...x, ...patch } : x)) });

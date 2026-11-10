@@ -50,6 +50,28 @@ function SlotsEditor({ a, sections, countOf, fixed, onChange }) {
   );
 }
 
+function TotalLine({ totals, big }) {
+  if (!totals.length) return null;
+  return (
+    <div style={{ display: "grid", gap: big ? 6 : 4, justifyItems: "end", textAlign: "right" }}>
+      {totals.map(t => {
+        const diff = t.have - t.need, ok = diff === 0;
+        return (
+          <div key={t.s.id}>
+            <div style={{ fontWeight: 800, fontSize: big ? 22 : 17, color: ok ? P.green : P.red }}>
+              {totals.length > 1 && <span style={{ fontFamily: MONO, fontSize: big ? 15 : 13, marginRight: 10 }}>{t.s.name}</span>}
+              Total periods covered: {t.need} out of {t.have}
+            </div>
+            <div style={{ fontSize: 13, color: ok ? P.green : P.red, fontWeight: 600 }}>
+              {ok ? "Every period is filled." : diff > 0 ? diff + " more period" + (diff === 1 ? "" : "s") + " to allot: a timetable can't have blank periods." : -diff + " period" + (diff === -1 ? "" : "s") + " too many: reduce something."}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function StepSubjects({ a, set, ctx, calc }) {
   const [open, setOpen] = useState({});
   const [custom, setCustom] = useState("");
@@ -88,7 +110,9 @@ export default function StepSubjects({ a, set, ctx, calc }) {
                 <option value="1">Single periods</option><option value="2">Double periods (2 together)</option>
               </select>
             ) : (
-              <span style={{ fontSize: 13 }}><NumIn value={l.block} onChange={v => setLoad(s.name, { block: v })} width={60} min={1} max={6} /> <span style={small}>periods per session</span></span>
+              <span style={{ fontSize: 13 }}><NumIn value={l.block} onChange={v => setLoad(s.name, { block: v })} width={60} min={1} max={6} /> <span style={small}>periods per session</span>
+                {(() => { const per = num(l.periods, 0), b = Math.max(1, num(l.block, 3)); if (!per) return null; const full = Math.floor(per / b), rem = per % b; return <div style={{ fontSize: 11.5, marginTop: 3, color: rem ? P.amber : P.green, fontWeight: 600 }}>= {full ? full + " session" + (full === 1 ? "" : "s") + " of " + b : ""}{full && rem ? " + " : ""}{rem ? "1 shorter session of " + rem : ""} a week</div>; })()}
+              </span>
             )}
           </td>
           <td style={td}><Check checked={l.avoidFirst} onChange={v => setLoad(s.name, { avoidFirst: v })}>avoid</Check></td>
@@ -172,21 +196,9 @@ export default function StepSubjects({ a, set, ctx, calc }) {
   return (
     <>
       <div style={{ position: "sticky", top: 0, zIndex: 5, background: "#fff", padding: "12px 0 10px", borderBottom: "1px solid " + P.border, margin: "0 0 4px" }}>
-        <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 6 }}>Periods used in the week, with the numbers below</div>
-        {totals.length === 0 ? (
-          <div style={small}>A week has {haveDefault || "?"} periods in each section. Fix the timings in Days and periods to see the totals.</div>
-        ) : (
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            {totals.map(t => {
-              const over = t.need > t.have, free = t.have - t.need;
-              return (
-                <span key={t.s.id} style={{ fontSize: 13, background: over ? P.redL : free === 0 ? P.greenL : P.bg, color: over ? P.red : "#1a2230", border: "1px solid " + (over ? P.red : P.border), borderRadius: 20, padding: "6px 14px" }}>
-                  <b style={{ fontFamily: MONO }}>{t.s.name}</b> · {t.need} of {t.have} periods used · {over ? (t.need - t.have) + " too many" : free === 0 ? "week is full" : free + " still free"}
-                </span>
-              );
-            })}
-          </div>
-        )}
+        {totals.length === 0
+          ? <div style={small}>A week has {haveDefault || "?"} periods in each section. Fix the timings in Days and periods to see the totals.</div>
+          : <TotalLine totals={totals} />}
       </div>
 
       <Q title="How many periods a week for each subject?" hint="One number per subject applies to every section that has it. Use Options to give one section a different number, or to fix its days and periods. By “hours” I always mean periods. I've filled in usual values: change what is different.">
@@ -196,7 +208,10 @@ export default function StepSubjects({ a, set, ctx, calc }) {
             <tbody>{ctx.subjects.map(subjectRow)}</tbody>
           </table>
         </div>
-        <div style={{ ...small, marginTop: 8 }}>“Avoid” is a wish, not a rule: if the timetable can't be built without it, I'll bend it and tell you where.</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap", marginTop: 10 }}>
+          <div style={{ ...small, maxWidth: 520 }}>“Avoid” is a wish, not a rule: if the timetable can't be built without it, I'll bend it and tell you where.</div>
+          <TotalLine totals={totals} big />
+        </div>
       </Q>
 
       <Q title="Other periods in the timetable" hint="Activities that are not subjects in the portal. Put the periods a week for each section; leave 0 if there are none. Use Options if one trainer takes all sections, or if the slots are fixed.">
@@ -216,6 +231,7 @@ export default function StepSubjects({ a, set, ctx, calc }) {
       </Q>
 
       <Q title="Labs and drawing">
+        <Check checked={a.labOnceADay !== false} onChange={v => set({ labOnceADay: v })}>One lab session a day for a section (labs that run together as batches count as one)</Check>
         <Check checked={a.labAcrossBreak} onChange={v => set({ labAcrossBreak: v })}>A lab session may continue across a break</Check>
         <div style={{ marginTop: 8 }}><span style={lbl}>Preferred time for labs</span>
           <select value={a.labPref} onChange={e => set({ labPref: e.target.value })} style={{ ...inp, width: 220 }}>

@@ -25,6 +25,7 @@ export function defaultAnswers() {
     labBlock: 3,             // periods in one lab session
     labPref: "any",          // any | morning | afternoon
     repeatSameDay: false,    // may the same subject appear twice in a day for a section
+    labOnceADay: true,       // at most one lab/drawing session a day for a section
     loads: {},               // subject name -> { periods, block, avoidFirst, avoidLast, perSection: { [sectionId]: n } }
     parallel: [],            // [[subjectName, ...]] lab subjects that run together as batches
     joint: [],               // [{ subject, sections: [sectionId, ...] }] one class for several sections together
@@ -38,6 +39,8 @@ export function defaultAnswers() {
     availability: [],        // [{ phone, mode: "blocked" | "only", cells: { "d-p": true } }]
     extras: [],              // see newExtra()
     notes: "",
+    sectionIds: [],          // sections being designed; empty = the first section of the year
+    allowBlank: false,       // a timetable may not have blank periods (only tests switch this on)
   };
 }
 

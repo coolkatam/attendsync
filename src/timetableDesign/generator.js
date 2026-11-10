@@ -192,8 +192,19 @@ export function buildSpec({ year, a, sections, people, published = [] }) {
   const pubBusy = {};
   published.forEach(b => (b.faculty || []).forEach(f => { (pubBusy[f.key] = pubBusy[f.key] || P.map(() => [])); if (b.day < D) pubBusy[f.key][b.day].push([b.start, b.end]); }));
 
+  // ...and how much of their day that already takes, so the daily limits count it too
+  const pubUnits = {};
+  const pubCounted = new Set();
+  published.forEach(b => (b.faculty || []).forEach(f => {
+    if (f.external || b.type === "note" || b.day >= D) return;
+    if (b.combo) { const id = f.key + "|" + b.day + "|" + b.start + "|" + b.combo; if (pubCounted.has(id)) return; pubCounted.add(id); }
+    const cells = [];
+    timings.periods.forEach((pr, i) => { if (i < P[b.day] && pr.start < b.end && b.start < pr.end) cells.push(i); });
+    (pubUnits[f.key] = pubUnits[f.key] || P.map(() => [])); pubUnits[f.key][b.day].push({ cells, teaching: b.type !== "other", size: b.periods || Math.max(1, cells.length), type: b.type, pub: true });
+  }));
+
   const spec = {
-    year, a, timings, D, P, units, dayCap, blocked, pubBusy,
+    year, a, timings, D, P, units, dayCap, blocked, pubBusy, pubUnits,
     sections: sections.map(s => ({ id: s.id, name: s.name })),
     publishedBlocks: published,
     limits: { maxTotal, maxTheory, maxLab, maxRun },
@@ -212,7 +223,10 @@ function precheck(spec, problems, people) {
   spec.sections.forEach(s => {
     const need = units.filter(u => u.sectionIds.includes(s.id)).reduce((t, u) => t + u.size, 0);
     const have = P.reduce((t, n) => t + n, 0);
+    const labSessions = units.filter(u => u.sectionIds.includes(s.id) && (u.type === "lab" || u.type === "drawing")).length;
+    if (a.labOnceADay !== false && labSessions > D) problems.push({ level: "error", step: "subj", text: s.name + " has " + labSessions + " lab sessions a week but only " + D + " days, and a section may have just one lab session a day. Reduce the lab sessions, or untick \"One lab session a day\" in Subjects and periods." });
     if (need > have) problems.push({ level: "error", step: "subj", text: s.name + " needs " + need + " periods a week but the week has only " + have + ". Reduce some subjects' periods (Subjects and periods), or add periods or a working day (Days and periods)." });
+    else if (need < have && !a.allowBlank) problems.push({ level: "error", step: "subj", text: s.name + " has " + (have - need) + " blank period" + (have - need === 1 ? "" : "s") + " in the week (" + need + " of " + have + " are filled). A timetable can't have blank periods: add " + (have - need) + " more period" + (have - need === 1 ? "" : "s") + " in Subjects and periods (more periods for a subject, or Library, Tutorials, Sports, Club activities)." });
   });
 
   // faculty: weekly demand against what the daily limits and availability allow
@@ -226,10 +240,16 @@ function precheck(spec, problems, people) {
   Object.keys(per).forEach(key => {
     const free = d => { let n = 0; for (let p = 0; p < P[d]; p++) if (!(blocked[key] && blocked[key][d][p])) n++; return n; };
     let capTotal = 0, capTheory = 0, capLab = 0;
-    for (let d = 0; d < D; d++) { const f = free(d); capTotal += Math.min(limits.maxTotal, f); capTheory += Math.min(limits.maxTheory, f); capLab += Math.min(limits.maxLab, f); }
+    for (let d = 0; d < D; d++) {
+      let f = free(d), pt = 0, pth = 0, pl = 0, pc = 0;
+      ((spec.pubUnits[key] || [])[d] || []).forEach(o => { pc += o.cells.length; if (!o.teaching) return; pt += o.size; if (o.type === "theory") pth += o.size; else pl += 1; });
+      f = Math.max(0, f - pc);
+      capTotal += Math.max(0, Math.min(limits.maxTotal - pt, f)); capTheory += Math.max(0, Math.min(limits.maxTheory - pth, f)); capLab += Math.max(0, Math.min(limits.maxLab - pl, f));
+    }
     const nm = nameOf.get(key) || key, r = per[key];
     const days = Math.max(1, D);
-    const away = Array.from({ length: D }, (_, d) => P[d] - free(d)).reduce((t, n) => t + n, 0) > 0 ? " and the slots they are unavailable" : "";
+    const hasPub = Object.keys(spec.pubUnits[key] ? { x: 1 } : {}).length > 0 && (spec.pubUnits[key] || []).some(l => l.length);
+    const away = (Array.from({ length: D }, (_, d) => P[d] - free(d)).reduce((t, n) => t + n, 0) > 0 ? " and the slots they are unavailable" : "") + (hasPub ? " (counting the classes they already have in published timetables)" : "");
     if (r.total > capTotal) problems.push({ level: "error", step: "lim", text: nm + " has " + r.total + " periods to teach in a week, but with at most " + limits.maxTotal + " periods a day" + away + ", only " + capTotal + " fit. To fix it: raise \"Most periods in a day\" in Faculty limits to at least " + Math.ceil(r.total / days) + ", or give some of " + nm + "'s subjects or sections to another faculty (Sections & Subjects), or reduce their periods." });
     else if (r.theory > capTheory) problems.push({ level: "error", step: "lim", text: nm + " teaches " + r.theory + " theory periods a week, but with at most " + limits.maxTheory + " theory periods a day" + away + ", only " + capTheory + " fit. To fix it: raise \"Most theory periods in a day\" in Faculty limits to at least " + Math.ceil(r.theory / days) + ", or give some of " + nm + "'s theory classes to another faculty, or reduce their periods." });
     else if (r.lab > capLab) problems.push({ level: "error", step: "lim", text: nm + " has " + r.lab + " lab sessions a week, but with at most " + limits.maxLab + " a day" + away + ", only " + capLab + " fit. To fix it: raise \"Most lab sessions in a day\" in Faculty limits to at least " + Math.ceil(r.lab / days) + ", or give a lab to another faculty." });
@@ -265,7 +285,6 @@ function precheck(spec, problems, people) {
   });
   if (D < 1) problems.push({ level: "error", step: "time", text: "There are no working days." });
   if (units.length === 0) problems.push({ level: "error", step: "subj", text: "There is nothing to place: no subject has any periods per week." });
-  void a;
 }
 
 // ── plan ─────────────────────────────────────────────────────────────────────────────────
@@ -318,9 +337,17 @@ class Plan {
         this.facRow(key);
         let th = 0, lab = 0, tot = 0;
         this.facDay[key][d].forEach(o => { if (ignore.has(o) || !o.teaching) return; tot += o.size; if (o.type === "theory") th += o.size; else lab += 1; });
+        ((this.s.pubUnits[key] || [])[d] || []).forEach(o => { if (!o.teaching) return; tot += o.size; if (o.type === "theory") th += o.size; else lab += 1; });
         tot += u.size; if (u.type === "theory") th += u.size; else lab += 1;
         if (th > L.maxTheory || lab > L.maxLab || tot > L.maxTotal) return false;
         if (!this.runOk(key, d, u, p, ignore)) return false;
+      }
+    }
+    if ((u.type === "lab" || u.type === "drawing") && this.s.a.labOnceADay !== false) {
+      for (const sid of u.sectionIds) {
+        let labs = 0;
+        this.secDay[sid][d].forEach(o => { if (!ignore.has(o) && (o.type === "lab" || o.type === "drawing")) labs++; });
+        if (labs > 0) return false;
       }
     }
     for (const b of u.blocks) {
@@ -334,6 +361,7 @@ class Plan {
   runOk(key, d, u, p, ignore) {
     const n = this.P[d], occ = new Array(n).fill(null), row = this.fac[key][d];
     for (let q = 0; q < n; q++) { const o = row[q]; if (o && !ignore.has(o) && o.teaching) occ[q] = o; }
+    ((this.s.pubUnits[key] || [])[d] || []).forEach(o => { if (o.teaching) o.cells.forEach(q => { if (!occ[q]) occ[q] = o; }); });
     for (let q = p; q < p + u.size; q++) occ[q] = u;
     let chain = 0, prev = null;
     for (let q = 0; q < n; q++) {
@@ -363,6 +391,7 @@ class Plan {
       this.facRow(key);
       let tot = 0;
       this.facDay[key][d].forEach(o => { if (o.teaching) tot += o.size; });
+      ((this.s.pubUnits[key] || [])[d] || []).forEach(o => { if (o.teaching) tot += o.size; });
       c += tot * 3;
     }
     if (u.type === "lab" || u.type === "drawing") {
@@ -545,6 +574,26 @@ export function verify(spec, blocks) {
       if (b.type === "theory") r.th += b.periods; else r.lab += 1;
     });
   });
+  if (spec.a.labOnceADay !== false) {
+    const labDays = {};
+    blocks.forEach(b => {
+      if (b.type !== "lab" && b.type !== "drawing") return;
+      const k = b.sectionId + "|" + b.day + "|" + b.start + "|" + b.end;       // batches that run together share one slot
+      (labDays[b.sectionId + "|" + b.day] = labDays[b.sectionId + "|" + b.day] || new Set()).add(k);
+    });
+    Object.keys(labDays).forEach(k => { if (labDays[k].size > 1) { const [sid, d] = k.split("|"); const nm = (blocks.find(b => b.sectionId === sid) || {}).sectionName || sid; issues.push(nm + " has more than one lab session on " + DAY_LONG[Number(d)] + "."); } });
+  }
+  const touched = new Set(Object.keys(per));
+  const pubDone = new Set();
+  spec.publishedBlocks.forEach(b => (b.faculty || []).forEach(f => {
+    if (f.external || b.type === "other" || b.type === "note") return;
+    const k = f.key + "|" + b.day;
+    if (!touched.has(k)) return;
+    if (b.combo) { const id = f.key + "|" + b.day + "|" + b.start + "|" + b.combo; if (pubDone.has(id)) return; pubDone.add(id); }
+    const r = per[k];
+    r.tot += b.periods || 1;
+    if (b.type === "theory") r.th += b.periods || 1; else r.lab += 1;
+  }));
   Object.values(per).forEach(r => {
     if (r.th > L.maxTheory) issues.push(r.name + " has " + r.th + " theory periods on " + DAY_LONG[r.day] + ".");
     if (r.lab > L.maxLab) issues.push(r.name + " has " + r.lab + " lab sessions on " + DAY_LONG[r.day] + ".");
