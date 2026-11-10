@@ -2,15 +2,15 @@
 // The question screens of "Design a timetable". Each takes { a, set, ctx }: the answers so far, a function that
 // changes some of them, and what the portal already knows (sections, subjects, faculty, timings).
 
-import React, { useState } from "react";
-import { P, Btn, Card } from "../components/UI";
+import React from "react";
+import { P, Btn } from "../components/UI";
 import { parseTimeToken, fmtClock } from "../timetableUpload/timeUtils";
-import { buildTimings, validateTimings, periodsOn, newExtra, EXTRA_PRESETS, DAY_LONG, DAY_ABBR, num } from "./designModel";
+import { buildTimings, validateTimings, periodsOn, DAY_LONG, DAY_ABBR } from "./designModel";
 
 const MONO = "'IBM Plex Mono', monospace";
-const inp = { border: "1.5px solid " + P.border, borderRadius: 8, padding: "8px 10px", fontSize: 14, fontFamily: "inherit", background: "#fff", boxSizing: "border-box" };
-const small = { fontSize: 12.5, color: P.gray, lineHeight: 1.6 };
-const lbl = { display: "block", fontSize: 11.5, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: P.gray, marginBottom: 6 };
+export const inp = { border: "1.5px solid " + P.border, borderRadius: 8, padding: "8px 10px", fontSize: 14, fontFamily: "inherit", background: "#fff", boxSizing: "border-box" };
+export const small = { fontSize: 12.5, color: P.gray, lineHeight: 1.6 };
+export const lbl = { display: "block", fontSize: 11.5, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: P.gray, marginBottom: 6 };
 
 export function Q({ title, hint, children }) {
   return (
@@ -22,25 +22,24 @@ export function Q({ title, hint, children }) {
   );
 }
 
-function Radio({ checked, onChange, children }) {
+export function Radio({ checked, onChange, children }) {
   return (
     <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, cursor: "pointer", padding: "3px 0" }}>
       <input type="radio" checked={checked} onChange={onChange} style={{ accentColor: P.blue }} />{children}
     </label>
   );
 }
-function Check({ checked, onChange, children }) {
+export function Check({ checked, onChange, children }) {
   return (
     <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, cursor: "pointer", padding: "3px 0" }}>
       <input type="checkbox" checked={!!checked} onChange={e => onChange(e.target.checked)} style={{ accentColor: P.blue, width: 16, height: 16 }} />{children}
     </label>
   );
 }
-function NumIn({ value, onChange, width = 80, min = 0, max, placeholder }) {
+export function NumIn({ value, onChange, width = 80, min = 0, max, placeholder }) {
   return <input type="number" min={min} max={max} value={value === undefined || value === null ? "" : value} placeholder={placeholder} onChange={e => onChange(e.target.value)} style={{ ...inp, width }} />;
 }
 
-const sameLabel = v => (v === undefined || v === "" ? "" : v);
 
 // ── Step: year ───────────────────────────────────────────────────────────────────────────
 export function StepYear({ ctx, year, setYear }) {
@@ -143,76 +142,6 @@ export function StepTimings({ a, set }) {
           </div>
         </Q>
       )}
-    </>
-  );
-}
-
-// ── Step: subjects ───────────────────────────────────────────────────────────────────────
-export function StepSubjects({ a, set, ctx }) {
-  const [open, setOpen] = useState({});
-  const setLoad = (name, patch) => set({ loads: { ...a.loads, [name]: { ...(a.loads[name] || {}), ...patch } } });
-  const setPer = (name, sid, v) => setLoad(name, { perSection: { ...((a.loads[name] || {}).perSection || {}), [sid]: v } });
-  return (
-    <>
-      <Q title="How many periods a week for each subject?" hint="One number per subject applies to every section that has it. Press “by section” to give a section a different number. By “hours” I always mean periods. I've filled in usual values: change what is different.">
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 760 }}>
-            <thead>
-              <tr>{["Subject", "Type", "Periods a week", "Class pattern", "Avoid first period", "Avoid last period", ""].map((h, i) => <th key={i} style={{ textAlign: "left", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: P.gray, padding: "6px 10px 6px 0", borderBottom: "1.5px solid " + P.border }}>{h}</th>)}</tr>
-            </thead>
-            <tbody>
-              {ctx.subjects.map(s => {
-                const l = a.loads[s.name] || {};
-                const theory = s.type === "Theory";
-                return (
-                  <React.Fragment key={s.name}>
-                    <tr>
-                      <td style={{ padding: "8px 10px 8px 0", fontWeight: 700, fontSize: 14, borderBottom: "1px solid " + P.border }}>{s.name}<div style={{ fontSize: 11.5, color: P.gray, fontWeight: 400 }}>in {s.sections.length} section{s.sections.length === 1 ? "" : "s"}</div></td>
-                      <td style={{ padding: "8px 10px 8px 0", fontSize: 13, color: P.gray, borderBottom: "1px solid " + P.border }}>{s.type}</td>
-                      <td style={{ padding: "8px 10px 8px 0", borderBottom: "1px solid " + P.border }}><NumIn value={l.periods} onChange={v => setLoad(s.name, { periods: v })} width={76} min={0} max={30} /></td>
-                      <td style={{ padding: "8px 10px 8px 0", borderBottom: "1px solid " + P.border }}>
-                        {theory ? (
-                          <select value={String(l.block || 1)} onChange={e => setLoad(s.name, { block: Number(e.target.value) })} style={{ ...inp, width: 190 }}>
-                            <option value="1">Single periods</option><option value="2">Double periods (2 together)</option>
-                          </select>
-                        ) : (
-                          <span style={{ fontSize: 13 }}><NumIn value={l.block} onChange={v => setLoad(s.name, { block: v })} width={60} min={1} max={6} /> <span style={small}>periods per session</span></span>
-                        )}
-                      </td>
-                      <td style={{ padding: "8px 10px 8px 0", borderBottom: "1px solid " + P.border }}><Check checked={l.avoidFirst} onChange={v => setLoad(s.name, { avoidFirst: v })}>avoid</Check></td>
-                      <td style={{ padding: "8px 10px 8px 0", borderBottom: "1px solid " + P.border }}><Check checked={l.avoidLast} onChange={v => setLoad(s.name, { avoidLast: v })}>avoid</Check></td>
-                      <td style={{ padding: "8px 0", borderBottom: "1px solid " + P.border }}>{s.sections.length > 1 && <Btn small variant="ghost" onClick={() => setOpen({ ...open, [s.name]: !open[s.name] })}>{open[s.name] ? "Hide" : "By section"}</Btn>}</td>
-                    </tr>
-                    {open[s.name] && (
-                      <tr><td colSpan={7} style={{ padding: "8px 0 10px", background: P.bg }}>
-                        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", padding: "0 10px" }}>
-                          {s.sections.map(sec => (
-                            <div key={sec.id} style={{ fontSize: 13 }}><div style={{ ...small, marginBottom: 3 }}>{sec.name}</div>
-                              <NumIn value={sameLabel((l.perSection || {})[sec.id])} onChange={v => setPer(s.name, sec.id, v)} width={90} min={0} max={30} placeholder={String(l.periods ?? "")} />
-                            </div>
-                          ))}
-                        </div>
-                      </td></tr>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <div style={{ ...small, marginTop: 8 }}>“Avoid” is a wish, not a rule: if the timetable can't be built without it, I'll bend it and tell you where.</div>
-      </Q>
-      <Q title="Labs and drawing">
-        <Check checked={a.labAcrossBreak} onChange={v => set({ labAcrossBreak: v })}>A lab session may continue across a break</Check>
-        <div style={{ marginTop: 8 }}><span style={lbl}>Preferred time for labs</span>
-          <select value={a.labPref} onChange={e => set({ labPref: e.target.value })} style={{ ...inp, width: 220 }}>
-            <option value="any">No preference</option><option value="morning">Morning</option><option value="afternoon">Afternoon</option>
-          </select>
-        </div>
-      </Q>
-      <Q title="Same subject twice in one day?" hint="Usually a subject comes once a day. Switch this on only if you are happy for a subject to come twice in a day for a section.">
-        <Check checked={a.repeatSameDay} onChange={v => set({ repeatSameDay: v })}>Allow the same subject twice in a day</Check>
-      </Q>
     </>
   );
 }
@@ -328,88 +257,3 @@ export function StepAvailability({ a, set, ctx }) {
   );
 }
 
-// ── Step: extra activities ───────────────────────────────────────────────────────────────
-export function StepExtras({ a, set, ctx }) {
-  const [custom, setCustom] = useState("");
-  const extras = a.extras;
-  const setX = (id, patch) => set({ extras: extras.map(x => (x.id === id ? { ...x, ...patch } : x)) });
-  const addX = name => { if (name.trim() && !extras.some(x => x.name.toLowerCase() === name.trim().toLowerCase())) set({ extras: [...extras, newExtra(name.trim())] }); };
-  return (
-    <>
-      <Q title="Activities that are not subjects in the portal" hint="CRT, sports, library, mentoring, seminars, clubs. Add each one that has periods in the timetable.">
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-          {EXTRA_PRESETS.map(n => <Btn key={n} small variant={extras.some(x => x.name === n) ? "primary" : "outline"} onClick={() => (extras.some(x => x.name === n) ? set({ extras: extras.filter(x => x.name !== n) }) : addX(n))}>{extras.some(x => x.name === n) ? "✓ " : "+ "}{n}</Btn>)}
-        </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <input value={custom} onChange={e => setCustom(e.target.value)} placeholder="Another activity (type its name)" style={{ ...inp, width: 280 }} />
-          <Btn small onClick={() => { addX(custom); setCustom(""); }}>Add</Btn>
-        </div>
-      </Q>
-      {extras.map(x => {
-        const n = sec => Math.min(12, Math.max(0, Math.floor(num((x.perSection || {})[sec], num(x.periods, 0)))));
-        return (
-          <Card key={x.id} style={{ margin: "0 0 12px", padding: "14px 16px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <div style={{ fontWeight: 800, fontSize: 16 }}>{x.name}</div>
-              <Btn small variant="ghost" onClick={() => set({ extras: extras.filter(e => e.id !== x.id) })}>Remove</Btn>
-            </div>
-            <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 10 }}>
-              <div><span style={lbl}>Periods a week for each section</span><NumIn value={x.periods} onChange={v => setX(x.id, { periods: v })} width={90} min={0} max={12} /></div>
-            </div>
-            <Q title="How should it be placed?">
-              <Radio checked={x.mode === "flex"} onChange={() => setX(x.id, { mode: "flex" })}>Flexible: you place it wherever it fits (in-house faculty)</Radio>
-              <Radio checked={x.mode === "fixed"} onChange={() => setX(x.id, { mode: "fixed" })}>Fixed: I will give the day and period myself (an outside trainer's own timetable)</Radio>
-              {x.mode === "flex" && <div style={{ marginTop: 6 }}><span style={small}>Periods together in one slot: </span><NumIn value={x.block} onChange={v => setX(x.id, { block: v })} width={64} min={1} max={4} /></div>}
-            </Q>
-            {x.mode === "fixed" && (
-              <Q title="Pick the slots" hint="One row for each period in the week. Each section can have its own.">
-                {ctx.yearSections.map((sec, si) => {
-                  const count = n(sec.id);
-                  const rows = (x.fixed || {})[sec.id] || [];
-                  const setRow = (k, patch) => { const r = Array.from({ length: count }, (_, i) => rows[i] || { day: "", period: "" }); r[k] = { ...r[k], ...patch }; setX(x.id, { fixed: { ...(x.fixed || {}), [sec.id]: r } }); };
-                  return (
-                    <div key={sec.id} style={{ padding: "8px 0", borderTop: si ? "1px dashed " + P.border : "none" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-                        <b style={{ fontFamily: MONO, fontSize: 13 }}>{sec.name}</b>
-                        <span style={small}>{count} slot{count === 1 ? "" : "s"}</span>
-                        {si === 0 && ctx.yearSections.length > 1 && count > 0 && <Btn small variant="ghost" onClick={() => { const f = { ...(x.fixed || {}) }; ctx.yearSections.forEach(o => { f[o.id] = rows.slice(0, count).map(r => ({ ...r })); }); setX(x.id, { fixed: f }); }}>Use these for every section</Btn>}
-                      </div>
-                      {Array.from({ length: count }, (_, k) => {
-                        const r = rows[k] || { day: "", period: "" };
-                        return (
-                          <div key={k} style={{ display: "flex", gap: 8, alignItems: "center", padding: "3px 0" }}>
-                            <span style={{ ...small, width: 48 }}>Slot {k + 1}</span>
-                            <select value={r.day} onChange={e => setRow(k, { day: e.target.value })} style={{ ...inp, width: 140 }}>
-                              <option value="">Day…</option>{Array.from({ length: a.days }, (_, d) => <option key={d} value={d}>{DAY_LONG[d]}</option>)}
-                            </select>
-                            <select value={r.period} onChange={e => setRow(k, { period: e.target.value })} style={{ ...inp, width: 130 }}>
-                              <option value="">Period…</option>{Array.from({ length: Number(a.periodsPerDay) || 0 }, (_, p) => <option key={p} value={p + 1}>Period {p + 1}</option>)}
-                            </select>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
-              </Q>
-            )}
-            <Q title="Who takes it?" hint="If one trainer takes every section, their slots can't overlap across sections. I'll check that.">
-              <Radio checked={!x.sameTrainer} onChange={() => setX(x.id, { sameTrainer: false })}>Not the same for every section, or it doesn't matter</Radio>
-              <Radio checked={!!x.sameTrainer} onChange={() => setX(x.id, { sameTrainer: true })}>The same faculty or trainer takes all sections</Radio>
-              {x.sameTrainer && (
-                <div style={{ marginLeft: 26, marginTop: 6, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                  <select value={x.trainer.kind === "portal" ? x.trainer.phone : x.trainer.kind === "ext" ? "__ext" : ""} onChange={e => { const v = e.target.value; setX(x.id, { trainer: v === "__ext" ? { kind: "ext", phone: "", name: x.trainer.name || "" } : v ? { kind: "portal", phone: v, name: "" } : { kind: "none", phone: "", name: "" } }); }} style={{ ...inp, minWidth: 240 }}>
-                    <option value="">Choose…</option>
-                    {ctx.people.map(p => <option key={p.phone} value={p.phone}>{p.name}</option>)}
-                    <option value="__ext">Someone from outside the college</option>
-                  </select>
-                  {x.trainer.kind === "ext" && <input value={x.trainer.name} onChange={e => setX(x.id, { trainer: { kind: "ext", phone: "", name: e.target.value } })} placeholder="Trainer's name" style={{ ...inp, width: 220 }} />}
-                </div>
-              )}
-            </Q>
-          </Card>
-        );
-      })}
-    </>
-  );
-}

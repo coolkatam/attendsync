@@ -34,7 +34,7 @@ function splitSizes(total, block) {
 export function buildSpec({ year, a, sections, people, published = [] }) {
   const problems = [];
   const timings = buildTimings(a);
-  if (timings.error) return { spec: null, problems: [{ level: "error", text: timings.error }] };
+  if (timings.error) return { spec: null, problems: [{ level: "error", step: "time", text: timings.error }] };
   const D = Number(a.days);
   const P = Array.from({ length: D }, (_, d) => periodsOn(a, d));
   const personBy = new Map(people.map(p => [p.phone, p]));
@@ -109,6 +109,23 @@ export function buildSpec({ year, a, sections, people, published = [] }) {
     if (type !== "theory" && total % block !== 0) problems.push({ level: "warn", text: s.name + ": " + sub.name + " has " + total + " periods a week, which isn't a multiple of its " + block + "-period sessions. One shorter session of " + (total % block) + " is added." });
     const faculty = sub.faculty.map((p, i) => facOf(p, i)).filter(Boolean);
     if (faculty.length === 0) problems.push({ level: "warn", text: s.name + ": \"" + sub.name + "\" has no faculty assigned in the portal. It is placed without any faculty clash check." });
+    if (load.mode === "fixed") {
+      const rows = ((load.fixed || {})[s.id] || []).slice(0, total);
+      let filled = 0;
+      rows.forEach(r => {
+        if (r.day === "" || r.day === undefined || r.period === "" || r.period === undefined) return;
+        const d = Number(r.day), pp = Number(r.period) - 1;
+        if (!(d >= 0 && d < D) || !(pp >= 0 && pp < P[d])) { problems.push({ level: "error", step: "subj", text: s.name + ": the " + sub.token + " slot " + DAY_LONG[d] + " period " + (pp + 1) + " doesn't exist in your timetable." }); return; }
+        filled++;
+        addUnit({
+          size: 1, type, teaching: true, kind: "fixed", fixedAt: { d, p: pp }, sectionIds: [s.id],
+          blocks: [{ sectionId: s.id, sectionName: s.name, token: sub.token, subject: sub.name, type, faculty, combo: "" }],
+          facs: faculty.map(f => f.key),
+        });
+      });
+      if (filled < total) problems.push({ level: "error", step: "subj", text: s.name + ": " + sub.name + " is set to fixed slots and needs " + total + " a week, but only " + filled + " " + (filled === 1 ? "has" : "have") + " a day and period. Open Options on that subject and choose them." });
+      return;
+    }
     sizes.forEach(size => addUnit({
       size, type, teaching: true, sectionIds: [s.id],
       blocks: [{ sectionId: s.id, sectionName: s.name, token: sub.token, subject: sub.name, type, faculty, combo: "" }],
@@ -139,11 +156,11 @@ export function buildSpec({ year, a, sections, people, published = [] }) {
         rows.slice(0, n).forEach(r => {
           if (r.day === "" || r.day === undefined || r.period === "" || r.period === undefined) return;
           const d = Number(r.day), p = Number(r.period) - 1;
-          if (!(d >= 0 && d < D) || !(p >= 0 && p < P[d])) { problems.push({ level: "error", text: s.name + ": the " + token + " slot " + DAY_LONG[d] + " period " + (p + 1) + " doesn't exist in your timetable." }); return; }
+          if (!(d >= 0 && d < D) || !(p >= 0 && p < P[d])) { problems.push({ level: "error", step: "subj", text: s.name + ": the " + token + " slot " + DAY_LONG[d] + " period " + (p + 1) + " doesn't exist in your timetable." }); return; }
           filled++;
           addUnit({ ...mk(1), kind: "fixed", fixedAt: { d, p } });
         });
-        if (filled < n) problems.push({ level: "error", text: s.name + ": " + token + " needs " + n + " fixed slot" + (n === 1 ? "" : "s") + " a week but only " + filled + " " + (filled === 1 ? "has" : "have") + " a day and period." });
+        if (filled < n) problems.push({ level: "error", step: "subj", text: s.name + ": " + token + " needs " + n + " fixed slot" + (n === 1 ? "" : "s") + " a week but only " + filled + " " + (filled === 1 ? "has" : "have") + " a day and period." });
       } else {
         splitSizes(n, Math.max(1, num(e.block, 1))).forEach(size => addUnit(mk(size)));
       }
@@ -195,7 +212,7 @@ function precheck(spec, problems, people) {
   spec.sections.forEach(s => {
     const need = units.filter(u => u.sectionIds.includes(s.id)).reduce((t, u) => t + u.size, 0);
     const have = P.reduce((t, n) => t + n, 0);
-    if (need > have) problems.push({ level: "error", text: s.name + " needs " + need + " periods a week but the week has only " + have + ". Reduce some subjects' periods or add periods." });
+    if (need > have) problems.push({ level: "error", step: "subj", text: s.name + " needs " + need + " periods a week but the week has only " + have + ". Reduce some subjects' periods (Subjects and periods), or add periods or a working day (Days and periods)." });
   });
 
   // faculty: weekly demand against what the daily limits and availability allow
@@ -211,9 +228,11 @@ function precheck(spec, problems, people) {
     let capTotal = 0, capTheory = 0, capLab = 0;
     for (let d = 0; d < D; d++) { const f = free(d); capTotal += Math.min(limits.maxTotal, f); capTheory += Math.min(limits.maxTheory, f); capLab += Math.min(limits.maxLab, f); }
     const nm = nameOf.get(key) || key, r = per[key];
-    if (r.total > capTotal) problems.push({ level: "error", text: nm + " has " + r.total + " periods to teach a week, but with at most " + limits.maxTotal + " a day (and the days they are unavailable) no more than " + capTotal + " fit. Move a subject to another faculty or raise the daily limit." });
-    else if (r.theory > capTheory) problems.push({ level: "error", text: nm + " has " + r.theory + " theory periods a week, but at most " + capTheory + " fit within " + limits.maxTheory + " theory periods a day." });
-    else if (r.lab > capLab) problems.push({ level: "error", text: nm + " has " + r.lab + " lab sessions a week, but at most " + capLab + " fit within " + limits.maxLab + " a day." });
+    const days = Math.max(1, D);
+    const away = Array.from({ length: D }, (_, d) => P[d] - free(d)).reduce((t, n) => t + n, 0) > 0 ? " and the slots they are unavailable" : "";
+    if (r.total > capTotal) problems.push({ level: "error", step: "lim", text: nm + " has " + r.total + " periods to teach in a week, but with at most " + limits.maxTotal + " periods a day" + away + ", only " + capTotal + " fit. To fix it: raise \"Most periods in a day\" in Faculty limits to at least " + Math.ceil(r.total / days) + ", or give some of " + nm + "'s subjects or sections to another faculty (Sections & Subjects), or reduce their periods." });
+    else if (r.theory > capTheory) problems.push({ level: "error", step: "lim", text: nm + " teaches " + r.theory + " theory periods a week, but with at most " + limits.maxTheory + " theory periods a day" + away + ", only " + capTheory + " fit. To fix it: raise \"Most theory periods in a day\" in Faculty limits to at least " + Math.ceil(r.theory / days) + ", or give some of " + nm + "'s theory classes to another faculty, or reduce their periods." });
+    else if (r.lab > capLab) problems.push({ level: "error", step: "lim", text: nm + " has " + r.lab + " lab sessions a week, but with at most " + limits.maxLab + " a day" + away + ", only " + capLab + " fit. To fix it: raise \"Most lab sessions in a day\" in Faculty limits to at least " + Math.ceil(r.lab / days) + ", or give a lab to another faculty." });
   });
 
   // fixed slots must not collide with each other
@@ -222,17 +241,30 @@ function precheck(spec, problems, people) {
     const { d, p } = u.fixedAt;
     u.sectionIds.forEach(sid => {
       const k = "s|" + sid + "|" + d + "|" + p;
-      if (seen.has(k)) problems.push({ level: "error", text: DAY_LONG[d] + " period " + (p + 1) + " is given to two fixed activities in " + u.blocks[0].sectionName + " (" + seen.get(k) + " and " + u.blocks[0].token + ")." });
+      if (seen.has(k)) problems.push({ level: "error", step: "subj", text: DAY_LONG[d] + " period " + (p + 1) + " is given to two fixed activities in " + u.blocks[0].sectionName + " (" + seen.get(k) + " and " + u.blocks[0].token + ")." });
       seen.set(k, u.blocks[0].token);
     });
     u.facs.forEach(key => {
       const k = "f|" + key + "|" + d + "|" + p;
-      if (seen.has(k)) problems.push({ level: "error", text: "The trainer for " + u.blocks[0].token + " is given " + DAY_LONG[d] + " period " + (p + 1) + " in two sections (" + seen.get(k) + " and " + u.blocks[0].sectionName + "). One trainer can't be in two sections at once." });
+      if (seen.has(k)) problems.push({ level: "error", step: "subj", text: "The trainer for " + u.blocks[0].token + " is given " + DAY_LONG[d] + " period " + (p + 1) + " in two sections (" + seen.get(k) + " and " + u.blocks[0].sectionName + "). One trainer can't be in two sections at once." });
       seen.set(k, u.blocks[0].sectionName);
     });
   });
-  if (D < 1) problems.push({ level: "error", text: "There are no working days." });
-  if (units.length === 0) problems.push({ level: "error", text: "There is nothing to place: no subject has any periods per week." });
+  const dayLoad = {};
+  units.filter(u => u.kind === "fixed" && u.teaching).forEach(u => u.facs.forEach(key => {
+    if (key.startsWith("ext:")) return;
+    const { d, p } = u.fixedAt;
+    if (blocked[key] && blocked[key][d][p]) problems.push({ level: "error", step: "subj", text: (nameOf.get(key) || key) + " is marked unavailable on " + DAY_LONG[d] + " period " + (p + 1) + ", but " + u.blocks[0].token + " (" + u.blocks[0].sectionName + ") is fixed there." });
+    const k = key + "|" + d;
+    const r = dayLoad[k] || (dayLoad[k] = { th: 0, lab: 0, tot: 0 });
+    r.tot += u.size; if (u.type === "theory") r.th += u.size; else r.lab += 1;
+  }));
+  Object.keys(dayLoad).forEach(k => {
+    const [key, d] = k.split("|"), r = dayLoad[k];
+    if (r.tot > limits.maxTotal || r.th > limits.maxTheory || r.lab > limits.maxLab) problems.push({ level: "error", step: "subj", text: (nameOf.get(key) || key) + " already has " + r.tot + " fixed period" + (r.tot === 1 ? "" : "s") + " on " + DAY_LONG[d] + ", more than the daily limit. Move a fixed slot to another day, or raise the limit in Faculty limits." });
+  });
+  if (D < 1) problems.push({ level: "error", step: "time", text: "There are no working days." });
+  if (units.length === 0) problems.push({ level: "error", step: "subj", text: "There is nothing to place: no subject has any periods per week." });
   void a;
 }
 

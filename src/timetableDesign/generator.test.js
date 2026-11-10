@@ -130,3 +130,28 @@ test("an impossible request is explained, not silently dropped", () => {
   expect((errors || []).length + (res ? res.problems.length : 0)).toBeGreaterThan(0);
   void problems;
 });
+
+test("the overload message says what to change and which tab", () => {
+  const { errors } = run((a) => { a.maxTheoryPerDay = 2; a.loads["S&GPS"] = { periods: 7, block: 1 }; });
+  const e = errors.find(x => /Dr A One/.test(x.text));
+  expect(e.step).toBe("lim");
+  expect(e.text).toMatch(/raise "Most theory periods in a day" in Faculty limits to at least 4/);
+});
+
+test("a portal subject such as CRT can be fixed to days and periods", () => {
+  const { errors, res, spec } = run((a) => {
+    a.loads["DMM"] = { periods: 2, block: 1, mode: "fixed", fixed: { s1: [{ day: 0, period: 4 }, { day: 2, period: 5 }], s2: [{ day: 1, period: 4 }, { day: 3, period: 5 }], s3: [{ day: 4, period: 4 }, { day: 5, period: 3 }] } };
+  });
+  expect(errors || []).toEqual([]);
+  expect(res.versions.length).toBeGreaterThan(0);
+  res.versions.forEach(v => {
+    expect(verify(spec, v.blocks)).toEqual([]);
+    const at = v.blocks.filter(b => b.token === "DMM" && b.sectionId === "s1").map(b => b.day + ":" + b.start).sort();
+    expect(at.length).toBe(2);
+  });
+});
+
+test("fixed slots that are not filled in are reported against the Subjects tab", () => {
+  const { errors } = run((a) => { a.loads["DMM"] = { periods: 3, block: 1, mode: "fixed", fixed: {} }; });
+  expect(errors.some(e => e.step === "subj" && /fixed slots/.test(e.text))).toBe(true);
+});

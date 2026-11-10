@@ -13,21 +13,21 @@ import { yearOfSection, fmtRange } from "../timetableUpload/timeUtils";
 import { computeWorkload } from "../timetableUpload/overlapCheck";
 import { subjectColours } from "../timetableUpload/reportBuilder";
 import { facultyListOf, guessType } from "../sections/subjectUtils";
-import { defaultAnswers, validateTimings, periodsOn, DAY_ABBR } from "./designModel";
+import { defaultAnswers, periodsOn, DAY_ABBR } from "./designModel";
 import { buildSpec, designVersions } from "./generator";
 import { writeDesignWorkbook, sectionsOf } from "./designExport";
 import { publishMaster } from "../timetableUpload/publishMaster";
-import { Q, StepYear, StepTimings, StepSubjects, StepTogether, StepLimits, StepAvailability, StepExtras } from "./steps";
+import { Q, StepYear, StepTimings, StepTogether, StepLimits, StepAvailability } from "./steps";
+import StepSubjects from "./StepSubjects";
 
 const MONO = "'IBM Plex Mono', monospace";
 const STEPS = [
   { id: "year", title: "Year" },
   { id: "time", title: "Days and periods" },
-  { id: "subj", title: "Subjects" },
+  { id: "subj", title: "Subjects and periods" },
   { id: "tog", title: "Labs and joint classes" },
   { id: "lim", title: "Faculty limits" },
   { id: "av", title: "Availability" },
-  { id: "ext", title: "Extra activities" },
   { id: "rev", title: "Review" },
 ];
 const TIMING_KEYS = ["days", "satHalf", "satPeriods", "periodsPerDay", "firstStart", "periodMins", "periodOverrides", "breaks"];
@@ -172,6 +172,11 @@ export default function DesignScreen({ user, onBack }) {
     });
   }, [ctx.subjects]);
 
+  const calc = useMemo(() => {
+    const other = published.filter(p => p.year !== year).flatMap(p => (p.blocks || []).map(b => ({ ...b, source: "published", publishedYear: p.year, publishedBy: p.publishedByName || "" })));
+    return buildSpec({ year, a, sections: ctx.yearSections, people: ctx.people, published: other });
+  }, [year, a, ctx, published]);
+
   if (!sections || !people) return <Spinner />;
 
   const set = patch => setA(prev => {
@@ -182,14 +187,13 @@ export default function DesignScreen({ user, onBack }) {
   const changeYear = y => { setYear(y); setA(loadDraft(user.phone, y)); setSets([]); setSpecUsed(null); sigs.current = []; };
 
   const hasSubjects = ctx.yearSections.some(s => s.subjects.length > 0);
-  const timingErrors = validateTimings(a).filter(p => p.level === "error");
   const sid = STEPS[step].id;
-  const canNext = sid === "year" ? ctx.yearSections.length > 0 && hasSubjects : sid === "time" ? timingErrors.length === 0 && a.timingsConfirmed : true;
+  const canNext = sid === "year" ? ctx.yearSections.length > 0 && hasSubjects : true;
 
-  const published_other = published.filter(p => p.year !== year).flatMap(p => (p.blocks || []).map(b => ({ ...b, source: "published", publishedYear: p.year, publishedBy: p.publishedByName || "" })));
-  const built = sid === "rev" || sets.length ? buildSpec({ year, a, sections: ctx.yearSections, people: ctx.people, published: published_other }) : null;
-  const errors = built ? built.problems.filter(p => p.level === "error") : [];
-  const warns = built ? built.problems.filter(p => p.level !== "error") : [];
+  const built = calc;
+  const errors = (a.timingsConfirmed ? [] : [{ level: "error", step: "time", text: "The period timings haven't been checked yet. Open Days and periods, look at the timings, and tick “these timings are correct”." }]).concat(built.problems.filter(p => p.level === "error"));
+  const warns = built.problems.filter(p => p.level !== "error");
+  const goTo = id => { const i = STEPS.findIndex(x => x.id === id); if (i >= 0) { setStep(i); window.scrollTo(0, 0); } };
 
   function design(more) {
     if (!built || !built.spec) return;
@@ -230,7 +234,7 @@ export default function DesignScreen({ user, onBack }) {
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
         {STEPS.map((s, i) => (
-          <button key={s.id} onClick={() => i <= step && setStep(i)} style={{ padding: "6px 12px", borderRadius: 20, fontSize: 12.5, fontWeight: 700, fontFamily: "inherit", cursor: i <= step ? "pointer" : "default", border: "1.5px solid " + (i === step ? P.blue : P.border), background: i === step ? P.blue : i < step ? P.blueL : "#fff", color: i === step ? "#fff" : i < step ? P.blue : P.gray }}>{i + 1}. {s.title}</button>
+          <button key={s.id} onClick={() => setStep(i)} style={{ padding: "6px 12px", borderRadius: 20, fontSize: 12.5, fontWeight: 700, fontFamily: "inherit", cursor: "pointer", border: "1.5px solid " + (i === step ? P.blue : P.border), background: i === step ? P.blue : "#fff", color: i === step ? "#fff" : P.navy }}>{i + 1}. {s.title}</button>
         ))}
       </div>
 
@@ -238,11 +242,10 @@ export default function DesignScreen({ user, onBack }) {
           <div style={{ fontWeight: 800, fontSize: 17, padding: "12px 0 0" }}>{STEPS[step].title}</div>
           {sid === "year" && <StepYear ctx={ctx} year={year} setYear={changeYear} />}
           {sid === "time" && <StepTimings a={a} set={set} />}
-          {sid === "subj" && <StepSubjects a={a} set={set} ctx={ctx} />}
+          {sid === "subj" && <StepSubjects a={a} set={set} ctx={ctx} calc={calc} />}
           {sid === "tog" && <StepTogether a={a} set={set} ctx={ctx} />}
           {sid === "lim" && <StepLimits a={a} set={set} />}
           {sid === "av" && <StepAvailability a={a} set={set} ctx={ctx} />}
-          {sid === "ext" && <StepExtras a={a} set={set} ctx={ctx} />}
           {sid === "rev" && (
             <>
               <Q title="Anything else I should know?" hint="Type it here. I can't act on free text, but it is kept with your answers for whoever reads them, and I'll tell you if I couldn't do something you asked for above.">
@@ -250,8 +253,13 @@ export default function DesignScreen({ user, onBack }) {
               </Q>
               <Q title="Before I design">
                 {errors.length === 0 && <div style={{ fontSize: 14, color: P.green, fontWeight: 600 }}>Nothing stops the design. {built && built.spec ? built.spec.units.length + " classes to place across " + built.spec.sections.length + " section" + (built.spec.sections.length === 1 ? "" : "s") + "." : ""}</div>}
-                {errors.length > 0 && <div style={{ fontSize: 13, fontWeight: 700, color: P.red, marginBottom: 6 }}>Fix these first (go back to the step that mentions them):</div>}
-                {errors.map((p, i) => <div key={i} style={{ fontSize: 13.5, color: P.red, background: P.redL, borderRadius: 8, padding: "8px 12px", margin: "4px 0" }}>{p.text}</div>)}
+                {errors.length > 0 && <div style={{ fontSize: 13, fontWeight: 700, color: P.red, marginBottom: 6 }}>These need fixing before I can design. Each has a button that takes you to the right tab:</div>}
+                {errors.map((p, i) => (
+                  <div key={i} style={{ fontSize: 13.5, color: P.red, background: P.redL, borderRadius: 8, padding: "10px 12px", margin: "6px 0", display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+                    <span style={{ flex: "1 1 420px", lineHeight: 1.55 }}>{p.text}</span>
+                    {p.step && <Btn small variant="outline" onClick={() => goTo(p.step)}>Go to {(STEPS.find(x => x.id === p.step) || {}).title}</Btn>}
+                  </div>
+                ))}
                 {warns.map((p, i) => <div key={i} style={{ fontSize: 13, color: P.amber, padding: "3px 0" }}>⚠ {p.text}</div>)}
               </Q>
               {built && built.spec && (
@@ -273,7 +281,6 @@ export default function DesignScreen({ user, onBack }) {
               ? <Btn disabled={!canNext} onClick={() => setStep(step + 1)}>Next →</Btn>
               : <Btn disabled={busy || errors.length > 0 || !built || !built.spec} onClick={() => design(false)}>{busy ? "Designing…" : sets.length ? "Design again" : "Design the timetables"}</Btn>}
           </div>
-          {sid === "time" && !canNext && <div style={{ ...{ fontSize: 12.5, color: P.gray }, textAlign: "right", marginTop: 6 }}>Tick “these timings are correct” to go on.</div>}
         </Card>
 
       {busy && <Card style={{ margin: 0, padding: 20 }}><Spinner /><div style={{ textAlign: "center", color: P.gray, fontSize: 14 }}>Designing clash-free timetables…</div></Card>}

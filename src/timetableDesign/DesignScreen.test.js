@@ -52,8 +52,10 @@ test("a coordinator can answer the questions and get versions", async () => {
   fireEvent.click(screen.getByLabelText ? screen.getByRole("checkbox", { name: /these timings are correct/i }) : null);
   next();                                                    // -> subjects
   expect(screen.getByText("How many periods a week for each subject?")).toBeTruthy();
-  next(); next(); next(); next();                           // -> together, limits, availability, extras
-  next();                                                    // -> review
+  expect(screen.getByText(/Other periods in the timetable/)).toBeTruthy();
+  expect(screen.getByText("Library")).toBeTruthy();
+  expect(screen.getAllByText(/periods used/).length).toBeGreaterThan(0);
+  next(); next(); next(); next();                           // -> together, limits, availability, review
   await screen.findByText("Before I design");
   fireEvent.click(screen.getByText("Design the timetables"));
   await waitFor(() => expect(screen.getByText(/clash-free version/)).toBeTruthy(), { timeout: 15000 });
@@ -73,4 +75,16 @@ test("the workbook has TT and Ind sheets in order", () => {
   const wb = buildDesignWorkbook(spec, res.versions);
   expect(wb.SheetNames).toEqual(["TT-1", "Ind-1", "TT-2", "Ind-2", "TT-3", "Ind-3"].slice(0, res.versions.length * 2));
   expect(res.versions.length).toBe(3);
+});
+
+test("every tab can be opened directly, and a problem points to the tab that fixes it", async () => {
+  localStorage.clear();
+  render(<DesignScreen user={{ phone: "9", role: "hod", name: "T" }} onBack={() => {}} />);
+  await screen.findByText("What the portal has for Year III");
+  fireEvent.click(screen.getByText("7. Review"));
+  await screen.findByText("Before I design");
+  // timings were never ticked, so the review says so and offers a way there
+  expect(screen.getByText(/haven't been checked yet/)).toBeTruthy();
+  fireEvent.click(screen.getByText("Go to Days and periods"));
+  expect(screen.getByText("Here are the timings")).toBeTruthy();
 });
