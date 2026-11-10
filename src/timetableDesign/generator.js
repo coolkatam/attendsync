@@ -13,6 +13,7 @@
 
 import { detectOverlaps } from "../timetableUpload/overlapCheck";
 import { buildTimings, periodsOn, contiguous, num, DAY_LONG } from "./designModel";
+import { nameKey } from "../timetableUpload/smartParser";
 
 const slug = s => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 const lower = s => String(s || "").toLowerCase();
@@ -122,7 +123,7 @@ export function buildSpec({ year, a, sections, people, published = [] }) {
     let trainer = null;
     if (e.sameTrainer && e.trainer) {
       if (e.trainer.kind === "portal" && personBy.has(e.trainer.phone)) trainer = facOf(e.trainer.phone, 0);
-      else if (e.trainer.kind === "ext" && String(e.trainer.name || "").trim()) trainer = { key: "ext:" + slug(e.trainer.name), name: String(e.trainer.name).trim(), phone: null, external: true, role: "main" };
+      else if (e.trainer.kind === "ext" && String(e.trainer.name || "").trim()) trainer = { key: "ext:" + (nameKey(e.trainer.name) || slug(e.trainer.name)), name: String(e.trainer.name).trim(), phone: null, external: true, role: "main" };
     }
     sections.forEach(s => {
       const n = num((e.perSection || {})[s.id], num(e.periods, 0));

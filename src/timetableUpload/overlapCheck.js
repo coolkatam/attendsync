@@ -114,6 +114,7 @@ export function suggestMoves(block, sectionSlots, allBlocks) {
   const out = moves.slice(0, 3).map(m => ({
     text: "Move " + block.token + " from " + DAY_NAMES[block.day].slice(0, 3) + " " + fmtRange(block.start, block.end) + " to " + DAY_NAMES[m.d].slice(0, 3) + " " + fmtRange(m.start, m.end) +
       " — " + (block.faculty.length ? block.faculty.map(f => f.name).join(", ") + " and the section are free then." : "the section is free then."),
+    move: { d: m.d, start: m.start, end: m.end },
   }));
 
   if (out.length === 0) {
@@ -121,7 +122,7 @@ export function suggestMoves(block, sectionSlots, allBlocks) {
       const ignore = [selfId, o.id + o.source];
       const xOk = freeFor(allBlocks, block.faculty, o.day, o.start, o.end, ignore, block.combo, block.sectionId);
       const yOk = freeFor(allBlocks, o.faculty, block.day, block.start, block.end, ignore, o.combo, o.sectionId);
-      if (xOk && yOk) out.push({ text: "Swap " + block.token + " (" + DAY_NAMES[block.day].slice(0, 3) + " " + fmtRange(block.start, block.end) + ") with " + o.token + " (" + DAY_NAMES[o.day].slice(0, 3) + " " + fmtRange(o.start, o.end) + ") — both faculty are free at the new times." });
+      if (xOk && yOk) out.push({ text: "Swap " + block.token + " (" + DAY_NAMES[block.day].slice(0, 3) + " " + fmtRange(block.start, block.end) + ") with " + o.token + " (" + DAY_NAMES[o.day].slice(0, 3) + " " + fmtRange(o.start, o.end) + ") — both faculty are free at the new times.", swap: { otherId: o.id } });
       return out.length >= 2;
     });
   }
@@ -152,4 +153,54 @@ export function computeWorkload(blocks) {
   });
   return Array.from(rows.values()).map(r => ({ ...r, teaching: r.theory + r.lab + r.drawing, overall: r.theory + r.lab + r.drawing + r.other }))
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// ── Fix it for me ─────────────────────────────────────────────────────────────────────────
+// Clears overlaps by moving (or swapping) classes of the upload, one clash at a time, always to a place where the
+// faculty and the section are free. Published timetables of other years are never touched.
+const dayShort = d => DAY_NAMES[d].slice(0, 3);
+export function autoFix(blocks, slotsBySection, publishedBlocks, maxRounds = 120) {
+  const cur = blocks.map(b => ({ ...b }));
+  const changes = [];
+  const seen = new Set();
+  const reid = b => { b.id = b.sectionId + ":" + b.day + ":" + b.start + ":" + b.token; };
+  for (let round = 0; round < maxRounds; round++) {
+    const conflicts = detectOverlaps(cur, publishedBlocks);
+    if (!conflicts.length) break;
+    const state = cur.map(b => b.id).sort().join("|");
+    if (seen.has(state)) break;
+    seen.add(state);
+    let fixed = false;
+    for (const c of conflicts) {
+      for (const cand of [c.a, c.b]) {
+        if (cand.source !== "upload" || cand.combo) continue;
+        const real = cur.find(b => b.id === cand.id);
+        if (!real) continue;
+        const all = cur.map(b => ({ ...b, source: "upload" })).concat(publishedBlocks.map(b => ({ ...b, source: "published" })));
+        const opts = suggestMoves({ ...real, source: "upload" }, slotsBySection[real.sectionId] || [], all);
+        const mv = opts.find(o => o.move);
+        const sw = opts.find(o => o.swap);
+        const who = real.faculty.map(f => f.name).join(", ");
+        if (mv) {
+          changes.push("Moved " + real.token + " (" + real.sectionName + ") from " + dayShort(real.day) + " " + fmtRange(real.start, real.end) + " to " + dayShort(mv.move.d) + " " + fmtRange(mv.move.start, mv.move.end) + (who ? " — " + who + " was double-booked." : "."));
+          real.day = mv.move.d; real.start = mv.move.start; real.end = mv.move.end; reid(real);
+          fixed = true;
+        } else if (sw) {
+          const other = cur.find(b => b.id === sw.swap.otherId);
+          if (other) {
+            changes.push("Swapped " + real.token + " (" + dayShort(real.day) + " " + fmtRange(real.start, real.end) + ") with " + other.token + " (" + dayShort(other.day) + " " + fmtRange(other.start, other.end) + ") in " + real.sectionName + ".");
+            const t = { day: real.day, start: real.start, end: real.end };
+            real.day = other.day; real.start = other.start; real.end = other.end;
+            other.day = t.day; other.start = t.start; other.end = t.end;
+            reid(real); reid(other);
+            fixed = true;
+          }
+        }
+        if (fixed) break;
+      }
+      if (fixed) break;
+    }
+    if (!fixed) break;
+  }
+  return { blocks: cur, changes, remaining: detectOverlaps(cur, publishedBlocks) };
 }

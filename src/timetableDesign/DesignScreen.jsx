@@ -15,7 +15,8 @@ import { subjectColours } from "../timetableUpload/reportBuilder";
 import { facultyListOf, guessType } from "../sections/subjectUtils";
 import { defaultAnswers, validateTimings, periodsOn, DAY_ABBR } from "./designModel";
 import { buildSpec, designVersions } from "./generator";
-import { writeDesignWorkbook } from "./designExport";
+import { writeDesignWorkbook, sectionsOf } from "./designExport";
+import { publishMaster } from "../timetableUpload/publishMaster";
 import { Q, StepYear, StepTimings, StepSubjects, StepTogether, StepLimits, StepAvailability, StepExtras } from "./steps";
 
 const MONO = "'IBM Plex Mono', monospace";
@@ -75,7 +76,7 @@ function SectionGrid({ spec, blocks, sectionId, colourOf }) {
   );
 }
 
-function VersionCard({ spec, v, n, colourOf }) {
+function VersionCard({ spec, v, n, colourOf, onPublish }) {
   const [sec, setSec] = useState(spec.sections[0] ? spec.sections[0].id : "");
   const load = useMemo(() => computeWorkload(v.blocks).filter(w => !w.external), [v]);
   const most = load.slice().sort((x, y) => y.teaching - x.teaching)[0];
@@ -84,6 +85,7 @@ function VersionCard({ spec, v, n, colourOf }) {
     <Card style={{ margin: 0, padding: "16px 18px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 8 }}>
         <div style={{ fontWeight: 800, fontSize: 17 }}>Version {n} <span style={{ fontWeight: 500, fontSize: 13, color: P.gray }}>· sheets TT-{n} and Ind-{n}</span></div>
+        <Btn small onClick={onPublish}>Use and publish this version</Btn>
         <div style={{ fontSize: 13, color: P.gray }}>{v.blocks.length} classes · no overlaps{most ? " · heaviest load " + most.name + " (" + most.teaching + " periods)" : ""}{least && least !== most ? ", lightest " + least.name + " (" + least.teaching + ")" : ""}</div>
       </div>
       {v.relaxed.length > 0 ? (
@@ -113,6 +115,9 @@ export default function DesignScreen({ user, onBack }) {
   const [sets, setSets] = useState([]);       // each: { versions, problems, attempts, completes }
   const [specUsed, setSpecUsed] = useState(null);
   const [showSet, setShowSet] = useState(0);
+  const [confirmN, setConfirmN] = useState(0);   // version waiting for "Yes, publish"
+  const [pubBusy, setPubBusy] = useState(false);
+  const [pubMsg, setPubMsg] = useState({ ok: true, text: "" });
   const sigs = useRef([]);
   const seeAll = user.phone === MASTER_ADMIN_PHONE || user.role === "hod";
 
@@ -199,7 +204,21 @@ export default function DesignScreen({ user, onBack }) {
     }, 60);
   }
 
+  async function publishVersion(n) {
+    const v = sets[showSet].versions[n - 1];
+    setPubBusy(true); setPubMsg({ ok: true, text: "" });
+    try {
+      await publishMaster({ year, blocks: v.blocks, sections: sectionsOf(specUsed), user, fileName: "Designed in the portal (version " + n + ")" });
+      setPubMsg({ ok: true, text: "Year " + year + " timetable published from Version " + n + ": " + specUsed.sections.length + " sections, " + v.blocks.length + " classes. Faculty now see their classes in My Timetable." });
+      setConfirmN(0);
+    } catch (err) {
+      setPubMsg({ ok: false, text: "Could not publish (" + err.message + "). Nothing was changed." });
+    }
+    setPubBusy(false);
+  }
+
   const current = sets[showSet];
+  const alreadyPublished = published.find(p => p.year === year);
   const colourOf = current && current.versions.length ? subjectColours(current.versions.flatMap(v => v.blocks)) : null;
 
   return (
@@ -287,8 +306,22 @@ export default function DesignScreen({ user, onBack }) {
                   </div>
                 </div>
               </Card>
-              {current.versions.map((v, i) => <VersionCard key={v.sig} spec={specUsed} v={v} n={i + 1} colourOf={colourOf} />)}
-              <div style={{ fontSize: 13, color: P.gray, lineHeight: 1.6 }}>Choose the version you like. To make changes, edit its TT sheet in Excel. Checking an edited sheet for overlaps and publishing it comes next.</div>
+              {pubMsg.text && <div style={{ fontSize: 13.5, color: pubMsg.ok ? P.green : P.red, background: pubMsg.ok ? P.greenL : P.redL, borderRadius: 10, padding: "12px 16px", fontWeight: 600 }}>{pubMsg.text}</div>}
+              {confirmN > 0 && (
+                <Card style={{ margin: 0, padding: "16px 20px", borderColor: P.blue }}>
+                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>Publish Version {confirmN} as the Year {year} timetable?</div>
+                  <div style={{ fontSize: 13.5, lineHeight: 1.6, marginBottom: 12 }}>
+                    It has no overlaps. {specUsed.sections.length} sections and {current.versions[confirmN - 1].blocks.length} classes will be saved as the master timetable.
+                    {alreadyPublished && <> <b style={{ color: P.amber }}>This replaces the Year {year} timetable already published by {alreadyPublished.publishedByName || "someone"}.</b></>}
+                  </div>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <Btn onClick={() => publishVersion(confirmN)} disabled={pubBusy}>{pubBusy ? "Publishing…" : "Yes, publish"}</Btn>
+                    <Btn variant="outline" onClick={() => setConfirmN(0)} disabled={pubBusy}>Cancel</Btn>
+                  </div>
+                </Card>
+              )}
+              {current.versions.map((v, i) => <VersionCard key={v.sig} spec={specUsed} v={v} n={i + 1} colourOf={colourOf} onPublish={() => { setPubMsg({ ok: true, text: "" }); setConfirmN(i + 1); }} />)}
+              <div style={{ fontSize: 13, color: P.gray, lineHeight: 1.6 }}>Happy with one? Publish it. To change something first, download the Excel, edit that version's TT sheet, then go back and choose <b>Upload a timetable</b>: it asks which version to read, shows any overlaps your edits cause, can fix them for you, and then publishes.</div>
             </>
           )}
         </>

@@ -136,7 +136,8 @@ export function facultySheet(blocks, workload, sections, colourOf, days = 6) {
 }
 
 // ── Sheet-3B: one blue grid per section ──
-export function sectionSheet(blocks, sections, colourOf, days = 6) {
+// opts.batchStyle writes labs that run together as "B1-TL, B2-ML" so the upload reads them back with the portal's own faculty
+export function sectionSheet(blocks, sections, colourOf, days = 6, opts = {}) {
   const g = new Grid();
   const widest = Math.max(1, ...sections.map(s => s.slots.length));
   g.cols = [{ wch: 13 }, ...Array.from({ length: widest }, () => ({ wch: 20 }))];
@@ -174,7 +175,7 @@ export function sectionSheet(blocks, sections, colourOf, days = 6) {
         if (end < from) return;
         for (let c = from; c <= end; c++) taken.add(c);
         const [bg, fg] = colourOf(p.blocks[0].token);
-        const text = p.blocks.map(b => {
+        const text = p.blocks.length > 1 && opts.batchStyle ? p.blocks.map((b, i) => "B" + (i + 1) + "-" + b.token).join(", ") : p.blocks.map(b => {
           const who = namesOf(b);
           return b.token + (b.combo ? " (" + b.combo + ")" : "") + (who ? "\n(" + who + ")" : "");
         }).join("\n");
@@ -245,4 +246,9 @@ export function addReportSheets(wb, { blocks, conflicts, suggestions, workload, 
 // Written with the styled library so the colours survive.
 export function writeReport(wb, fileName) {
   XLSX.writeFile(wb, fileName);
+}
+
+// An empty workbook made with the same library, for a clean "final timetable" file.
+export function newReportWorkbook() {
+  return XLSX.utils.book_new();
 }

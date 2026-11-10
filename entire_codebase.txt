@@ -18827,7 +18827,12 @@ service firebase.storage {
       "Bash(grep -v \"^\\\\s*$\")",
       "Bash(sed -i 's/^export function facultySheet\\(blocks, workload, sections, colourOf\\) {/export function facultySheet\\(blocks, workload, sections, colourOf, days = 6\\) {/; s/^export function sectionSheet\\(blocks, sections, colourOf\\) {/export function sectionSheet\\(blocks, sections, colourOf, days = 6\\) {/; s/    DAY_NAMES.forEach\\(\\(dn, d\\) => {/    DAY_NAMES.slice\\(0, days\\).forEach\\(\\(dn, d\\) => {/; s/      DAY_NAMES.forEach\\(\\(dn, d\\) => {/      DAY_NAMES.slice\\(0, days\\).forEach\\(\\(dn, d\\) => {/; s/g.merge\\(first, i + 1, first + 5, i + 1,/g.merge\\(first, i + 1, first + days - 1, i + 1,/' src/timetableUpload/reportBuilder.js)",
       "Bash(sed -i 's/sectionSheet\\(v.blocks, sections, colourOf\\)/sectionSheet\\(v.blocks, sections, colourOf, spec.D\\)/; s/facultySheet\\(v.blocks, computeWorkload\\(v.blocks\\), sections, colourOf\\)/facultySheet\\(v.blocks, computeWorkload\\(v.blocks\\), sections, colourOf, spec.D\\)/' src/timetableDesign/designExport.js)",
-      "Bash(powershell.exe -NoProfile -File ./bundle_codebase.ps1)"
+      "Bash(powershell.exe -NoProfile -File ./bundle_codebase.ps1)",
+      "Bash(git commit -q -m ' *)",
+      "Bash(grep -n \"GENERATED =\\\\|{0,5}\\\\[-\" src/timetableUpload/smartParser.js)",
+      "Bash(sed -i 's/^import { buildTimings, periodsOn, contiguous, num, DAY_LONG } from \".\\\\/designModel\";/import { buildTimings, periodsOn, contiguous, num, DAY_LONG } from \".\\\\/designModel\";\\\\nimport { nameKey } from \"..\\\\/timetableUpload\\\\/smartParser\";/' src/timetableDesign/generator.js)",
+      "Bash(sed -i 's/key: \"ext:\" + slug\\(e.trainer.name\\), name/key: \"ext:\" + \\(nameKey\\(e.trainer.name\\) || slug\\(e.trainer.name\\)\\), name/' src/timetableDesign/generator.js)",
+      "Bash(cd \"C:\\\\Users\\\\aruni\\\\attendsync\" && CI=true timeout 250 npx react-scripts test --watchAll=false src/timetableDesign/editChecks > /tmp/ec.txt 2>&1; grep -E \"Tests:|✕|√|Expected|Received|●\" /tmp/ec.txt | head -20)"
     ]
   }
 }
@@ -42239,6 +42244,41 @@ export default function WeekCards({ week, editable, onAdd, onEdit, compact }) {
 === END_FILE: .\src\timetable\WeekCards.jsx ===
 
 
+=== START_FILE: .\src\timetableDesign\autofix.test.js ===
+
+import { buildSpec, designVersions } from "./generator";
+import { defaultAnswers } from "./designModel";
+import { autoFix } from "../timetableUpload/overlapCheck";
+import { sectionsOf } from "./designExport";
+
+test("autoFix clears a clash it is given without creating another", () => {
+  const people = [1, 2, 3, 4].map(i => ({ phone: "p" + i, name: "Dr " + i }));
+  const mk = (id, name) => ({ id, name, subjects: ["T1", "T2", "T3"].map((n, i) => ({ name: n, token: n, type: "Theory", faculty: ["p" + (i + 1)] })) });
+  const sections = [mk("s1", "III-A"), mk("s2", "III-B"), mk("s3", "III-C")];
+  const a = defaultAnswers();
+  ["T1", "T2", "T3"].forEach(n => { a.loads[n] = { periods: 4, block: 1 }; });
+  const { spec } = buildSpec({ year: "III", a, sections, people, published: [] });
+  const res = designVersions(spec, people, { count: 1, seed: 3 });
+  const blocks = res.versions[0].blocks.map(b => ({ ...b, source: "upload" }));
+
+  // force Dr 1 into two sections at the same time
+  const t1 = blocks.filter(b => b.token === "T1");
+  const target = t1.find(b => b.sectionId === "s1");
+  const victim = t1.find(b => b.sectionId === "s2" && !(b.day === target.day && b.start === target.start));
+  victim.day = target.day; victim.start = target.start; victim.end = target.end;
+  victim.id = victim.sectionId + ":" + victim.day + ":" + victim.start + ":" + victim.token;
+
+  const slots = {};
+  sectionsOf(spec).forEach(s => { slots[s.id] = s.slots; });
+  const out = autoFix(blocks, slots, []);
+  expect(out.changes.length).toBeGreaterThan(0);
+  expect(out.remaining).toEqual([]);
+});
+
+
+=== END_FILE: .\src\timetableDesign\autofix.test.js ===
+
+
 === START_FILE: .\src\timetableDesign\designExport.js ===
 
 // src/timetableDesign/designExport.js
@@ -42259,7 +42299,7 @@ export function buildDesignWorkbook(spec, versions) {
   const colourOf = subjectColours(versions.flatMap(v => v.blocks));
   versions.forEach((v, i) => {
     const n = i + 1;
-    XLSX.utils.book_append_sheet(wb, sectionSheet(v.blocks, sections, colourOf, spec.D), "TT-" + n);
+    XLSX.utils.book_append_sheet(wb, sectionSheet(v.blocks, sections, colourOf, spec.D, { batchStyle: true }), "TT-" + n);
     XLSX.utils.book_append_sheet(wb, facultySheet(v.blocks, computeWorkload(v.blocks), sections, colourOf, spec.D), "Ind-" + n);
   });
   return wb;
@@ -42422,7 +42462,8 @@ import { subjectColours } from "../timetableUpload/reportBuilder";
 import { facultyListOf, guessType } from "../sections/subjectUtils";
 import { defaultAnswers, validateTimings, periodsOn, DAY_ABBR } from "./designModel";
 import { buildSpec, designVersions } from "./generator";
-import { writeDesignWorkbook } from "./designExport";
+import { writeDesignWorkbook, sectionsOf } from "./designExport";
+import { publishMaster } from "../timetableUpload/publishMaster";
 import { Q, StepYear, StepTimings, StepSubjects, StepTogether, StepLimits, StepAvailability, StepExtras } from "./steps";
 
 const MONO = "'IBM Plex Mono', monospace";
@@ -42482,7 +42523,7 @@ function SectionGrid({ spec, blocks, sectionId, colourOf }) {
   );
 }
 
-function VersionCard({ spec, v, n, colourOf }) {
+function VersionCard({ spec, v, n, colourOf, onPublish }) {
   const [sec, setSec] = useState(spec.sections[0] ? spec.sections[0].id : "");
   const load = useMemo(() => computeWorkload(v.blocks).filter(w => !w.external), [v]);
   const most = load.slice().sort((x, y) => y.teaching - x.teaching)[0];
@@ -42491,6 +42532,7 @@ function VersionCard({ spec, v, n, colourOf }) {
     <Card style={{ margin: 0, padding: "16px 18px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 8 }}>
         <div style={{ fontWeight: 800, fontSize: 17 }}>Version {n} <span style={{ fontWeight: 500, fontSize: 13, color: P.gray }}>· sheets TT-{n} and Ind-{n}</span></div>
+        <Btn small onClick={onPublish}>Use and publish this version</Btn>
         <div style={{ fontSize: 13, color: P.gray }}>{v.blocks.length} classes · no overlaps{most ? " · heaviest load " + most.name + " (" + most.teaching + " periods)" : ""}{least && least !== most ? ", lightest " + least.name + " (" + least.teaching + ")" : ""}</div>
       </div>
       {v.relaxed.length > 0 ? (
@@ -42520,6 +42562,9 @@ export default function DesignScreen({ user, onBack }) {
   const [sets, setSets] = useState([]);       // each: { versions, problems, attempts, completes }
   const [specUsed, setSpecUsed] = useState(null);
   const [showSet, setShowSet] = useState(0);
+  const [confirmN, setConfirmN] = useState(0);   // version waiting for "Yes, publish"
+  const [pubBusy, setPubBusy] = useState(false);
+  const [pubMsg, setPubMsg] = useState({ ok: true, text: "" });
   const sigs = useRef([]);
   const seeAll = user.phone === MASTER_ADMIN_PHONE || user.role === "hod";
 
@@ -42606,7 +42651,21 @@ export default function DesignScreen({ user, onBack }) {
     }, 60);
   }
 
+  async function publishVersion(n) {
+    const v = sets[showSet].versions[n - 1];
+    setPubBusy(true); setPubMsg({ ok: true, text: "" });
+    try {
+      await publishMaster({ year, blocks: v.blocks, sections: sectionsOf(specUsed), user, fileName: "Designed in the portal (version " + n + ")" });
+      setPubMsg({ ok: true, text: "Year " + year + " timetable published from Version " + n + ": " + specUsed.sections.length + " sections, " + v.blocks.length + " classes. Faculty now see their classes in My Timetable." });
+      setConfirmN(0);
+    } catch (err) {
+      setPubMsg({ ok: false, text: "Could not publish (" + err.message + "). Nothing was changed." });
+    }
+    setPubBusy(false);
+  }
+
   const current = sets[showSet];
+  const alreadyPublished = published.find(p => p.year === year);
   const colourOf = current && current.versions.length ? subjectColours(current.versions.flatMap(v => v.blocks)) : null;
 
   return (
@@ -42694,8 +42753,22 @@ export default function DesignScreen({ user, onBack }) {
                   </div>
                 </div>
               </Card>
-              {current.versions.map((v, i) => <VersionCard key={v.sig} spec={specUsed} v={v} n={i + 1} colourOf={colourOf} />)}
-              <div style={{ fontSize: 13, color: P.gray, lineHeight: 1.6 }}>Choose the version you like. To make changes, edit its TT sheet in Excel. Checking an edited sheet for overlaps and publishing it comes next.</div>
+              {pubMsg.text && <div style={{ fontSize: 13.5, color: pubMsg.ok ? P.green : P.red, background: pubMsg.ok ? P.greenL : P.redL, borderRadius: 10, padding: "12px 16px", fontWeight: 600 }}>{pubMsg.text}</div>}
+              {confirmN > 0 && (
+                <Card style={{ margin: 0, padding: "16px 20px", borderColor: P.blue }}>
+                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>Publish Version {confirmN} as the Year {year} timetable?</div>
+                  <div style={{ fontSize: 13.5, lineHeight: 1.6, marginBottom: 12 }}>
+                    It has no overlaps. {specUsed.sections.length} sections and {current.versions[confirmN - 1].blocks.length} classes will be saved as the master timetable.
+                    {alreadyPublished && <> <b style={{ color: P.amber }}>This replaces the Year {year} timetable already published by {alreadyPublished.publishedByName || "someone"}.</b></>}
+                  </div>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <Btn onClick={() => publishVersion(confirmN)} disabled={pubBusy}>{pubBusy ? "Publishing…" : "Yes, publish"}</Btn>
+                    <Btn variant="outline" onClick={() => setConfirmN(0)} disabled={pubBusy}>Cancel</Btn>
+                  </div>
+                </Card>
+              )}
+              {current.versions.map((v, i) => <VersionCard key={v.sig} spec={specUsed} v={v} n={i + 1} colourOf={colourOf} onPublish={() => { setPubMsg({ ok: true, text: "" }); setConfirmN(i + 1); }} />)}
+              <div style={{ fontSize: 13, color: P.gray, lineHeight: 1.6 }}>Happy with one? Publish it. To change something first, download the Excel, edit that version's TT sheet, then go back and choose <b>Upload a timetable</b>: it asks which version to read, shows any overlaps your edits cause, can fix them for you, and then publishes.</div>
             </>
           )}
         </>
@@ -42791,6 +42864,80 @@ test("the workbook has TT and Ind sheets in order", () => {
 === END_FILE: .\src\timetableDesign\DesignScreen.test.js ===
 
 
+=== START_FILE: .\src\timetableDesign\editChecks.test.js ===
+
+import { buildSpec, designVersions } from "./generator";
+import { defaultAnswers } from "./designModel";
+import { sectionsOf } from "./designExport";
+import { moveBlock, swapBlocks, changeFaculty, removeBlock, addBlock, checkEdit, loadWarnings, startOptions } from "../timetableUpload/editChecks";
+
+function setup() {
+  const people = [1, 2, 3, 4].map(i => ({ phone: "p" + i, name: "Dr " + i }));
+  const mk = (id, name) => ({ id, name, subjects: ["T1", "T2", "T3"].map((n, i) => ({ name: n, token: n, type: "Theory", faculty: ["p" + (i + 1)] })) });
+  const sections = [mk("s1", "III-A"), mk("s2", "III-B")];
+  const a = defaultAnswers();
+  ["T1", "T2", "T3"].forEach(n => { a.loads[n] = { periods: 4, block: 1 }; });
+  const { spec } = buildSpec({ year: "III", a, sections, people, published: [] });
+  const res = designVersions(spec, people, { count: 1, seed: 11 });
+  return { secs: sectionsOf(spec), blocks: res.versions[0].blocks.map(b => ({ ...b })) };
+}
+
+test("moving to a free place is allowed; onto the faculty's other class is refused", () => {
+  const { secs, blocks } = setup();
+  const s1 = secs.find(s => s.id === "s1");
+  const b = blocks.find(x => x.sectionId === "s1" && x.token === "T1");
+  const free = [];
+  for (let d = 0; d < 6; d++) startOptions(b, s1.slots).forEach(o => { if (!blocks.some(x => x.sectionId === "s1" && x.day === d && x.start < o.end && o.start < x.end)) free.push([d, o.start]); });
+  const ok = moveBlock(blocks, b.id, free[0][0], free[0][1], s1.slots);
+  expect(ok.error).toBeUndefined();
+  expect(typeof ok.text).toBe("string");
+
+  const other = blocks.find(x => x.sectionId === "s2" && x.token === "T1");
+  const clash = moveBlock(blocks, b.id, other.day, other.start, s1.slots);
+  if (!clash.error) {
+    const chk = checkEdit(clash.blocks, clash.editedIds, []);
+    expect(chk.ok).toBe(false);
+    expect(chk.problems.length).toBeGreaterThan(0);
+  }
+});
+
+test("a section can't get two classes at once; swap, remove and add work", () => {
+  const { secs, blocks } = setup();
+  const s1 = secs.find(s => s.id === "s1");
+  const a = blocks.find(x => x.sectionId === "s1" && x.token === "T1");
+  const b = blocks.find(x => x.sectionId === "s1" && x.token === "T2");
+  const mv = moveBlock(blocks, a.id, b.day, b.start, s1.slots);
+  const chk = checkEdit(mv.blocks, mv.editedIds, []);
+  expect(chk.ok).toBe(false);
+  expect(chk.problems.some(p => /two classes at once/.test(p.text))).toBe(true);
+
+  const sw = swapBlocks(blocks, a.id, b.id);
+  expect(sw.error).toBeUndefined();
+  expect(checkEdit(sw.blocks, sw.editedIds, []).problems.filter(p => /two classes at once/.test(p.text))).toEqual([]);
+
+  const rm = removeBlock(blocks, a.id);
+  expect(rm.blocks.length).toBe(blocks.length - 1);
+  const add = addBlock(rm.blocks, s1, a.day, a.start, { token: "SPORTS", type: "other", faculty: [], periods: 1 });
+  expect(add.error).toBeUndefined();
+  expect(add.blocks.length).toBe(blocks.length);
+  expect(addBlock(rm.blocks, s1, a.day, 1, { token: "X", periods: 1 }).error).toBeTruthy();
+});
+
+test("a faculty change that double-books someone is refused", () => {
+  const { blocks } = setup();
+  const a = blocks.find(x => x.sectionId === "s1" && x.token === "T1");
+  const dr2 = { key: "p2", name: "Dr 2", phone: "p2", external: false };
+  const ch = changeFaculty(blocks, a.id, [dr2]);
+  const chk = checkEdit(ch.blocks, ch.editedIds, []);
+  const busy = blocks.some(x => x.token === "T2" && x.day === a.day && x.start < a.end && a.start < x.end);
+  expect(chk.ok).toBe(!busy);
+  expect(Array.isArray(loadWarnings(ch.blocks, ch.editedIds))).toBe(true);
+});
+
+
+=== END_FILE: .\src\timetableDesign\editChecks.test.js ===
+
+
 === START_FILE: .\src\timetableDesign\generator.js ===
 
 // src/timetableDesign/generator.js
@@ -42808,6 +42955,7 @@ test("the workbook has TT and Ind sheets in order", () => {
 
 import { detectOverlaps } from "../timetableUpload/overlapCheck";
 import { buildTimings, periodsOn, contiguous, num, DAY_LONG } from "./designModel";
+import { nameKey } from "../timetableUpload/smartParser";
 
 const slug = s => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 const lower = s => String(s || "").toLowerCase();
@@ -42917,7 +43065,7 @@ export function buildSpec({ year, a, sections, people, published = [] }) {
     let trainer = null;
     if (e.sameTrainer && e.trainer) {
       if (e.trainer.kind === "portal" && personBy.has(e.trainer.phone)) trainer = facOf(e.trainer.phone, 0);
-      else if (e.trainer.kind === "ext" && String(e.trainer.name || "").trim()) trainer = { key: "ext:" + slug(e.trainer.name), name: String(e.trainer.name).trim(), phone: null, external: true, role: "main" };
+      else if (e.trainer.kind === "ext" && String(e.trainer.name || "").trim()) trainer = { key: "ext:" + (nameKey(e.trainer.name) || slug(e.trainer.name)), name: String(e.trainer.name).trim(), phone: null, external: true, role: "main" };
     }
     sections.forEach(s => {
       const n = num((e.perSection || {})[s.id], num(e.periods, 0));
@@ -43526,6 +43674,122 @@ test("an impossible request is explained, not silently dropped", () => {
 === END_FILE: .\src\timetableDesign\generator.test.js ===
 
 
+=== START_FILE: .\src\timetableDesign\PublishedEditor.test.js ===
+
+import React from "react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+
+const mockMaster = { current: null };
+jest.mock("../firebase", () => ({ db: {} }));
+jest.mock("firebase/firestore", () => ({
+  collection: (_db, name) => ({ __name: name }),
+  doc: (_db, name, id) => ({ __name: name, __id: id }),
+  getDoc: async () => ({ exists: () => !!mockMaster.current, data: () => mockMaster.current }),
+  getDocs: async () => ({ forEach: fn => [{ id: "p1", data: () => ({ name: "Dr One", status: "approved" }) }, { id: "p2", data: () => ({ name: "Dr Two", status: "approved" }) }].forEach(fn) }),
+  onSnapshot: (ref, cb) => { cb({ docs: [] }); return () => {}; },
+  setDoc: jest.fn(async () => {}),
+}));
+
+const PublishedEditor = require("../timetableUpload/PublishedEditor").default;
+
+const slots = [{ start: 540, end: 590 }, { start: 590, end: 640 }, { start: 640, end: 650, brk: true }, { start: 650, end: 700 }, { start: 700, end: 750 }].map(s => ({ brk: false, ...s }));
+const blk = (token, day, start, end, who) => ({ id: "s1:" + day + ":" + start + ":" + token, sectionId: "s1", sectionName: "III-A", day, start, end, token, subject: token, type: "theory", combo: "", periods: 1, faculty: who ? [{ key: who, name: who === "p1" ? "Dr One" : "Dr Two", phone: who, external: false, role: "main" }] : [] });
+
+test("the editor shows the timetable, refuses a clashing move and accepts a safe one", async () => {
+  mockMaster.current = {
+    publishedByName: "T", publishedAt: new Date().toISOString(),
+    sections: [{ id: "s1", name: "III-A", slots }, { id: "s2", name: "III-B", slots }],
+    blocks: [
+      blk("AAA", 0, 540, 590, "p1"),
+      blk("BBB", 0, 590, 640, "p2"),
+      { ...blk("AAA", 1, 540, 590, "p1"), sectionId: "s2", sectionName: "III-B", id: "s2:1:540:AAA" },
+    ],
+  };
+  render(<PublishedEditor year="III" user={{ phone: "9", name: "T" }} onBack={() => {}} />);
+  await screen.findByText("Edit the Year III timetable");
+  const aaa = screen.getAllByText("AAA")[0];
+  fireEvent.click(aaa);
+  await screen.findByText(/Move to/);
+  // move AAA on Monday onto Tuesday period 1: Dr One is already teaching AAA to III-B then -> refused
+  const selects = screen.getAllByRole("combobox");
+  fireEvent.change(selects[0], { target: { value: "1" } });
+  fireEvent.click(screen.getByText("Move"));
+  await screen.findByText(/Not changed/);
+  expect(screen.getByText(/would be in two places/)).toBeTruthy();
+
+  // a safe move: Tuesday period 4 (free for everyone)
+  fireEvent.change(screen.getAllByRole("combobox")[1], { target: { value: "650" } });
+  fireEvent.click(screen.getByText("Move"));
+  await waitFor(() => expect(screen.getByText(/1 unsaved change/)).toBeTruthy());
+  expect(screen.getByText("Save changes")).toBeTruthy();
+});
+
+
+=== END_FILE: .\src\timetableDesign\PublishedEditor.test.js ===
+
+
+=== START_FILE: .\src\timetableDesign\roundtrip.test.js ===
+
+import * as XLSXS from "xlsx-js-style";
+import * as XLSX from "xlsx";
+import { buildSpec, designVersions } from "./generator";
+import { buildDesignWorkbook } from "./designExport";
+import { defaultAnswers, newExtra } from "./designModel";
+import { parseSmart } from "../timetableUpload/smartParser";
+import { groupBlocks, detectOverlaps } from "../timetableUpload/overlapCheck";
+
+const people = [
+  ["p1", "Dr Arun Kumar"], ["p2", "V S Subramanyam"], ["p3", "Kola Poornodaya Venkata Krishna Varma"], ["p4", "Dr Amit Kumar Mehar"],
+  ["p5", "Dr Karun Kumar"], ["p6", "Pawan Kumar Singotia"], ["p7", "G Sunil Gavaskar"],
+].map(([phone, name]) => ({ phone, name }));
+const mk = (id, name) => ({
+  id, name,
+  subjects: [
+    { name: "S&GPS", token: "S&GPS", short: "S&GPS", type: "Theory", faculty: ["p1"] },
+    { name: "DMM", token: "DMM", short: "DMM", type: "Theory", faculty: ["p2"] },
+    { name: "AIML", token: "AIML", short: "AIML", type: "Theory", faculty: ["p3"] },
+    { name: "Thermal Lab", token: "TL", short: "TL", type: "Lab", faculty: ["p4", "p5"] },
+    { name: "Metrology Lab", token: "ML", short: "ML", type: "Lab", faculty: ["p6"] },
+  ],
+});
+
+test("a designed workbook is read back into the same classes with the same faculty", () => {
+  const sections = [mk("s1", "III YR I SEM SL-1"), mk("s2", "III YR I SEM AL-1")];
+  const a = defaultAnswers();
+  ["S&GPS", "DMM", "AIML"].forEach(n => { a.loads[n] = { periods: 4, block: 1 }; });
+  ["Thermal Lab", "Metrology Lab"].forEach(n => { a.loads[n] = { periods: 3, block: 3 }; });
+  a.parallel = [["Thermal Lab", "Metrology Lab"]];
+  const crt = newExtra("CRT"); crt.periods = 2; crt.sameTrainer = true; crt.trainer = { kind: "ext", phone: "", name: "Ramesh Babu" };
+  a.extras = [crt];
+  const { spec } = buildSpec({ year: "III", a, sections, people, published: [] });
+  const res = designVersions(spec, people, { count: 3, seed: 7 });
+  expect(res.versions.length).toBeGreaterThan(1);
+
+  const wbOut = buildDesignWorkbook(spec, res.versions);
+  const buf = XLSXS.write(wbOut, { type: "array", bookType: "xlsx" });
+  const wbIn = XLSX.read(buf, { type: "array" });
+
+  res.versions.forEach((v, i) => {
+    const ctx = {
+      year: "III", people, sheets: ["TT-" + (i + 1)],
+      sections: sections.map(s => ({ id: s.id, name: s.name, subjects: s.subjects.map(x => ({ name: x.name, short: x.short, type: x.type, faculty: x.faculty })) })),
+    };
+    const parse = parseSmart(wbIn, ctx, {});
+    expect(parse.problems.filter(p => p.level === "error")).toEqual([]);
+    expect(parse.pending).toEqual([]);
+    const blocks = groupBlocks(parse.entries, "upload");
+    // same classes at the same times for the same people (compare without notes)
+    const sig = bs => bs.filter(b => b.type !== "note").map(b => [b.sectionId, b.day, b.start, b.end, b.token, b.faculty.map(f => f.key).sort().join("+")].join("|")).sort();
+    const expected = v.blocks.map(b => ({ ...b, faculty: b.faculty }));
+    expect(sig(blocks)).toEqual(sig(expected));
+    expect(detectOverlaps(blocks, [])).toEqual([]);
+  });
+});
+
+
+=== END_FILE: .\src\timetableDesign\roundtrip.test.js ===
+
+
 === START_FILE: .\src\timetableDesign\steps.jsx ===
 
 // src/timetableDesign/steps.jsx
@@ -43948,6 +44212,140 @@ export function StepExtras({ a, set, ctx }) {
 === END_FILE: .\src\timetableDesign\steps.jsx ===
 
 
+=== START_FILE: .\src\timetableUpload\editChecks.js ===
+
+// src/timetableUpload/editChecks.js
+// Edits to a published timetable (move, swap, change faculty, add, remove) and the checks that run on every one.
+// Each edit function returns { blocks, editedIds, text } or { error }; checkEdit then says whether the result is
+// allowed: a faculty member may not be in two places at once (including other years' published timetables) and a
+// section may not have two classes at the same time (except labs running together as batches).
+
+import { detectOverlaps } from "./overlapCheck";
+import { DAY_NAMES, fmtRange } from "./timeUtils";
+
+const day3 = d => DAY_NAMES[d].slice(0, 3);
+const LABISH = ["lab", "drawing"];
+const mkId = b => b.sectionId + ":" + b.day + ":" + b.start + ":" + b.token;
+const teachingOf = slots => (slots || []).filter(s => !s.brk).slice().sort((a, b) => a.start - b.start);
+
+// where a block of k periods could start (index into the section's teaching periods)
+export function startOptions(block, slots) {
+  const t = teachingOf(slots);
+  const k = block.periods || 1;
+  // a block that already runs across a break (a lab, say) may keep doing so
+  const first = t.findIndex(s => s.start === block.start);
+  let gapOk = false;
+  if (first >= 0) for (let x = first + 1; x < first + k && x < t.length; x++) if (t[x].start !== t[x - 1].end) gapOk = true;
+  const out = [];
+  for (let i = 0; i + k <= t.length; i++) {
+    let ok = true;
+    for (let x = i + 1; x < i + k; x++) if (t[x].start !== t[x - 1].end && !gapOk) ok = false;
+    if (ok) out.push({ index: i, start: t[i].start, end: t[i + k - 1].end });
+  }
+  return out;
+}
+
+export function moveBlock(blocks, id, day, start, slots) {
+  const b = blocks.find(x => x.id === id);
+  if (!b) return { error: "That class could not be found." };
+  const opt = startOptions(b, slots).find(o => o.start === start);
+  if (!opt) return { error: "A " + (b.periods || 1) + "-period class can't start there." };
+  if (b.day === day && b.start === start) return { error: "It is already there." };
+  const text = "Moved " + b.token + " (" + b.sectionName + ") from " + day3(b.day) + " " + fmtRange(b.start, b.end) + " to " + day3(day) + " " + fmtRange(opt.start, opt.end) + ".";
+  const moved = { ...b, day, start: opt.start, end: opt.end };
+  moved.id = mkId(moved);
+  return { blocks: blocks.map(x => (x.id === id ? moved : x)), editedIds: [moved.id], text };
+}
+
+export function swapBlocks(blocks, idA, idB) {
+  const a = blocks.find(x => x.id === idA), b = blocks.find(x => x.id === idB);
+  if (!a || !b) return { error: "A class could not be found." };
+  if (a.sectionId !== b.sectionId) return { error: "Only two classes of the same section can be swapped." };
+  if ((a.periods || 1) !== (b.periods || 1)) return { error: "These two classes have a different number of periods, so they can't swap places." };
+  const na = { ...a, day: b.day, start: b.start, end: b.end }, nb = { ...b, day: a.day, start: a.start, end: a.end };
+  na.id = mkId(na); nb.id = mkId(nb);
+  return {
+    blocks: blocks.map(x => (x.id === idA ? na : x.id === idB ? nb : x)), editedIds: [na.id, nb.id],
+    text: "Swapped " + a.token + " (" + day3(a.day) + " " + fmtRange(a.start, a.end) + ") with " + b.token + " (" + day3(b.day) + " " + fmtRange(b.start, b.end) + ") in " + a.sectionName + ".",
+  };
+}
+
+export function changeFaculty(blocks, id, faculty) {
+  const b = blocks.find(x => x.id === id);
+  if (!b) return { error: "That class could not be found." };
+  const f = faculty.map((p, i) => ({ ...p, role: i === 0 ? "main" : "asst" }));
+  const before = b.faculty.map(x => x.name).join(", ") || "nobody";
+  return { blocks: blocks.map(x => (x.id === id ? { ...x, faculty: f } : x)), editedIds: [id], text: "Changed the faculty of " + b.token + " (" + b.sectionName + ", " + day3(b.day) + " " + fmtRange(b.start, b.end) + ") from " + before + " to " + (f.map(x => x.name).join(", ") || "nobody") + "." };
+}
+
+export function removeBlock(blocks, id) {
+  const b = blocks.find(x => x.id === id);
+  if (!b) return { error: "That class could not be found." };
+  return { blocks: blocks.filter(x => x.id !== id), editedIds: [], text: "Removed " + b.token + " (" + b.sectionName + ", " + day3(b.day) + " " + fmtRange(b.start, b.end) + ")." };
+}
+
+// section: { id, name, slots }; item: { token, subject, type, faculty, periods }
+export function addBlock(blocks, section, day, start, item) {
+  const probe = { id: "", sectionId: section.id, sectionName: section.name, day, start, end: start, token: item.token, subject: item.subject || item.token, type: item.type || "other", combo: "", periods: item.periods || 1, faculty: item.faculty || [] };
+  const opt = startOptions(probe, section.slots).find(o => o.start === start);
+  if (!opt) return { error: "A " + probe.periods + "-period class can't start there: it would run past the day or across a break." };
+  const nb = { ...probe, end: opt.end };
+  nb.id = mkId(nb);
+  if (blocks.some(x => x.id === nb.id)) return { error: "That class is already there." };
+  return { blocks: blocks.concat(nb), editedIds: [nb.id], text: "Added " + nb.token + " to " + section.name + " on " + day3(day) + " " + fmtRange(nb.start, nb.end) + "." };
+}
+
+// is the changed timetable allowed? published = blocks of OTHER years' published timetables
+export function checkEdit(blocks, editedIds, published) {
+  const tagged = blocks.map(b => ({ ...b, source: "upload" }));
+  const facultyClashes = detectOverlaps(tagged, published)
+    .filter(c => editedIds.includes(c.a.id) || editedIds.includes(c.b.id))
+    .map(c => ({
+      text: c.name + " would be in two places on " + DAY_NAMES[c.day] + ": " + c.a.sectionName + " · " + c.a.token + " (" + fmtRange(c.a.start, c.a.end) + ") and " + c.b.sectionName + " · " + c.b.token + " (" + fmtRange(c.b.start, c.b.end) + ")" +
+        (c.b.source === "published" ? ", which is already published for Year " + (c.b.publishedYear || "?") : "") + ".",
+    }));
+  const sectionClashes = [];
+  editedIds.forEach(id => {
+    const b = blocks.find(x => x.id === id);
+    if (!b) return;
+    const o = blocks.find(x => x.id !== id && x.sectionId === b.sectionId && x.day === b.day && x.start < b.end && b.start < x.end
+      && !(x.start === b.start && x.end === b.end && LABISH.includes(x.type) && LABISH.includes(b.type)));
+    if (o) sectionClashes.push({ text: b.sectionName + " would have two classes at once on " + DAY_NAMES[b.day] + ": " + b.token + " and " + o.token + " (" + fmtRange(Math.max(b.start, o.start), Math.min(b.end, o.end)) + ")." });
+  });
+  const problems = facultyClashes.concat(sectionClashes);
+  return { ok: problems.length === 0, problems };
+}
+
+// not a rule, a heads-up: a faculty member now has more than the usual in a day
+export function loadWarnings(blocks, editedIds, limits = { maxTotal: 4, maxTheory: 3, maxLab: 1 }) {
+  const keys = new Set();
+  blocks.filter(b => editedIds.includes(b.id)).forEach(b => b.faculty.forEach(f => { if (!f.external) keys.add(f.key); }));
+  const per = new Map();
+  const counted = new Set();
+  blocks.forEach(b => {
+    if (b.type === "other" || b.type === "note") return;
+    b.faculty.forEach(f => {
+      if (!keys.has(f.key)) return;
+      if (b.combo) { const id = f.key + "|" + b.day + "|" + b.start + "|" + b.combo; if (counted.has(id)) return; counted.add(id); }
+      const k = f.key + "|" + b.day;
+      const r = per.get(k) || { name: f.name, day: b.day, tot: 0, th: 0, lab: 0 };
+      r.tot += b.periods; if (b.type === "theory") r.th += b.periods; else r.lab += 1;
+      per.set(k, r);
+    });
+  });
+  const out = [];
+  per.forEach(r => {
+    if (r.tot > limits.maxTotal) out.push(r.name + " now has " + r.tot + " periods on " + DAY_NAMES[r.day] + ".");
+    else if (r.th > limits.maxTheory) out.push(r.name + " now has " + r.th + " theory periods on " + DAY_NAMES[r.day] + ".");
+    else if (r.lab > limits.maxLab) out.push(r.name + " now has " + r.lab + " lab sessions on " + DAY_NAMES[r.day] + ".");
+  });
+  return out;
+}
+
+
+=== END_FILE: .\src\timetableUpload\editChecks.js ===
+
+
 === START_FILE: .\src\timetableUpload\overlapCheck.js ===
 
 // src/timetableUpload/overlapCheck.js
@@ -44066,6 +44464,7 @@ export function suggestMoves(block, sectionSlots, allBlocks) {
   const out = moves.slice(0, 3).map(m => ({
     text: "Move " + block.token + " from " + DAY_NAMES[block.day].slice(0, 3) + " " + fmtRange(block.start, block.end) + " to " + DAY_NAMES[m.d].slice(0, 3) + " " + fmtRange(m.start, m.end) +
       " — " + (block.faculty.length ? block.faculty.map(f => f.name).join(", ") + " and the section are free then." : "the section is free then."),
+    move: { d: m.d, start: m.start, end: m.end },
   }));
 
   if (out.length === 0) {
@@ -44073,7 +44472,7 @@ export function suggestMoves(block, sectionSlots, allBlocks) {
       const ignore = [selfId, o.id + o.source];
       const xOk = freeFor(allBlocks, block.faculty, o.day, o.start, o.end, ignore, block.combo, block.sectionId);
       const yOk = freeFor(allBlocks, o.faculty, block.day, block.start, block.end, ignore, o.combo, o.sectionId);
-      if (xOk && yOk) out.push({ text: "Swap " + block.token + " (" + DAY_NAMES[block.day].slice(0, 3) + " " + fmtRange(block.start, block.end) + ") with " + o.token + " (" + DAY_NAMES[o.day].slice(0, 3) + " " + fmtRange(o.start, o.end) + ") — both faculty are free at the new times." });
+      if (xOk && yOk) out.push({ text: "Swap " + block.token + " (" + DAY_NAMES[block.day].slice(0, 3) + " " + fmtRange(block.start, block.end) + ") with " + o.token + " (" + DAY_NAMES[o.day].slice(0, 3) + " " + fmtRange(o.start, o.end) + ") — both faculty are free at the new times.", swap: { otherId: o.id } });
       return out.length >= 2;
     });
   }
@@ -44106,8 +44505,369 @@ export function computeWorkload(blocks) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+// ── Fix it for me ─────────────────────────────────────────────────────────────────────────
+// Clears overlaps by moving (or swapping) classes of the upload, one clash at a time, always to a place where the
+// faculty and the section are free. Published timetables of other years are never touched.
+const dayShort = d => DAY_NAMES[d].slice(0, 3);
+export function autoFix(blocks, slotsBySection, publishedBlocks, maxRounds = 120) {
+  const cur = blocks.map(b => ({ ...b }));
+  const changes = [];
+  const seen = new Set();
+  const reid = b => { b.id = b.sectionId + ":" + b.day + ":" + b.start + ":" + b.token; };
+  for (let round = 0; round < maxRounds; round++) {
+    const conflicts = detectOverlaps(cur, publishedBlocks);
+    if (!conflicts.length) break;
+    const state = cur.map(b => b.id).sort().join("|");
+    if (seen.has(state)) break;
+    seen.add(state);
+    let fixed = false;
+    for (const c of conflicts) {
+      for (const cand of [c.a, c.b]) {
+        if (cand.source !== "upload" || cand.combo) continue;
+        const real = cur.find(b => b.id === cand.id);
+        if (!real) continue;
+        const all = cur.map(b => ({ ...b, source: "upload" })).concat(publishedBlocks.map(b => ({ ...b, source: "published" })));
+        const opts = suggestMoves({ ...real, source: "upload" }, slotsBySection[real.sectionId] || [], all);
+        const mv = opts.find(o => o.move);
+        const sw = opts.find(o => o.swap);
+        const who = real.faculty.map(f => f.name).join(", ");
+        if (mv) {
+          changes.push("Moved " + real.token + " (" + real.sectionName + ") from " + dayShort(real.day) + " " + fmtRange(real.start, real.end) + " to " + dayShort(mv.move.d) + " " + fmtRange(mv.move.start, mv.move.end) + (who ? " — " + who + " was double-booked." : "."));
+          real.day = mv.move.d; real.start = mv.move.start; real.end = mv.move.end; reid(real);
+          fixed = true;
+        } else if (sw) {
+          const other = cur.find(b => b.id === sw.swap.otherId);
+          if (other) {
+            changes.push("Swapped " + real.token + " (" + dayShort(real.day) + " " + fmtRange(real.start, real.end) + ") with " + other.token + " (" + dayShort(other.day) + " " + fmtRange(other.start, other.end) + ") in " + real.sectionName + ".");
+            const t = { day: real.day, start: real.start, end: real.end };
+            real.day = other.day; real.start = other.start; real.end = other.end;
+            other.day = t.day; other.start = t.start; other.end = t.end;
+            reid(real); reid(other);
+            fixed = true;
+          }
+        }
+        if (fixed) break;
+      }
+      if (fixed) break;
+    }
+    if (!fixed) break;
+  }
+  return { blocks: cur, changes, remaining: detectOverlaps(cur, publishedBlocks) };
+}
+
 
 === END_FILE: .\src\timetableUpload\overlapCheck.js ===
+
+
+=== START_FILE: .\src\timetableUpload\PublishedEditor.jsx ===
+
+// src/timetableUpload/PublishedEditor.jsx
+// Edit a published timetable on screen: click a class to move it, swap it, change its faculty or remove it; click an
+// empty period to add a class. Every edit is checked for overlaps (faculty, section, other years' published
+// timetables) before it is accepted, and nothing is saved until "Save changes". Saving updates the master
+// timetable, which faculty see in My Timetable.
+
+import React, { useState, useEffect, useRef } from "react";
+import { collection, doc, getDoc, getDocs, onSnapshot } from "firebase/firestore";
+import { db } from "../firebase";
+import { P, Btn, Card, Spinner } from "../components/UI";
+import FacultyListEditor from "../sections/FacultyListEditor";
+import { facultyListOf } from "../sections/subjectUtils";
+import { DAY_NAMES, fmtRange, fmtClock } from "./timeUtils";
+import { suggestMoves } from "./overlapCheck";
+import { publishMaster } from "./publishMaster";
+import { startOptions, moveBlock, swapBlocks, changeFaculty, removeBlock, addBlock, checkEdit, loadWarnings } from "./editChecks";
+
+const MONO = "'IBM Plex Mono', monospace";
+const PALETTE = [["DDEBF7", "1F4E79"], ["E2F0D9", "375623"], ["FFF2CC", "7F6000"], ["FCE4D6", "843C0C"], ["E4DFEC", "4B2E83"], ["D9F2F0", "0F5F5A"], ["F8E1F4", "8A2B7E"], ["FDE2E4", "9B2C3B"], ["DCE6F9", "2B4C9B"], ["F3E5C8", "6B4E16"]];
+const sel = { border: "1.5px solid " + P.border, borderRadius: 8, padding: "8px 10px", fontSize: 14, fontFamily: "inherit", background: "#fff", boxSizing: "border-box" };
+const lbl = { display: "block", fontSize: 11.5, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: P.gray, marginBottom: 5 };
+
+export default function PublishedEditor({ year, user, onBack }) {
+  const [master, setMaster] = useState(undefined);       // undefined = loading, null = not found
+  const [blocks, setBlocks] = useState([]);
+  const [others, setOthers] = useState([]);              // blocks of other years' published timetables
+  const [portalSections, setPortalSections] = useState([]);
+  const [people, setPeople] = useState([]);
+  const [secId, setSecId] = useState("");
+  const [pick, setPick] = useState(null);                // { kind: "block", id } | { kind: "cell", day, start }
+  const [msg, setMsg] = useState(null);                  // { ok, text, problems, ideas, warnings }
+  const [log, setLog] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const first = useRef(true);
+
+  useEffect(() => {
+    let alive = true;
+    getDoc(doc(db, "masterTimetables", year)).then(s => {
+      if (!alive) return;
+      if (!s.exists()) { setMaster(null); return; }
+      const d = { year, ...s.data() };
+      setMaster(d); setBlocks((d.blocks || []).map(b => ({ ...b }))); setSecId((d.sections || [])[0] ? d.sections[0].id : "");
+    });
+    getDocs(collection(db, "users")).then(us => {
+      if (!alive) return;
+      const list = [];
+      us.forEach(d => { const u = d.data(); if (u.status === "approved") list.push({ phone: d.id, name: u.name || d.id }); });
+      setPeople(list.sort((a, b) => a.name.localeCompare(b.name)));
+    });
+    const u1 = onSnapshot(collection(db, "masterTimetables"), snap => {
+      if (!alive) return;
+      setOthers(snap.docs.filter(d => d.id !== year).flatMap(d => (d.data().blocks || []).map(b => ({ ...b, source: "published", publishedYear: d.id, publishedBy: d.data().publishedByName || "" }))));
+    }, () => {});
+    const u2 = onSnapshot(collection(db, "sections"), snap => { if (alive) setPortalSections(snap.docs.map(d => ({ id: d.id, ...d.data() }))); }, () => {});
+    return () => { alive = false; u1(); u2(); };
+  }, [year]);
+
+  if (master === undefined) return <Spinner />;
+  if (master === null) return (
+    <div style={{ padding: 24 }}><Btn small variant="ghost" onClick={onBack}>← Back</Btn><div style={{ marginTop: 16, color: P.gray }}>There is no published timetable for Year {year}.</div></div>
+  );
+
+  const sections = master.sections || [];
+  const section = sections.find(s => s.id === secId) || sections[0];
+  const slots = section ? section.slots : [];
+  const days = blocks.some(b => b.day === 5) ? 6 : 5;
+  const dirty = log.length > 0;
+  const colourOf = (() => { const t = Array.from(new Set(blocks.map(b => b.token))).sort(); const m = new Map(t.map((x, i) => [x, PALETTE[i % PALETTE.length]])); return x => m.get(x) || PALETTE[0]; })();
+  const peopleBy = new Map(people.map(p => [p.phone, p]));
+  const facObj = phone => { const p = peopleBy.get(phone); return p ? { key: phone, name: p.name, phone, external: false } : null; };
+  const portalSection = portalSections.find(s => s.id === (section && section.id));
+
+  const picked = pick && pick.kind === "block" ? blocks.find(b => b.id === pick.id) : null;
+
+  function apply(result, ofBlock) {
+    if (result.error) { setMsg({ ok: false, text: result.error }); return; }
+    const chk = checkEdit(result.blocks, result.editedIds, others);
+    if (!chk.ok) {
+      let ideas = [];
+      if (ofBlock) {
+        const sec = sections.find(s => s.id === ofBlock.sectionId);
+        const all = blocks.map(b => ({ ...b, source: "upload" })).concat(others);
+        ideas = suggestMoves({ ...ofBlock, source: "upload" }, sec ? sec.slots : [], all).map(o => o.text).slice(0, 3);
+      }
+      setMsg({ ok: false, text: "Not changed. This edit would cause a clash:", problems: chk.problems.map(p => p.text), ideas });
+      return;
+    }
+    setBlocks(result.blocks);
+    setLog(l => l.concat(result.text));
+    setMsg({ ok: true, text: result.text, warnings: loadWarnings(result.blocks, result.editedIds) });
+    setPick(null);
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      await publishMaster({ year, blocks, sections, user, edited: true, keepFrom: master });
+      setMaster({ ...master, blocks }); setLog([]); setPick(null);
+      setMsg({ ok: true, text: "Saved. The Year " + year + " timetable is updated, and faculty see the change in My Timetable." });
+    } catch (err) { setMsg({ ok: false, text: "Could not save (" + err.message + "). Nothing was changed." }); }
+    setSaving(false);
+  }
+  function discard() {
+    if (!window.confirm("Throw away the " + log.length + " unsaved change" + (log.length === 1 ? "" : "s") + "?")) return;
+    setBlocks((master.blocks || []).map(b => ({ ...b }))); setLog([]); setPick(null); setMsg(null);
+  }
+
+  return (
+    <div style={{ padding: "24px clamp(16px, 3vw, 32px) 90px", maxWidth: "min(1400px, 96vw)", margin: "0 auto", display: "grid", gap: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <Btn small variant="ghost" onClick={() => (dirty && !window.confirm("You have unsaved changes. Leave without saving?") ? null : onBack())}>← Back</Btn>
+        <div style={{ fontWeight: 800, fontSize: 20 }}>Edit the Year {year} timetable</div>
+        <div style={{ fontSize: 13, color: P.gray }}>Published by {master.publishedByName || "—"}{master.publishedAt ? " on " + new Date(master.publishedAt).toLocaleDateString() : ""}{master.lastEditedAt ? " · last edited by " + (master.lastEditedByName || "—") + " on " + new Date(master.lastEditedAt).toLocaleDateString() : ""}</div>
+      </div>
+
+      <div style={{ fontSize: 13.5, color: P.gray, lineHeight: 1.6 }}>Click a class to move, swap, change or remove it. Click an empty period to add a class. Every change is checked for overlaps first, and one that would clash is not made.</div>
+
+      {msg && (
+        <div style={{ fontSize: 13.5, color: msg.ok ? P.green : P.red, background: msg.ok ? P.greenL : P.redL, borderRadius: 10, padding: "12px 16px" }}>
+          <div style={{ fontWeight: 700 }}>{msg.text}</div>
+          {(msg.problems || []).map((t, i) => <div key={i} style={{ marginTop: 4 }}>• {t}</div>)}
+          {(msg.ideas || []).length > 0 && <div style={{ marginTop: 8, color: "#1a2230" }}><b>You could instead:</b>{msg.ideas.map((t, i) => <div key={i}>• {t}</div>)}</div>}
+          {(msg.warnings || []).map((t, i) => <div key={i} style={{ marginTop: 4, color: P.amber }}>⚠ {t} (allowed, but check it is what you want)</div>)}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {sections.map(s => (
+          <button key={s.id} onClick={() => { setSecId(s.id); setPick(null); }} style={{ padding: "7px 16px", borderRadius: 20, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", border: "1.5px solid " + (section && section.id === s.id ? P.blue : P.border), background: section && section.id === s.id ? P.blue : "#fff", color: section && section.id === s.id ? "#fff" : P.navy }}>{s.name}</button>
+        ))}
+      </div>
+
+      <Card style={{ margin: 0, padding: "14px 16px" }}>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ borderCollapse: "separate", borderSpacing: 3, minWidth: 700 }}>
+            <thead>
+              <tr><th />{slots.map((s, i) => <th key={i} style={{ fontSize: 10.5, color: P.gray, fontWeight: 700, padding: "2px 4px", whiteSpace: "nowrap" }}>{s.brk ? (s.label || "Break") : "P" + (slots.slice(0, i).filter(x => !x.brk).length + 1)}<div style={{ fontWeight: 400, fontFamily: MONO }}>{fmtRange(s.start, s.end)}</div></th>)}</tr>
+            </thead>
+            <tbody>
+              {Array.from({ length: days }, (_, d) => (
+                <tr key={d}>
+                  <td style={{ fontSize: 12, fontWeight: 700, paddingRight: 8 }}>{DAY_NAMES[d].slice(0, 3)}</td>
+                  {slots.map((s, i) => {
+                    if (s.brk) return <td key={i} style={{ background: "#f6efdc", borderRadius: 5, width: 18 }} />;
+                    const hit = blocks.filter(b => b.sectionId === (section && section.id) && b.day === d && b.start <= s.start && s.end <= b.end);
+                    if (!hit.length) {
+                      const on = pick && pick.kind === "cell" && pick.day === d && pick.start === s.start;
+                      return <td key={i}><button onClick={() => { setPick({ kind: "cell", day: d, start: s.start }); setMsg(null); }} style={{ width: "100%", minWidth: 74, height: 34, background: on ? P.blueL : "#fafafa", border: "1.5px dashed " + (on ? P.blue : P.border), borderRadius: 5, cursor: "pointer", color: "#b6bdc6", fontSize: 14 }} aria-label={"Add a class on " + DAY_NAMES[d] + " " + fmtRange(s.start, s.end)}>+</button></td>;
+                    }
+                    return (
+                      <td key={i}>
+                        <div style={{ display: "grid", gap: 2 }}>
+                          {hit.map(b => {
+                            const [bg, fg] = colourOf(b.token);
+                            const on = pick && pick.kind === "block" && pick.id === b.id;
+                            return <button key={b.id} onClick={() => { setPick({ kind: "block", id: b.id }); setMsg(null); }} title={b.faculty.map(f => f.name).join(", ") || "no faculty"} style={{ background: "#" + bg, color: "#" + fg, border: on ? "2.5px solid " + P.navy : "2.5px solid transparent", borderRadius: 5, padding: "6px 6px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", minWidth: 74 }}>{b.token}</button>;
+                          })}
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {picked && <BlockPanel key={picked.id} b={picked} section={section} slots={slots} days={days} blocks={blocks} people={people} facObj={facObj} apply={apply} remove={() => { if (window.confirm("Remove " + picked.token + " from " + picked.sectionName + "?")) apply(removeBlock(blocks, picked.id)); }} />}
+      {pick && pick.kind === "cell" && section && <AddPanel key={pick.day + "-" + pick.start} cell={pick} section={section} portalSection={portalSection} people={people} facObj={facObj} blocks={blocks} apply={apply} />}
+
+      {dirty && (
+        <div style={{ position: "sticky", bottom: 12, background: "#fff", border: "1.5px solid " + P.blue, borderRadius: 12, padding: "12px 16px", boxShadow: "0 6px 20px rgba(22,50,79,0.18)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>{log.length} unsaved change{log.length === 1 ? "" : "s"}</div>
+            <div style={{ display: "flex", gap: 10 }}><Btn variant="outline" onClick={discard} disabled={saving}>Discard</Btn><Btn onClick={save} disabled={saving}>{saving ? "Saving…" : "Save changes"}</Btn></div>
+          </div>
+          <details style={{ marginTop: 6 }}><summary style={{ fontSize: 12.5, color: P.gray, cursor: "pointer" }}>What will change</summary>{log.map((t, i) => <div key={i} style={{ fontSize: 12.5, padding: "2px 0" }}>• {t}</div>)}</details>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BlockPanel({ b, section, slots, days, blocks, people, facObj, apply, remove }) {
+  const opts = startOptions(b, slots);
+  const [day, setDay] = useState(b.day);
+  const [start, setStart] = useState(b.start);
+  const swapWith = blocks.filter(x => x.id !== b.id && x.sectionId === b.sectionId && (x.periods || 1) === (b.periods || 1) && !(x.day === b.day && x.start === b.start));
+  const [swapId, setSwapId] = useState("");
+  const external = b.faculty.filter(f => f.external);
+  const [list, setList] = useState(b.faculty.filter(f => !f.external).map(f => f.key));
+  const opt = people.map(p => ({ value: p.phone, label: p.name }));
+  const teachingIdx = start => slots.filter(s => !s.brk && s.start <= start).length;
+  return (
+    <Card style={{ margin: 0, padding: "16px 18px", borderColor: P.navy }}>
+      <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 2 }}>{b.token} <span style={{ fontWeight: 500, color: P.gray, fontSize: 13 }}>· {b.sectionName} · {DAY_NAMES[b.day]} {fmtRange(b.start, b.end)} · {b.periods || 1} period{(b.periods || 1) === 1 ? "" : "s"}</span></div>
+      <div style={{ fontSize: 13, color: P.gray, marginBottom: 12 }}>{b.faculty.map(f => f.name).join(", ") || "No faculty"}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 18 }}>
+        <div>
+          <span style={lbl}>Move to</span>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <select value={day} onChange={e => setDay(Number(e.target.value))} style={sel}>{Array.from({ length: days }, (_, d) => <option key={d} value={d}>{DAY_NAMES[d]}</option>)}</select>
+            <select value={start} onChange={e => setStart(Number(e.target.value))} style={sel}>{opts.map(o => <option key={o.start} value={o.start}>Period {teachingIdx(o.start)} · {fmtRange(o.start, o.end)}</option>)}</select>
+            <Btn small onClick={() => apply(moveBlock(blocks, b.id, day, start, slots), b)}>Move</Btn>
+          </div>
+        </div>
+        <div>
+          <span style={lbl}>Swap with another class of {section.name}</span>
+          {swapWith.length === 0 ? <div style={{ fontSize: 13, color: P.gray }}>No other class of the same length.</div> : (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <select value={swapId} onChange={e => setSwapId(e.target.value)} style={{ ...sel, maxWidth: 260 }}>
+                <option value="">Choose…</option>
+                {swapWith.slice().sort((x, y) => x.day - y.day || x.start - y.start).map(x => <option key={x.id} value={x.id}>{DAY_NAMES[x.day].slice(0, 3)} {fmtRange(x.start, x.end)} · {x.token}</option>)}
+              </select>
+              <Btn small disabled={!swapId} onClick={() => apply(swapBlocks(blocks, b.id, swapId), b)}>Swap</Btn>
+            </div>
+          )}
+        </div>
+      </div>
+      <div style={{ marginTop: 16 }}>
+        <span style={lbl}>Faculty</span>
+        <FacultyListEditor list={list} onChange={setList} facultyOptions={opt} />
+        {external.length > 0 && <div style={{ fontSize: 12.5, color: P.gray, marginTop: 6 }}>From outside the portal, kept as they are: {external.map(f => f.name).join(", ")}.</div>}
+        <div style={{ marginTop: 8 }}><Btn small variant="outline" onClick={() => apply(changeFaculty(blocks, b.id, list.filter(Boolean).map(facObj).filter(Boolean).concat(external)), b)}>Change faculty</Btn></div>
+      </div>
+      <div style={{ marginTop: 14, borderTop: "1px solid " + P.border, paddingTop: 12 }}><Btn small variant="danger" onClick={remove}>Remove this class</Btn></div>
+    </Card>
+  );
+}
+
+function AddPanel({ cell, section, portalSection, people, facObj, blocks, apply }) {
+  const subs = portalSection ? (portalSection.subjects || []) : [];
+  const [subName, setSubName] = useState("");
+  const [other, setOther] = useState("");
+  const [periods, setPeriods] = useState(1);
+  const sub = subs.find(s => s.name === subName);
+  const [list, setList] = useState([]);
+  const opt = people.map(p => ({ value: p.phone, label: p.name }));
+  function chooseSub(name) { setSubName(name); const s = subs.find(x => x.name === name); setList(s ? facultyListOf(s) : []); }
+  const type = sub ? String(sub.type || "Theory").toLowerCase() : "other";
+  const token = sub ? String(sub.short || sub.name).toUpperCase().replace(/\s+/g, " ") : other.trim().toUpperCase();
+  return (
+    <Card style={{ margin: 0, padding: "16px 18px", borderColor: P.blue }}>
+      <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 10 }}>Add a class to {section.name} · {DAY_NAMES[cell.day]} from {fmtClock(cell.start)}</div>
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-end" }}>
+        <div><span style={lbl}>Subject</span>
+          <select value={subName} onChange={e => chooseSub(e.target.value)} style={{ ...sel, minWidth: 220 }}>
+            <option value="">Another activity…</option>{subs.map(s => <option key={s.id || s.name} value={s.name}>{s.name}</option>)}
+          </select>
+        </div>
+        {!sub && <div><span style={lbl}>Activity name</span><input value={other} onChange={e => setOther(e.target.value)} placeholder="e.g. Sports" style={{ ...sel, width: 180 }} /></div>}
+        <div><span style={lbl}>Periods</span><input type="number" min="1" max="4" value={periods} onChange={e => setPeriods(Number(e.target.value) || 1)} style={{ ...sel, width: 80 }} /></div>
+      </div>
+      <div style={{ marginTop: 14 }}><span style={lbl}>Faculty (optional)</span><FacultyListEditor list={list} onChange={setList} facultyOptions={opt} /></div>
+      <div style={{ marginTop: 12 }}>
+        <Btn small disabled={!token} onClick={() => apply(addBlock(blocks, section, cell.day, cell.start, { token, subject: sub ? sub.name : token, type, faculty: list.filter(Boolean).map(facObj).filter(Boolean).map((f, i) => ({ ...f, role: i === 0 ? "main" : "asst" })), periods }))}>Add this class</Btn>
+      </div>
+    </Card>
+  );
+}
+
+
+=== END_FILE: .\src\timetableUpload\PublishedEditor.jsx ===
+
+
+=== START_FILE: .\src\timetableUpload\publishMaster.js ===
+
+// src/timetableUpload/publishMaster.js
+// Saves a year's timetable as the master timetable (masterTimetables/{year}). Used when an uploaded sheet is published,
+// when a designed version is published, and when a published timetable is edited on screen.
+
+import { doc, setDoc } from "firebase/firestore";
+import { db } from "../firebase";
+
+export function masterData({ year, blocks, sections, user, fileName = "", keepFrom = null, edited = false }) {
+  const keep = b => ({
+    id: b.id, sectionId: b.sectionId, sectionName: b.sectionName, day: b.day, start: b.start, end: b.end,
+    token: b.token, subject: b.subject, type: b.type, combo: b.combo || "", periods: b.periods,
+    faculty: b.faculty.map(f => ({ key: f.key, name: f.name, phone: f.phone || null, external: !!f.external, role: f.role })),
+  });
+  const base = {
+    year,
+    blocks: blocks.map(keep),
+    sections: sections.map(sec => ({ id: sec.id, name: sec.name, slots: sec.slots.map(x => ({ start: x.start, end: x.end, brk: !!x.brk, ...(x.label ? { label: x.label } : {}) })) })),
+    publishedBy: user.phone, publishedByName: user.name || user.phone, publishedAt: new Date().toISOString(),
+    fileName,
+  };
+  if (edited && keepFrom) {
+    base.publishedBy = keepFrom.publishedBy || user.phone;
+    base.publishedByName = keepFrom.publishedByName || user.name || user.phone;
+    base.publishedAt = keepFrom.publishedAt || base.publishedAt;
+    base.fileName = keepFrom.fileName || "";
+    base.lastEditedBy = user.phone; base.lastEditedByName = user.name || user.phone; base.lastEditedAt = new Date().toISOString();
+  }
+  return JSON.parse(JSON.stringify(base));
+}
+
+export async function publishMaster(args) {
+  const data = masterData(args);
+  if (JSON.stringify(data).length > 900000) throw new Error("this timetable is too large to store in one piece");
+  await setDoc(doc(db, "masterTimetables", args.year), data);
+  return data;
+}
+
+
+=== END_FILE: .\src\timetableUpload\publishMaster.js ===
 
 
 === START_FILE: .\src\timetableUpload\reportBuilder.js ===
@@ -44250,7 +45010,8 @@ export function facultySheet(blocks, workload, sections, colourOf, days = 6) {
 }
 
 // ── Sheet-3B: one blue grid per section ──
-export function sectionSheet(blocks, sections, colourOf, days = 6) {
+// opts.batchStyle writes labs that run together as "B1-TL, B2-ML" so the upload reads them back with the portal's own faculty
+export function sectionSheet(blocks, sections, colourOf, days = 6, opts = {}) {
   const g = new Grid();
   const widest = Math.max(1, ...sections.map(s => s.slots.length));
   g.cols = [{ wch: 13 }, ...Array.from({ length: widest }, () => ({ wch: 20 }))];
@@ -44288,7 +45049,7 @@ export function sectionSheet(blocks, sections, colourOf, days = 6) {
         if (end < from) return;
         for (let c = from; c <= end; c++) taken.add(c);
         const [bg, fg] = colourOf(p.blocks[0].token);
-        const text = p.blocks.map(b => {
+        const text = p.blocks.length > 1 && opts.batchStyle ? p.blocks.map((b, i) => "B" + (i + 1) + "-" + b.token).join(", ") : p.blocks.map(b => {
           const who = namesOf(b);
           return b.token + (b.combo ? " (" + b.combo + ")" : "") + (who ? "\n(" + who + ")" : "");
         }).join("\n");
@@ -44359,6 +45120,11 @@ export function addReportSheets(wb, { blocks, conflicts, suggestions, workload, 
 // Written with the styled library so the colours survive.
 export function writeReport(wb, fileName) {
   XLSX.writeFile(wb, fileName);
+}
+
+// An empty workbook made with the same library, for a clean "final timetable" file.
+export function newReportWorkbook() {
+  return XLSX.utils.book_new();
 }
 
 
@@ -44432,7 +45198,7 @@ const isBreakCell = v => { const t = clean(v); return isBreakWord(t) || /^[A-Za-
 function nameTokens(raw) {
   return String(raw || "").toLowerCase().replace(/[^a-z\s]/g, " ").split(/\s+/).filter(t => t && !TITLES.has(t));
 }
-const nameKey = raw => nameTokens(raw).join(" ");
+export const nameKey = raw => nameTokens(raw).join(" ");
 const isInitial = t => t.length <= 2;
 const wordsOf = t => t.filter(x => !isInitial(x));
 const initialsOf = t => t.filter(isInitial);
@@ -44598,7 +45364,10 @@ export function parseSmart(wb, ctx, res) {
   const skippedTitles = [];
   let blocksFound = 0;
 
-  wb.SheetNames.forEach(sheetName => {
+  // the generated Ind-n / report sheets repeat a timetable; only the section sheets (or the ones asked for) are read
+  const GENERATED = /^(Ind-\d+|Sheet-3 Individual|Sheet-4 Overlaps|Workload Summary)$/i;
+  const sheetNames = ctx.sheets ? wb.SheetNames.filter(n => ctx.sheets.includes(n)) : wb.SheetNames.filter(n => !GENERATED.test(n));
+  sheetNames.forEach(sheetName => {
     const ws = wb.Sheets[sheetName];
     if (!ws || !ws["!ref"]) return;
     const rows = sheetRows(ws);
@@ -44729,6 +45498,8 @@ export function parseSmart(wb, ctx, res) {
           body = clean(body);
           const explicit = [];
           groups.forEach(g => splitNames(g).forEach(n => { if (looksLikeName(n)) explicit.push(n); }));
+          // an activity such as CRT may be taken by someone who is not in the portal: the bracket then holds their name
+          if (!explicit.length && EXTRAS.test(body) && groups.length) groups.forEach(g => splitNames(g).forEach(n => { if (!/^[A-Za-z]{0,5}[-\s]?\d+$/.test(clean(n))) explicit.push(n); }));
 
           // batch rotation: "B1-IA, B2-SL, B3-AM" are parallel labs
           let pieces, batchLabs = false;
@@ -44804,12 +45575,16 @@ export function parseSmart(wb, ctx, res) {
 
 // src/timetableUpload/TimetableEntry.jsx
 // Coordinator Duties > Timetable: the admin first chooses whether to upload a timetable they already have
-// or have the portal design one from a few questions.
+// or have the portal design one from a few questions. Timetables already published are listed below, each with an
+// Edit button that opens the on-screen editor (every edit is checked for overlaps).
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { collection, onSnapshot } from "firebase/firestore";
+import { db } from "../firebase";
 import { P, Btn } from "../components/UI";
 import TimetableUploadScreen from "./TimetableUploadScreen";
 import DesignScreen from "../timetableDesign/DesignScreen";
+import PublishedEditor from "./PublishedEditor";
 
 function Choice({ title, text, action, onClick, accent }) {
   return (
@@ -44824,8 +45599,19 @@ function Choice({ title, text, action, onClick, accent }) {
 }
 
 export default function TimetableEntry({ user }) {
-  const [mode, setMode] = useState(null);
+  const [mode, setMode] = useState(null);       // null | "upload" | "design" | "edit"
+  const [editYear, setEditYear] = useState("");
+  const [published, setPublished] = useState([]);
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "masterTimetables"), snap => {
+      setPublished(snap.docs.map(d => ({ year: d.id, ...d.data() })).sort((a, b) => a.year.localeCompare(b.year)));
+    }, () => {});
+    return unsub;
+  }, []);
+
   if (mode === "design") return <DesignScreen user={user} onBack={() => setMode(null)} />;
+  if (mode === "edit") return <PublishedEditor year={editYear} user={user} onBack={() => setMode(null)} />;
   if (mode === "upload") {
     return (
       <div>
@@ -44841,9 +45627,26 @@ export default function TimetableEntry({ user }) {
       <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 4 }}>How would you like to make the timetable?</div>
       <div style={{ fontSize: 14, color: P.gray, marginBottom: 24 }}>Either way it is checked for overlaps before it is published.</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 18 }}>
-        <Choice accent={P.blue} title="Upload a timetable" text="You already have the timetable in Excel. The portal reads it in any layout, finds overlaps, suggests fixes and shows every faculty member's workload." action="Upload an Excel file" onClick={() => setMode("upload")} />
+        <Choice accent={P.blue} title="Upload a timetable" text="You already have the timetable in Excel. The portal reads it in any layout, finds overlaps, suggests fixes (or makes them for you) and shows every faculty member's workload." action="Upload an Excel file" onClick={() => setMode("upload")} />
         <Choice accent={P.teal} title="Design a timetable" text="Answer a few questions about periods, breaks, subjects and faculty limits. The portal designs up to three clash-free versions for you to choose from, in one Excel file." action="Start the questions" onClick={() => setMode("design")} />
       </div>
+
+      {published.length > 0 && (
+        <div style={{ marginTop: 34 }}>
+          <div style={{ fontSize: 17, fontWeight: 800, marginBottom: 4 }}>Published timetables</div>
+          <div style={{ fontSize: 13.5, color: P.gray, marginBottom: 12 }}>Need a change after publishing? Edit it here, on screen. Each change is checked for overlaps before it is accepted.</div>
+          {published.map(p => (
+            <div key={p.year} style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", background: "#fff", border: "1px solid " + P.border, borderRadius: 12, padding: "12px 16px", marginBottom: 8 }}>
+              <span style={{ fontWeight: 800, fontSize: 15, minWidth: 70 }}>Year {p.year}</span>
+              <span style={{ flex: 1, minWidth: 220, fontSize: 13, color: P.gray }}>
+                {(p.sections || []).map(x => x.name).join(", ")} · {(p.blocks || []).length} classes · published by {p.publishedByName || "—"}{p.publishedAt ? " on " + new Date(p.publishedAt).toLocaleDateString() : ""}
+                {p.lastEditedAt ? " · edited by " + (p.lastEditedByName || "—") + " on " + new Date(p.lastEditedAt).toLocaleDateString() : ""}
+              </span>
+              <Btn small onClick={() => { setEditYear(p.year); setMode("edit"); }}>Edit on screen</Btn>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -44872,8 +45675,9 @@ import { MASTER_ADMIN_PHONE } from "../utils";
 import { parseSmart } from "./smartParser";
 import WeekCards from "../timetable/WeekCards";
 import { DAYS } from "../timetable/timetableModel";
-import { groupBlocks, detectOverlaps, checkCombos, suggestionsFor, computeWorkload } from "./overlapCheck";
-import { addReportSheets, writeReport } from "./reportBuilder";
+import { groupBlocks, detectOverlaps, checkCombos, suggestionsFor, computeWorkload, autoFix } from "./overlapCheck";
+import { addReportSheets, writeReport, newReportWorkbook } from "./reportBuilder";
+import { publishMaster } from "./publishMaster";
 import { yearOfSection, DAY_NAMES, fmtRange } from "./timeUtils";
 import { facultyListOf, shortOf } from "../sections/subjectUtils";
 
@@ -44912,7 +45716,10 @@ export default function TimetableUploadScreen({ user }) {
   const [publishedErr, setPublishedErr] = useState(false);
   const [year, setYear] = useState("III");
   const [fileName, setFileName] = useState("");
-  const [result, setResult] = useState(null);
+  const [base, setResult] = useState(null);
+  const [fix, setFix] = useState(null);                 // overlaps cleared by "Fix these for me"
+  const [sheetChoices, setSheetChoices] = useState([]); // TT-1, TT-2 ... when the file came from "Design a timetable"
+  const [chosenSheet, setChosenSheet] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [confirming, setConfirming] = useState(false);
@@ -44952,18 +45759,25 @@ export default function TimetableUploadScreen({ user }) {
 
   if (!sections || !people) return <Spinner />;
 
+  // what is shown and published: the file as read, or the file with its overlaps cleared by "Fix these for me"
+  const result = !base ? null : !fix ? base : {
+    ...base, blocks: fix.blocks, conflicts: fix.remaining,
+    suggestions: fix.remaining.map(c => suggestionsFor(c, base.slotsBy, fix.blocks.map(b => ({ ...b, source: "upload" })).concat(base.publishedBlocks))),
+    comboProblems: checkCombos(fix.blocks), workload: computeWorkload(fix.blocks),
+  };
+
   const yearSections = sections.filter(s => yearOfSection(s) === year);
   const noYear = sections.filter(s => !yearOfSection(s));
   const facultyByPhone = {};
   people.forEach(p => { facultyByPhone[p.phone] = p; });
   const hasSubjects = yearSections.some(s => (s.subjects || []).length > 0);
 
-  function analyse(wb, res) {
+  function analyse(wb, res, sheet) {
     const ctxSections = yearSections.map(s => ({
       id: s.id, name: s.name,
       subjects: (s.subjects || []).map(sub => ({ name: sub.name, short: shortOf(sub), type: sub.type || "Theory", faculty: facultyListOf(sub) })),
     }));
-    const parse = parseSmart(wb, { year, sections: ctxSections, people }, res);
+    const parse = parseSmart(wb, { year, sections: ctxSections, people, sheets: sheet ? [sheet] : undefined }, res);
     const blocks = groupBlocks(parse.entries, "upload");
     const publishedBlocks = published.filter(p => p.year !== year).flatMap(p =>
       (p.blocks || []).map(b => ({ ...b, source: "published", publishedBy: p.publishedByName || "", publishedYear: p.year })));
@@ -44974,19 +45788,32 @@ export default function TimetableUploadScreen({ user }) {
     const suggestions = conflicts.map(c => suggestionsFor(c, slotsBy, allBlocks));
     const comboProblems = checkCombos(blocks);
     const workload = computeWorkload(blocks);
-    return { wb, parse, blocks, conflicts, suggestions, comboProblems, workload };
+    return { wb, parse, blocks, conflicts, suggestions, comboProblems, workload, publishedBlocks, slotsBy };
+  }
+
+  function pickSheet(name) {
+    setChosenSheet(name); setFix(null); setAnswers(NO_ANSWERS);
+    if (wbRef.current) setResult(analyse(wbRef.current, NO_ANSWERS, name));
+  }
+
+  function fixNow() {
+    setFix(autoFix(base.blocks, base.slotsBy, base.publishedBlocks));
   }
 
   async function onFile(e) {
     const f = e.target.files && e.target.files[0];
     e.target.value = "";
     if (!f) return;
-    setBusy(true); setError(""); setResult(null); setFileName(f.name);
+    setBusy(true); setError(""); setResult(null); setFix(null); setFileName(f.name);
     try {
       const wb = XLSX.read(await f.arrayBuffer(), { type: "array" });
       wbRef.current = wb;
       setAnswers(NO_ANSWERS);
-      setResult(analyse(wb, NO_ANSWERS));
+      const tts = wb.SheetNames.filter(n => /^TT-\d+$/i.test(n));
+      setSheetChoices(tts);
+      const first = tts[0] || "";
+      setChosenSheet(first);
+      setResult(analyse(wb, NO_ANSWERS, first));
     } catch (err) {
       setError("This file could not be read as an Excel workbook (" + err.message + "). Use the downloaded template and save it as .xlsx.");
     }
@@ -44997,7 +45824,8 @@ export default function TimetableUploadScreen({ user }) {
   function answer(field, key, value) {
     const next = { ...answers, [field]: { ...answers[field], [key]: value } };
     setAnswers(next);
-    if (wbRef.current) setResult(analyse(wbRef.current, next));
+    setFix(null);
+    if (wbRef.current) setResult(analyse(wbRef.current, next, chosenSheet));
   }
 
   function downloadReport() {
@@ -45008,25 +45836,20 @@ export default function TimetableUploadScreen({ user }) {
     writeReport(rep, "Timetable report - Year " + year + ".xlsx");
   }
 
+  // the finished timetable on its own: every section's timetable, every faculty member's, and the workload
+  function downloadFinal() {
+    const rep = addReportSheets(newReportWorkbook(), {
+      blocks: result.blocks, conflicts: result.conflicts, suggestions: result.suggestions, workload: result.workload, sections: result.parse.sections,
+    });
+    writeReport(rep, "Final timetable - Year " + year + ".xlsx");
+  }
+
   async function publishNow() {
     setPublishing(true); setError(""); setNotice("");
     try {
-      const keep = b => ({
-        id: b.id, sectionId: b.sectionId, sectionName: b.sectionName, day: b.day, start: b.start, end: b.end,
-        token: b.token, subject: b.subject, type: b.type, combo: b.combo || "", periods: b.periods,
-        faculty: b.faculty.map(f => ({ key: f.key, name: f.name, phone: f.phone || null, external: !!f.external, role: f.role })),
-      });
-      const data = JSON.parse(JSON.stringify({
-        year,
-        blocks: result.blocks.map(keep),
-        sections: result.parse.sections.map(sec => ({ id: sec.id, name: sec.name, slots: sec.slots.map(x => ({ start: x.start, end: x.end, brk: !!x.brk })) })),
-        publishedBy: user.phone, publishedByName: user.name || user.phone, publishedAt: new Date().toISOString(),
-        fileName: fileName || "",
-      }));
-      if (JSON.stringify(data).length > 900000) throw new Error("this timetable is too large to store in one piece");
-      await setDoc(doc(db, "masterTimetables", year), data);
+      const data = await publishMaster({ year, blocks: result.blocks, sections: result.parse.sections, user, fileName: fileName || "" });
       setNotice("Year " + year + " timetable published: " + data.sections.length + " sections, " + data.blocks.length + " classes. Later uploads for other years are now checked against it.");
-      setResult(null); setFileName(""); setConfirming(false);
+      setResult(null); setFix(null); setSheetChoices([]); setFileName(""); setConfirming(false);
     } catch (err) {
       setError("Could not publish (" + err.message + "). Nothing was changed.");
     }
@@ -45056,7 +45879,7 @@ export default function TimetableUploadScreen({ user }) {
           The portal already knows this year's sections, subjects and faculty. Your Excel is matched against them, so it can be in any layout.
         </div>
         <div style={{ display: "flex", gap: 14, alignItems: "flex-end", flexWrap: "wrap" }}>
-          <div style={{ width: 160 }}><Sel label="Year" value={year} onChange={v => { setYear(v || "III"); setResult(null); setFileName(""); wbRef.current = null; setAnswers(NO_ANSWERS); }} options={YEARS.map(y => ({ value: y, label: "Year " + y }))} /></div>
+          <div style={{ width: 160 }}><Sel label="Year" value={year} onChange={v => { setYear(v || "III"); setResult(null); setFix(null); setSheetChoices([]); setFileName(""); wbRef.current = null; setAnswers(NO_ANSWERS); }} options={YEARS.map(y => ({ value: y, label: "Year " + y }))} /></div>
         </div>
         {yearSections.length === 0 ? (
           <div style={{ fontSize: 13, color: P.amber, background: P.amberL, borderRadius: 8, padding: "8px 12px" }}>
@@ -45112,6 +45935,18 @@ export default function TimetableUploadScreen({ user }) {
         {publishedErr && <div style={{ fontSize: 12.5, color: P.amber, marginTop: 10 }}>Published timetables of other years could not be loaded, so overlaps with them can't be checked yet.</div>}
         {error && <div style={{ fontSize: 13, color: P.red, background: P.redL, borderRadius: 8, padding: "8px 12px", marginTop: 10 }}>{error}</div>}
       </Card>
+
+      {sheetChoices.length > 1 && (
+        <Card style={{ margin: 0, padding: "16px 20px", borderColor: P.blue }}>
+          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>This file holds {sheetChoices.length} designed versions</div>
+          <div style={{ fontSize: 12.5, color: P.gray, marginBottom: 10 }}>Choose the one you want checked and published. The others are ignored.</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {sheetChoices.map(n => (
+              <button key={n} onClick={() => pickSheet(n)} style={{ padding: "8px 18px", borderRadius: 9, fontWeight: 700, fontSize: 14, cursor: "pointer", fontFamily: "inherit", border: "1.5px solid " + (chosenSheet === n ? P.blue : P.border), background: chosenSheet === n ? P.blue : "#fff", color: chosenSheet === n ? "#fff" : P.navy }}>{n}</button>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {notice && <div style={{ fontSize: 13.5, color: P.green, background: P.greenL, borderRadius: 10, padding: "12px 16px", fontWeight: 600 }}>{notice}</div>}
 
@@ -45170,6 +46005,7 @@ export default function TimetableUploadScreen({ user }) {
                 {result.conflicts.length > 0 && <Pill color={P.red} bg={P.redL}>{result.conflicts.length} overlap{result.conflicts.length === 1 ? "" : "s"} to clear</Pill>}
                 {ready && <Pill color={P.green} bg={P.greenL}>No overlaps — ready to publish</Pill>}
                 <Btn small onClick={downloadReport}>Download report (Excel)</Btn>
+                {ready && <Btn small onClick={downloadFinal}>Download final timetable (Excel)</Btn>}
                 <Btn small disabled={!ready || publishing} onClick={() => setConfirming(true)}>Publish Year {year}</Btn>
               </div>
             </div>
@@ -45233,7 +46069,22 @@ export default function TimetableUploadScreen({ user }) {
 
           <Card style={{ margin: 0, padding: "16px 20px" }}>
             <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Overlaps</div>
-            <div style={{ fontSize: 12.5, color: P.gray, marginBottom: 12 }}>A faculty member has two classes at overlapping times. Each one lists changes that clear it without creating a new clash. Fix them in the sheet and upload again.</div>
+            <div style={{ fontSize: 12.5, color: P.gray, marginBottom: 12 }}>A faculty member has two classes at overlapping times. Each one lists changes that clear it without creating a new clash. Either fix them in your sheet and upload again, or let the portal do it.</div>
+            {(result.conflicts.length > 0 || fix) && (
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
+                {!fix && <Btn small onClick={fixNow}>Fix these for me</Btn>}
+                {fix && <Btn small variant="outline" onClick={() => setFix(null)}>Undo the portal's changes</Btn>}
+                {!fix && <span style={{ fontSize: 12.5, color: P.gray }}>Classes are moved only to places where the faculty and the section are free. Nothing is saved until you publish.</span>}
+              </div>
+            )}
+            {fix && (
+              <div style={{ background: P.bg, border: "1px solid " + P.border, borderRadius: 10, padding: "10px 14px", marginBottom: 12 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6, color: fix.remaining.length ? P.amber : P.green }}>
+                  {fix.changes.length} change{fix.changes.length === 1 ? "" : "s"} made{fix.remaining.length ? "; " + fix.remaining.length + " overlap" + (fix.remaining.length === 1 ? "" : "s") + " could not be cleared automatically (listed below)" : ": no overlaps left"}
+                </div>
+                {fix.changes.map((t, i) => <div key={i} style={{ fontSize: 13, padding: "2px 0" }}>• {t}</div>)}
+              </div>
+            )}
             {result.conflicts.length === 0 ? (
               <div style={{ fontSize: 13.5, color: P.green }}>No overlaps found.</div>
             ) : result.conflicts.map((c, i) => (

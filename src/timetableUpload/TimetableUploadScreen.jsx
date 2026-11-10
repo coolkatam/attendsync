@@ -16,8 +16,9 @@ import { MASTER_ADMIN_PHONE } from "../utils";
 import { parseSmart } from "./smartParser";
 import WeekCards from "../timetable/WeekCards";
 import { DAYS } from "../timetable/timetableModel";
-import { groupBlocks, detectOverlaps, checkCombos, suggestionsFor, computeWorkload } from "./overlapCheck";
-import { addReportSheets, writeReport } from "./reportBuilder";
+import { groupBlocks, detectOverlaps, checkCombos, suggestionsFor, computeWorkload, autoFix } from "./overlapCheck";
+import { addReportSheets, writeReport, newReportWorkbook } from "./reportBuilder";
+import { publishMaster } from "./publishMaster";
 import { yearOfSection, DAY_NAMES, fmtRange } from "./timeUtils";
 import { facultyListOf, shortOf } from "../sections/subjectUtils";
 
@@ -56,7 +57,10 @@ export default function TimetableUploadScreen({ user }) {
   const [publishedErr, setPublishedErr] = useState(false);
   const [year, setYear] = useState("III");
   const [fileName, setFileName] = useState("");
-  const [result, setResult] = useState(null);
+  const [base, setResult] = useState(null);
+  const [fix, setFix] = useState(null);                 // overlaps cleared by "Fix these for me"
+  const [sheetChoices, setSheetChoices] = useState([]); // TT-1, TT-2 ... when the file came from "Design a timetable"
+  const [chosenSheet, setChosenSheet] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [confirming, setConfirming] = useState(false);
@@ -96,18 +100,25 @@ export default function TimetableUploadScreen({ user }) {
 
   if (!sections || !people) return <Spinner />;
 
+  // what is shown and published: the file as read, or the file with its overlaps cleared by "Fix these for me"
+  const result = !base ? null : !fix ? base : {
+    ...base, blocks: fix.blocks, conflicts: fix.remaining,
+    suggestions: fix.remaining.map(c => suggestionsFor(c, base.slotsBy, fix.blocks.map(b => ({ ...b, source: "upload" })).concat(base.publishedBlocks))),
+    comboProblems: checkCombos(fix.blocks), workload: computeWorkload(fix.blocks),
+  };
+
   const yearSections = sections.filter(s => yearOfSection(s) === year);
   const noYear = sections.filter(s => !yearOfSection(s));
   const facultyByPhone = {};
   people.forEach(p => { facultyByPhone[p.phone] = p; });
   const hasSubjects = yearSections.some(s => (s.subjects || []).length > 0);
 
-  function analyse(wb, res) {
+  function analyse(wb, res, sheet) {
     const ctxSections = yearSections.map(s => ({
       id: s.id, name: s.name,
       subjects: (s.subjects || []).map(sub => ({ name: sub.name, short: shortOf(sub), type: sub.type || "Theory", faculty: facultyListOf(sub) })),
     }));
-    const parse = parseSmart(wb, { year, sections: ctxSections, people }, res);
+    const parse = parseSmart(wb, { year, sections: ctxSections, people, sheets: sheet ? [sheet] : undefined }, res);
     const blocks = groupBlocks(parse.entries, "upload");
     const publishedBlocks = published.filter(p => p.year !== year).flatMap(p =>
       (p.blocks || []).map(b => ({ ...b, source: "published", publishedBy: p.publishedByName || "", publishedYear: p.year })));
@@ -118,19 +129,32 @@ export default function TimetableUploadScreen({ user }) {
     const suggestions = conflicts.map(c => suggestionsFor(c, slotsBy, allBlocks));
     const comboProblems = checkCombos(blocks);
     const workload = computeWorkload(blocks);
-    return { wb, parse, blocks, conflicts, suggestions, comboProblems, workload };
+    return { wb, parse, blocks, conflicts, suggestions, comboProblems, workload, publishedBlocks, slotsBy };
+  }
+
+  function pickSheet(name) {
+    setChosenSheet(name); setFix(null); setAnswers(NO_ANSWERS);
+    if (wbRef.current) setResult(analyse(wbRef.current, NO_ANSWERS, name));
+  }
+
+  function fixNow() {
+    setFix(autoFix(base.blocks, base.slotsBy, base.publishedBlocks));
   }
 
   async function onFile(e) {
     const f = e.target.files && e.target.files[0];
     e.target.value = "";
     if (!f) return;
-    setBusy(true); setError(""); setResult(null); setFileName(f.name);
+    setBusy(true); setError(""); setResult(null); setFix(null); setFileName(f.name);
     try {
       const wb = XLSX.read(await f.arrayBuffer(), { type: "array" });
       wbRef.current = wb;
       setAnswers(NO_ANSWERS);
-      setResult(analyse(wb, NO_ANSWERS));
+      const tts = wb.SheetNames.filter(n => /^TT-\d+$/i.test(n));
+      setSheetChoices(tts);
+      const first = tts[0] || "";
+      setChosenSheet(first);
+      setResult(analyse(wb, NO_ANSWERS, first));
     } catch (err) {
       setError("This file could not be read as an Excel workbook (" + err.message + "). Use the downloaded template and save it as .xlsx.");
     }
@@ -141,7 +165,8 @@ export default function TimetableUploadScreen({ user }) {
   function answer(field, key, value) {
     const next = { ...answers, [field]: { ...answers[field], [key]: value } };
     setAnswers(next);
-    if (wbRef.current) setResult(analyse(wbRef.current, next));
+    setFix(null);
+    if (wbRef.current) setResult(analyse(wbRef.current, next, chosenSheet));
   }
 
   function downloadReport() {
@@ -152,25 +177,20 @@ export default function TimetableUploadScreen({ user }) {
     writeReport(rep, "Timetable report - Year " + year + ".xlsx");
   }
 
+  // the finished timetable on its own: every section's timetable, every faculty member's, and the workload
+  function downloadFinal() {
+    const rep = addReportSheets(newReportWorkbook(), {
+      blocks: result.blocks, conflicts: result.conflicts, suggestions: result.suggestions, workload: result.workload, sections: result.parse.sections,
+    });
+    writeReport(rep, "Final timetable - Year " + year + ".xlsx");
+  }
+
   async function publishNow() {
     setPublishing(true); setError(""); setNotice("");
     try {
-      const keep = b => ({
-        id: b.id, sectionId: b.sectionId, sectionName: b.sectionName, day: b.day, start: b.start, end: b.end,
-        token: b.token, subject: b.subject, type: b.type, combo: b.combo || "", periods: b.periods,
-        faculty: b.faculty.map(f => ({ key: f.key, name: f.name, phone: f.phone || null, external: !!f.external, role: f.role })),
-      });
-      const data = JSON.parse(JSON.stringify({
-        year,
-        blocks: result.blocks.map(keep),
-        sections: result.parse.sections.map(sec => ({ id: sec.id, name: sec.name, slots: sec.slots.map(x => ({ start: x.start, end: x.end, brk: !!x.brk })) })),
-        publishedBy: user.phone, publishedByName: user.name || user.phone, publishedAt: new Date().toISOString(),
-        fileName: fileName || "",
-      }));
-      if (JSON.stringify(data).length > 900000) throw new Error("this timetable is too large to store in one piece");
-      await setDoc(doc(db, "masterTimetables", year), data);
+      const data = await publishMaster({ year, blocks: result.blocks, sections: result.parse.sections, user, fileName: fileName || "" });
       setNotice("Year " + year + " timetable published: " + data.sections.length + " sections, " + data.blocks.length + " classes. Later uploads for other years are now checked against it.");
-      setResult(null); setFileName(""); setConfirming(false);
+      setResult(null); setFix(null); setSheetChoices([]); setFileName(""); setConfirming(false);
     } catch (err) {
       setError("Could not publish (" + err.message + "). Nothing was changed.");
     }
@@ -200,7 +220,7 @@ export default function TimetableUploadScreen({ user }) {
           The portal already knows this year's sections, subjects and faculty. Your Excel is matched against them, so it can be in any layout.
         </div>
         <div style={{ display: "flex", gap: 14, alignItems: "flex-end", flexWrap: "wrap" }}>
-          <div style={{ width: 160 }}><Sel label="Year" value={year} onChange={v => { setYear(v || "III"); setResult(null); setFileName(""); wbRef.current = null; setAnswers(NO_ANSWERS); }} options={YEARS.map(y => ({ value: y, label: "Year " + y }))} /></div>
+          <div style={{ width: 160 }}><Sel label="Year" value={year} onChange={v => { setYear(v || "III"); setResult(null); setFix(null); setSheetChoices([]); setFileName(""); wbRef.current = null; setAnswers(NO_ANSWERS); }} options={YEARS.map(y => ({ value: y, label: "Year " + y }))} /></div>
         </div>
         {yearSections.length === 0 ? (
           <div style={{ fontSize: 13, color: P.amber, background: P.amberL, borderRadius: 8, padding: "8px 12px" }}>
@@ -256,6 +276,18 @@ export default function TimetableUploadScreen({ user }) {
         {publishedErr && <div style={{ fontSize: 12.5, color: P.amber, marginTop: 10 }}>Published timetables of other years could not be loaded, so overlaps with them can't be checked yet.</div>}
         {error && <div style={{ fontSize: 13, color: P.red, background: P.redL, borderRadius: 8, padding: "8px 12px", marginTop: 10 }}>{error}</div>}
       </Card>
+
+      {sheetChoices.length > 1 && (
+        <Card style={{ margin: 0, padding: "16px 20px", borderColor: P.blue }}>
+          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>This file holds {sheetChoices.length} designed versions</div>
+          <div style={{ fontSize: 12.5, color: P.gray, marginBottom: 10 }}>Choose the one you want checked and published. The others are ignored.</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {sheetChoices.map(n => (
+              <button key={n} onClick={() => pickSheet(n)} style={{ padding: "8px 18px", borderRadius: 9, fontWeight: 700, fontSize: 14, cursor: "pointer", fontFamily: "inherit", border: "1.5px solid " + (chosenSheet === n ? P.blue : P.border), background: chosenSheet === n ? P.blue : "#fff", color: chosenSheet === n ? "#fff" : P.navy }}>{n}</button>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {notice && <div style={{ fontSize: 13.5, color: P.green, background: P.greenL, borderRadius: 10, padding: "12px 16px", fontWeight: 600 }}>{notice}</div>}
 
@@ -314,6 +346,7 @@ export default function TimetableUploadScreen({ user }) {
                 {result.conflicts.length > 0 && <Pill color={P.red} bg={P.redL}>{result.conflicts.length} overlap{result.conflicts.length === 1 ? "" : "s"} to clear</Pill>}
                 {ready && <Pill color={P.green} bg={P.greenL}>No overlaps — ready to publish</Pill>}
                 <Btn small onClick={downloadReport}>Download report (Excel)</Btn>
+                {ready && <Btn small onClick={downloadFinal}>Download final timetable (Excel)</Btn>}
                 <Btn small disabled={!ready || publishing} onClick={() => setConfirming(true)}>Publish Year {year}</Btn>
               </div>
             </div>
@@ -377,7 +410,22 @@ export default function TimetableUploadScreen({ user }) {
 
           <Card style={{ margin: 0, padding: "16px 20px" }}>
             <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Overlaps</div>
-            <div style={{ fontSize: 12.5, color: P.gray, marginBottom: 12 }}>A faculty member has two classes at overlapping times. Each one lists changes that clear it without creating a new clash. Fix them in the sheet and upload again.</div>
+            <div style={{ fontSize: 12.5, color: P.gray, marginBottom: 12 }}>A faculty member has two classes at overlapping times. Each one lists changes that clear it without creating a new clash. Either fix them in your sheet and upload again, or let the portal do it.</div>
+            {(result.conflicts.length > 0 || fix) && (
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
+                {!fix && <Btn small onClick={fixNow}>Fix these for me</Btn>}
+                {fix && <Btn small variant="outline" onClick={() => setFix(null)}>Undo the portal's changes</Btn>}
+                {!fix && <span style={{ fontSize: 12.5, color: P.gray }}>Classes are moved only to places where the faculty and the section are free. Nothing is saved until you publish.</span>}
+              </div>
+            )}
+            {fix && (
+              <div style={{ background: P.bg, border: "1px solid " + P.border, borderRadius: 10, padding: "10px 14px", marginBottom: 12 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6, color: fix.remaining.length ? P.amber : P.green }}>
+                  {fix.changes.length} change{fix.changes.length === 1 ? "" : "s"} made{fix.remaining.length ? "; " + fix.remaining.length + " overlap" + (fix.remaining.length === 1 ? "" : "s") + " could not be cleared automatically (listed below)" : ": no overlaps left"}
+                </div>
+                {fix.changes.map((t, i) => <div key={i} style={{ fontSize: 13, padding: "2px 0" }}>• {t}</div>)}
+              </div>
+            )}
             {result.conflicts.length === 0 ? (
               <div style={{ fontSize: 13.5, color: P.green }}>No overlaps found.</div>
             ) : result.conflicts.map((c, i) => (

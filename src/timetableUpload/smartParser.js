@@ -63,7 +63,7 @@ const isBreakCell = v => { const t = clean(v); return isBreakWord(t) || /^[A-Za-
 function nameTokens(raw) {
   return String(raw || "").toLowerCase().replace(/[^a-z\s]/g, " ").split(/\s+/).filter(t => t && !TITLES.has(t));
 }
-const nameKey = raw => nameTokens(raw).join(" ");
+export const nameKey = raw => nameTokens(raw).join(" ");
 const isInitial = t => t.length <= 2;
 const wordsOf = t => t.filter(x => !isInitial(x));
 const initialsOf = t => t.filter(isInitial);
@@ -229,7 +229,10 @@ export function parseSmart(wb, ctx, res) {
   const skippedTitles = [];
   let blocksFound = 0;
 
-  wb.SheetNames.forEach(sheetName => {
+  // the generated Ind-n / report sheets repeat a timetable; only the section sheets (or the ones asked for) are read
+  const GENERATED = /^(Ind-\d+|Sheet-3 Individual|Sheet-4 Overlaps|Workload Summary)$/i;
+  const sheetNames = ctx.sheets ? wb.SheetNames.filter(n => ctx.sheets.includes(n)) : wb.SheetNames.filter(n => !GENERATED.test(n));
+  sheetNames.forEach(sheetName => {
     const ws = wb.Sheets[sheetName];
     if (!ws || !ws["!ref"]) return;
     const rows = sheetRows(ws);
@@ -360,6 +363,8 @@ export function parseSmart(wb, ctx, res) {
           body = clean(body);
           const explicit = [];
           groups.forEach(g => splitNames(g).forEach(n => { if (looksLikeName(n)) explicit.push(n); }));
+          // an activity such as CRT may be taken by someone who is not in the portal: the bracket then holds their name
+          if (!explicit.length && EXTRAS.test(body) && groups.length) groups.forEach(g => splitNames(g).forEach(n => { if (!/^[A-Za-z]{0,5}[-\s]?\d+$/.test(clean(n))) explicit.push(n); }));
 
           // batch rotation: "B1-IA, B2-SL, B3-AM" are parallel labs
           let pieces, batchLabs = false;

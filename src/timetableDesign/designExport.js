@@ -16,7 +16,7 @@ export function buildDesignWorkbook(spec, versions) {
   const colourOf = subjectColours(versions.flatMap(v => v.blocks));
   versions.forEach((v, i) => {
     const n = i + 1;
-    XLSX.utils.book_append_sheet(wb, sectionSheet(v.blocks, sections, colourOf, spec.D), "TT-" + n);
+    XLSX.utils.book_append_sheet(wb, sectionSheet(v.blocks, sections, colourOf, spec.D, { batchStyle: true }), "TT-" + n);
     XLSX.utils.book_append_sheet(wb, facultySheet(v.blocks, computeWorkload(v.blocks), sections, colourOf, spec.D), "Ind-" + n);
   });
   return wb;
