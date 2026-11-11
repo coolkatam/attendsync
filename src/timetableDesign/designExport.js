@@ -22,6 +22,16 @@ export function buildDesignWorkbook(spec, versions) {
   return wb;
 }
 
+// one version on its own: just its two sheets, TT-n and Ind-n
+export function writeVersionWorkbook(spec, version, n, fileName) {
+  const wb = XLSX.utils.book_new();
+  const sections = sectionsOf(spec);
+  const colourOf = subjectColours(version.blocks);
+  XLSX.utils.book_append_sheet(wb, sectionSheet(version.blocks, sections, colourOf, spec.D, { batchStyle: true }), "TT-" + n);
+  XLSX.utils.book_append_sheet(wb, facultySheet(version.blocks, computeWorkload(version.blocks), sections, colourOf, spec.D), "Ind-" + n);
+  XLSX.writeFile(wb, fileName);
+}
+
 export function writeDesignWorkbook(spec, versions, fileName) {
   XLSX.writeFile(buildDesignWorkbook(spec, versions), fileName);
 }

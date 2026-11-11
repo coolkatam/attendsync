@@ -196,7 +196,7 @@ export default function PublishedEditor({ year, user, onBack }) {
   );
 }
 
-function BlockPanel({ b, section, slots, days, blocks, people, facObj, apply, remove }) {
+export function BlockPanel({ b, section, slots, days, blocks, people, facObj, apply, remove }) {
   const opts = startOptions(b, slots);
   const [day, setDay] = useState(b.day);
   const [start, setStart] = useState(b.start);
@@ -238,7 +238,7 @@ function BlockPanel({ b, section, slots, days, blocks, people, facObj, apply, re
         {external.length > 0 && <div style={{ fontSize: 12.5, color: P.gray, marginTop: 6 }}>From outside the portal, kept as they are: {external.map(f => f.name).join(", ")}.</div>}
         <div style={{ marginTop: 8 }}><Btn small variant="outline" onClick={() => apply(changeFaculty(blocks, b.id, list.filter(Boolean).map(facObj).filter(Boolean).concat(external)), b)}>Change faculty</Btn></div>
       </div>
-      <div style={{ marginTop: 14, borderTop: "1px solid " + P.border, paddingTop: 12 }}><Btn small variant="danger" onClick={remove}>Remove this class</Btn></div>
+      {remove && <div style={{ marginTop: 14, borderTop: "1px solid " + P.border, paddingTop: 12 }}><Btn small variant="danger" onClick={remove}>Remove this class</Btn></div>}
     </Card>
   );
 }

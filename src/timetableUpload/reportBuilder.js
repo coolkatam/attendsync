@@ -65,15 +65,6 @@ export function subjectColours(blocks) {
 
 const namesOf = b => b.faculty.map(f => f.name).join(" / ").toUpperCase();
 
-// The distinct non-break periods across every section, in time order.
-function globalColumns(sections) {
-  const cols = [];
-  sections.forEach(s => s.slots.filter(x => !x.brk).forEach(x => {
-    if (!cols.some(c => c.start === x.start && c.end === x.end)) cols.push({ start: x.start, end: x.end });
-  }));
-  return cols.sort((a, b) => a.start - b.start || a.end - b.end);
-}
-
 // Groups blocks starting together on one day (parallel labs share a cell) and gives each group the columns it spans.
 function placeBlocks(list, cols) {
   const groups = new Map();
@@ -92,40 +83,75 @@ function placeBlocks(list, cols) {
   return placed;
 }
 
+// Every distinct period and break across the sections, in time order (breaks are columns too).
+function globalSlots(sections) {
+  const cols = [];
+  sections.forEach(s => s.slots.forEach(x => {
+    if (!cols.some(c => c.start === x.start && c.end === x.end && !!c.brk === !!x.brk)) cols.push({ start: x.start, end: x.end, brk: !!x.brk, label: x.label });
+  }));
+  return cols.sort((a, b) => a.start - b.start || a.end - b.end);
+}
+const breakName = x => x.label || (x.start >= 690 ? "Lunch" : "Break");
+
 // ── Sheet-3: one green grid per faculty member ──
+// name in the middle of the top row, total workload in its right-hand corner, break and lunch as tall vertical columns
 export function facultySheet(blocks, workload, sections, colourOf, days = 6) {
   const g = new Grid();
-  const cols = globalColumns(sections);
-  const n = Math.max(cols.length, 1);
-  g.cols = [{ wch: 14 }, ...Array.from({ length: n }, () => ({ wch: 22 }))];
+  const slots = globalSlots(sections);
+  const n = Math.max(slots.length, 1);                       // columns after the Day column
+  const teach = slots.map((x, i) => ({ ...x, i })).filter(x => !x.brk);
+  g.cols = [{ wch: 14 }, ...slots.map(x => ({ wch: x.brk ? 7 : 22 }))];
+  if (!slots.length) g.cols = [{ wch: 14 }, { wch: 22 }];
   let r = 0;
   workload.forEach(w => {
     const mine = blocks.filter(b => b.type !== "note" && b.faculty.some(f => f.key === w.key));
-    g.merge(r, 0, r, n, "Faculty: " + w.name.toUpperCase() + " (Total Load: " + w.overall + " Periods)" + (w.external ? "  · from outside the portal" : ""),
-      st({ bg: GREEN, fg: WHITE, bold: true, size: 12, h: "left" }));
-    g.rows[r] = { hpt: 24 };
+    // top row: [blank] [ NAME, centred ] [ total workload ]
+    const headStyle = h => st({ bg: GREEN, fg: WHITE, bold: true, size: 12, h });
+    const rightFrom = n >= 5 ? n - 1 : n;                    // the last columns hold the workload
+    const nameTo = n >= 5 ? rightFrom - 1 : n - 1;
+    g.set(r, 0, "", headStyle("left"));
+    if (nameTo >= 1) g.merge(r, 1, r, nameTo, w.name.toUpperCase() + (w.external ? "  (outside the portal)" : ""), headStyle("center"));
+    else g.set(r, 1, w.name.toUpperCase(), headStyle("center"));
+    if (rightFrom > nameTo) g.merge(r, rightFrom, r, n, "Total load: " + w.overall + " periods", headStyle("right"));
+    g.rows[r] = { hpt: 26 };
     r++;
     g.set(r, 0, "Day", st({ bg: "2E7D4F", fg: WHITE, bold: true }));
-    cols.forEach((c, i) => g.set(r, i + 1, "P" + (i + 1) + " (" + fmtRange24(c.start, c.end) + ")", st({ bg: "2E7D4F", fg: WHITE, bold: true })));
-    g.rows[r] = { hpt: 22 };
+    let period = 0;
+    slots.forEach((x, i) => {
+      if (x.brk) g.set(r, i + 1, breakName(x), st({ bg: "8A6D1D", fg: WHITE, bold: true, size: 9 }));
+      else { period++; g.set(r, i + 1, "P" + period + " (" + fmtRange24(x.start, x.end) + ")", st({ bg: "2E7D4F", fg: WHITE, bold: true })); }
+    });
+    g.rows[r] = { hpt: 32 };
     r++;
+    const first = r;
+    slots.forEach((x, i) => {
+      if (x.brk) g.merge(first, i + 1, first + days - 1, i + 1, breakName(x).toUpperCase().split("").join(" "), st({ bg: "F1E6C4", fg: "6B4E16", bold: true, size: 11, rot: 90 }));
+    });
+    const cols = teach.map(x => ({ start: x.start, end: x.end }));
     DAY_NAMES.slice(0, days).forEach((dn, d) => {
       const zebra = d % 2 === 1 ? ZEBRA : WHITE;
       g.set(r, 0, dn, st({ bg: "E3EFE7", bold: true, h: "left" }));
-      const taken = new Array(n).fill(false);
-      placeBlocks(mine.filter(b => b.day === d), cols).forEach(p => {
-        let c2 = p.c2;
-        for (let c = p.c1; c <= p.c2; c++) if (taken[c]) { c2 = c - 1; break; }
-        if (c2 < p.c1) return;
-        for (let c = p.c1; c <= c2; c++) taken[c] = true;
-        const [bg, fg] = colourOf(p.blocks[0].token);
-        const text = p.blocks.map(b => {
+      const taken = new Set();
+      placeBlocks(mine.filter(b => b.day === d), cols).forEach(pl => {
+        const from = teach[pl.c1].i, to = teach[pl.c2].i;
+        const [bg, fg] = colourOf(pl.blocks[0].token);
+        const text = pl.blocks.map(b => {
           const me = b.faculty.find(f => f.key === w.key);
           return b.token + (me && me.role === "asst" ? " (Asst. Faculty)" : "") + "\n" + b.sectionName + (b.combo ? " (" + b.combo + ")" : "");
         }).join("\n");
-        g.merge(r, p.c1 + 1, r, c2 + 1, text, st({ bg, fg, bold: true }));
+        // a class that runs across a break is shown in two parts, one each side of the break column
+        let segStart = null;
+        for (let c = from; c <= to + 1; c++) {
+          const usable = c <= to && !slots[c].brk && !taken.has(c);
+          if (usable && segStart === null) segStart = c;
+          if (!usable && segStart !== null) {
+            for (let k = segStart; k < c; k++) taken.add(k);
+            g.merge(r, segStart + 1, r, c, text, st({ bg, fg, bold: true }));
+            segStart = null;
+          }
+        }
       });
-      for (let c = 0; c < n; c++) if (!taken[c]) g.set(r, c + 1, "-", st({ bg: zebra, fg: GREY_TXT }));
+      slots.forEach((x, c) => { if (!x.brk && !taken.has(c)) g.set(r, c + 1, "-", st({ bg: zebra, fg: GREY_TXT })); });
       g.rows[r] = { hpt: 40 };
       r++;
     });

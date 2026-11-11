@@ -15,7 +15,8 @@ import { subjectColours } from "../timetableUpload/reportBuilder";
 import { facultyListOf, guessType } from "../sections/subjectUtils";
 import { defaultAnswers, periodsOn, DAY_ABBR } from "./designModel";
 import { buildSpec, designVersions } from "./generator";
-import { writeDesignWorkbook, sectionsOf } from "./designExport";
+import { writeVersionWorkbook, sectionsOf } from "./designExport";
+import VersionEditor from "./VersionEditor";
 import { publishMaster, mergeSections } from "../timetableUpload/publishMaster";
 import { Q, StepYear, StepTimings, StepTogether, StepLimits, StepAvailability } from "./steps";
 import StepSubjects from "./StepSubjects";
@@ -113,7 +114,7 @@ function SectionGrid({ spec, blocks, sectionId, colourOf }) {
   );
 }
 
-function VersionCard({ spec, v, n, colourOf, onPublish }) {
+function VersionCard({ spec, v, n, colourOf, onPublish, onDownload, onEdit, onUndoEdits }) {
   const [sec, setSec] = useState(spec.sections[0] ? spec.sections[0].id : "");
   const load = useMemo(() => computeWorkload(v.blocks).filter(w => !w.external), [v]);
   const most = load.slice().sort((x, y) => y.teaching - x.teaching)[0];
@@ -122,9 +123,14 @@ function VersionCard({ spec, v, n, colourOf, onPublish }) {
     <Card style={{ margin: 0, padding: "16px 18px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 8 }}>
         <div style={{ fontWeight: 800, fontSize: 17 }}>Version {n} <span style={{ fontWeight: 500, fontSize: 13, color: P.gray }}>· sheets TT-{n} and Ind-{n}</span></div>
-        <Btn small onClick={onPublish}>Use and publish this version</Btn>
-        <div style={{ fontSize: 13, color: P.gray }}>{v.blocks.length} classes · no overlaps{most ? " · heaviest load " + most.name + " (" + most.teaching + " periods)" : ""}{least && least !== most ? ", lightest " + least.name + " (" + least.teaching + ")" : ""}</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Btn small variant="outline" onClick={onDownload}>Download Excel (TT-{n}, Ind-{n})</Btn>
+          <Btn small variant="outline" onClick={onEdit}>Minor changes</Btn>
+          <Btn small onClick={onPublish}>Use and publish this version</Btn>
+        </div>
+        <div style={{ fontSize: 13, color: P.gray }}>{v.edited ? <b style={{ color: P.blue }}>Changed by you · </b> : null}{v.blocks.length} classes · no overlaps{most ? " · heaviest load " + most.name + " (" + most.teaching + " periods)" : ""}{least && least !== most ? ", lightest " + least.name + " (" + least.teaching + ")" : ""}</div>
       </div>
+      {v.edited && <div style={{ fontSize: 13, marginBottom: 8 }}><span style={{ color: P.gray }}>This version has your minor changes. </span><button onClick={onUndoEdits} style={{ background: "none", border: "none", color: P.blue, fontWeight: 700, cursor: "pointer", padding: 0, fontFamily: "inherit", fontSize: 13 }}>Go back to the version as designed</button></div>}
       {v.relaxed.length > 0 ? (
         <details style={{ marginBottom: 10 }}>
           <summary style={{ fontSize: 13, color: P.amber, fontWeight: 700, cursor: "pointer" }}>{v.relaxed.length} preference{v.relaxed.length === 1 ? "" : "s"} could not be kept</summary>
@@ -147,6 +153,7 @@ export default function DesignScreen({ user, onBack }) {
   const [published, setPublished] = useState([]);
   const [year, setYear] = useState("III");
   const [a, setA] = useState(() => loadDraft(user.phone, "III"));
+  const [editN, setEditN] = useState(0);        // the version being given minor changes
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
   const [sets, setSets] = useState([]);       // each: { versions, problems, attempts, completes }
@@ -246,7 +253,7 @@ export default function DesignScreen({ user, onBack }) {
 
   function design(more) {
     if (!built || !built.spec) return;
-    setBusy(true);
+    setBusy(true); setEditN(0);
     setTimeout(() => {
       const res = designVersions(built.spec, ctx.people, { count: 3, skip: more ? sigs.current : [], timeMs: 9000 });
       res.versions.forEach(v => sigs.current.push(v.sig));
@@ -271,6 +278,14 @@ export default function DesignScreen({ user, onBack }) {
     setPubBusy(false);
   }
 
+  const versionFile = n => "Timetable design - " + (specUsed.sections.length === 1 ? specUsed.sections[0].name : "Year " + year + " (" + specUsed.sections.length + " sections)").replace(/[\\/:*?"<>|]/g, "") + " - Version " + n + ".xlsx";
+  const changeVersion = (i, fn) => setSets(prev => prev.map((st, si) => (si === showSet ? { ...st, versions: st.versions.map((v, vi) => (vi === i ? fn(v) : v)) } : st)));
+  const saveEdit = (i, blocks) => { changeVersion(i, v => ({ ...v, blocks, edited: true, orig: v.orig || v.blocks })); setEditN(0); setPubMsg({ ok: true, text: "Your minor changes to Version " + (i + 1) + " are saved. There are no overlaps. You can download or publish it." }); };
+  const undoEdits = i => { if (window.confirm("Go back to Version " + (i + 1) + " as it was designed? Your minor changes to it are lost.")) changeVersion(i, v => ({ ...v, blocks: v.orig || v.blocks, edited: false, orig: undefined })); };
+  const editOthers = () => {
+    const used = new Set(specUsed.sections.map(x => x.id));
+    return published.flatMap(pb => (pb.blocks || []).filter(b => pb.year !== year || !used.has(b.sectionId)).map(b => ({ ...b, source: "published", publishedYear: pb.year, publishedBy: pb.publishedByName || "" })));
+  };
   const current = sets[showSet];
   const alreadyPublished = published.find(p => p.year === year);
   const colourOf = current && current.versions.length ? subjectColours(current.versions.flatMap(v => v.blocks)) : null;
@@ -364,11 +379,10 @@ export default function DesignScreen({ user, onBack }) {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                   <div>
                     <div style={{ fontWeight: 800, fontSize: 16, color: P.green }}>{current.versions.length} clash-free version{current.versions.length === 1 ? "" : "s"} ready</div>
-                    <div style={{ fontSize: 13, color: P.gray, marginTop: 2 }}>The Excel file has {current.versions.length * 2} sheets: {current.versions.map((_, i) => "TT-" + (i + 1) + ", Ind-" + (i + 1)).join(", ")}. TT is every section's timetable, Ind is every faculty member's own.{current.versions.length < 3 ? " Only " + current.versions.length + " genuinely different arrangement" + (current.versions.length === 1 ? "" : "s") + " fit your rules." : ""}</div>
+                    <div style={{ fontSize: 13, color: P.gray, marginTop: 2 }}>Each version has its own Excel file with 2 sheets: TT (every section's timetable) and Ind (every faculty member's own). Use <b>Minor changes</b> on a version to adjust it on screen.{current.versions.length < 3 ? " Only " + current.versions.length + " genuinely different arrangement" + (current.versions.length === 1 ? "" : "s") + " fit your rules." : ""}</div>
                   </div>
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <Btn onClick={() => writeDesignWorkbook(specUsed, current.versions, "Timetable designs - " + (specUsed.sections.length === 1 ? specUsed.sections[0].name : "Year " + year + " (" + specUsed.sections.length + " sections)").replace(/[\\/:*?"<>|]/g, "") + (sets.length > 1 ? " (set " + (showSet + 1) + ")" : "") + ".xlsx")}>Download Excel</Btn>
-                    <Btn variant="outline" disabled={busy} onClick={() => design(true)}>Design another set</Btn>
+                    <Btn variant="outline" disabled={busy} onClick={() => design(true)}>Redesign: another set</Btn>
                   </div>
                 </div>
               </Card>
@@ -394,8 +408,14 @@ export default function DesignScreen({ user, onBack }) {
                   </div>
                 </Card>
               )}
-              {current.versions.map((v, i) => <VersionCard key={v.sig} spec={specUsed} v={v} n={i + 1} colourOf={colourOf} onPublish={() => { setPubMsg({ ok: true, text: "" }); setConfirmN(i + 1); }} />)}
-              <div style={{ fontSize: 13, color: P.gray, lineHeight: 1.6 }}>Happy with one? Publish it. To change something first, download the Excel, edit that version's TT sheet, then go back and choose <b>Upload a timetable</b>: it asks which version to read, shows any overlaps your edits cause, can fix them for you, and then publishes.</div>
+              {current.versions.map((v, i) => editN === i + 1
+                ? <VersionEditor key={v.sig + ":edit"} spec={specUsed} n={i + 1} blocks={v.blocks} others={editOthers()} people={ctx.people} colourOf={colourOf} onSave={blocks => saveEdit(i, blocks)} onCancel={() => setEditN(0)} />
+                : <VersionCard key={v.sig} spec={specUsed} v={v} n={i + 1} colourOf={colourOf}
+                    onPublish={() => { setPubMsg({ ok: true, text: "" }); setConfirmN(i + 1); }}
+                    onDownload={() => writeVersionWorkbook(specUsed, v, i + 1, versionFile(i + 1))}
+                    onEdit={() => { setPubMsg({ ok: true, text: "" }); setEditN(i + 1); }}
+                    onUndoEdits={() => undoEdits(i)} />)}
+              <div style={{ fontSize: 13, color: P.gray, lineHeight: 1.6 }}>Happy with one? Publish it. To change something first, press <b>Minor changes</b> on that version: edit it on screen, and every change is checked for overlaps before it is kept. You can also edit the downloaded Excel yourself and bring it back through <b>Upload a timetable</b>.</div>
             </>
           )}
         </>

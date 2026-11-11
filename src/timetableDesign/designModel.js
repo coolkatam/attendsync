@@ -25,6 +25,7 @@ export function defaultAnswers() {
     labBlock: 3,             // periods in one lab session
     labPref: "any",          // any | morning | afternoon
     repeatSameDay: false,    // may the same subject appear twice in a day for a section
+    labsOverlap: true,       // may labs of different sections run at the same time
     labOnceADay: true,       // at most one lab/drawing session a day for a section
     loads: {},               // subject name -> { periods, block, avoidFirst, avoidLast, perSection: { [sectionId]: n } }
     parallel: [],            // [[subjectName, ...]] lab subjects that run together as batches

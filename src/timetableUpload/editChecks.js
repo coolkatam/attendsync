@@ -80,7 +80,8 @@ export function addBlock(blocks, section, day, start, item) {
 }
 
 // is the changed timetable allowed? published = blocks of OTHER years' published timetables
-export function checkEdit(blocks, editedIds, published) {
+// opts.noLabOverlap: labs of different sections may not be at the same time
+export function checkEdit(blocks, editedIds, published, opts = {}) {
   const tagged = blocks.map(b => ({ ...b, source: "upload" }));
   const facultyClashes = detectOverlaps(tagged, published)
     .filter(c => editedIds.includes(c.a.id) || editedIds.includes(c.b.id))
@@ -96,7 +97,17 @@ export function checkEdit(blocks, editedIds, published) {
       && !(x.start === b.start && x.end === b.end && LABISH.includes(x.type) && LABISH.includes(b.type)));
     if (o) sectionClashes.push({ text: b.sectionName + " would have two classes at once on " + DAY_NAMES[b.day] + ": " + b.token + " and " + o.token + " (" + fmtRange(Math.max(b.start, o.start), Math.min(b.end, o.end)) + ")." });
   });
-  const problems = facultyClashes.concat(sectionClashes);
+  const labClashes = [];
+  if (opts.noLabOverlap) {
+    editedIds.forEach(id => {
+      const b = blocks.find(x => x.id === id);
+      if (!b || !LABISH.includes(b.type)) return;
+      const o = blocks.find(x => x.id !== id && x.sectionId !== b.sectionId && LABISH.includes(x.type) && x.day === b.day && x.start < b.end && b.start < x.end && !(x.combo && x.combo === b.combo))
+        || (published || []).find(x => LABISH.includes(x.type) && x.day === b.day && x.start < b.end && b.start < x.end && (!opts.year || !x.publishedYear || x.publishedYear === opts.year));
+      if (o) labClashes.push({ text: "You chose that labs of different sections may not overlap, but " + b.sectionName + " " + b.token + " would be at the same time as " + o.sectionName + " " + o.token + " on " + DAY_NAMES[b.day] + "." });
+    });
+  }
+  const problems = facultyClashes.concat(sectionClashes, labClashes);
   return { ok: problems.length === 0, problems };
 }
 

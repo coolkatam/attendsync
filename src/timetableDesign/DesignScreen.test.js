@@ -62,7 +62,8 @@ test("a coordinator can answer the questions and get versions", async () => {
   await screen.findByText("Before I design");
   fireEvent.click(screen.getByText("Design the timetables"));
   await waitFor(() => expect(screen.getByText(/clash-free version/)).toBeTruthy(), { timeout: 15000 });
-  expect(screen.getByText("Download Excel")).toBeTruthy();
+  expect(screen.getAllByText(/Download Excel \(TT-/).length).toBeGreaterThan(0);
+  expect(screen.getAllByText("Minor changes").length).toBeGreaterThan(0);
   expect(screen.getByText("Version 1")).toBeTruthy();
 }, 30000);
 

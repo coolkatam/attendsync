@@ -203,8 +203,12 @@ export function buildSpec({ year, a, sections, people, published = [] }) {
     (pubUnits[f.key] = pubUnits[f.key] || P.map(() => [])); pubUnits[f.key][b.day].push({ cells, teaching: b.type !== "other", size: b.periods || Math.max(1, cells.length), type: b.type, pub: true });
   }));
 
+  // labs already published for other sections of this year: only matters when labs may not overlap
+  const pubLabs = P.map(() => []);
+  published.forEach(b => { if ((b.type === "lab" || b.type === "drawing") && b.day < D && (!b.publishedYear || b.publishedYear === year)) pubLabs[b.day].push([b.start, b.end]); });
+
   const spec = {
-    year, a, timings, D, P, units, dayCap, blocked, pubBusy, pubUnits,
+    year, a, timings, D, P, units, dayCap, blocked, pubBusy, pubUnits, pubLabs,
     sections: sections.map(s => ({ id: s.id, name: s.name })),
     publishedBlocks: published,
     limits: { maxTotal, maxTheory, maxLab, maxRun },
@@ -302,7 +306,9 @@ class Plan {
     spec.sections.forEach(x => { this.sec[x.id] = this.P.map(n => new Array(n).fill(null)); this.secDay[x.id] = this.P.map(() => new Set()); });
     this.fac = {}; this.facDay = {};
     this.pos = new Map();
+    this.labAt = this.P.map(n => Array.from({ length: n }, () => new Set()));
   }
+  isLab(u) { return u.type === "lab" || u.type === "drawing"; }
   facRow(key) {
     if (!this.fac[key]) { this.fac[key] = this.P.map(n => new Array(n).fill(null)); this.facDay[key] = this.P.map(() => new Set()); }
     return this.fac[key];
@@ -318,6 +324,10 @@ class Plan {
     const k = u.size, start = this.per[p].start, end = this.per[p + k - 1].end;
     const out = new Set();
     for (const sid of u.sectionIds) for (let q = p; q < p + k; q++) { const o = this.sec[sid][d][q]; if (o && o !== u) out.add(o); }
+    if (this.s.a.labsOverlap === false && this.isLab(u)) {
+      if ((this.s.pubLabs[d] || []).some(([x, y]) => x < end && start < y)) return null;
+      for (let q = p; q < p + k; q++) this.labAt[d][q].forEach(o => { if (o !== u && !u.sectionIds.every(s => o.sectionIds.includes(s))) out.add(o); });
+    }
     for (const key of u.facs) {
       const bl = this.s.blocked[key];
       if (bl) for (let q = p; q < p + k; q++) if (bl[d][q]) return null;
@@ -405,6 +415,7 @@ class Plan {
   place(u, d, p) {
     for (const sid of u.sectionIds) { for (let q = p; q < p + u.size; q++) this.sec[sid][d][q] = u; this.secDay[sid][d].add(u); }
     for (const key of u.facs) { const row = this.facRow(key)[d]; for (let q = p; q < p + u.size; q++) row[q] = u; this.facDay[key][d].add(u); }
+    if (this.isLab(u)) for (let q = p; q < p + u.size; q++) this.labAt[d][q].add(u);
     this.pos.set(u, { d, p });
   }
   unplace(u) {
@@ -413,6 +424,7 @@ class Plan {
     const { d, p } = at;
     for (const sid of u.sectionIds) { for (let q = p; q < p + u.size; q++) this.sec[sid][d][q] = null; this.secDay[sid][d].delete(u); }
     for (const key of u.facs) { const row = this.fac[key][d]; for (let q = p; q < p + u.size; q++) row[q] = null; this.facDay[key][d].delete(u); }
+    if (this.isLab(u)) for (let q = p; q < p + u.size; q++) this.labAt[d][q].delete(u);
     this.pos.delete(u);
   }
   positions(u) {
@@ -450,13 +462,18 @@ class Plan {
   }
   // why a unit has nowhere to go, in plain words
   why(u) {
-    const reasons = { section: 0, faculty: 0, away: 0, limit: 0 };
+    const reasons = { section: 0, faculty: 0, away: 0, limit: 0, labs: 0 };
     let who = null;
     for (const [d, p] of this.positions(u)) {
       const k = u.size, start = this.per[p].start, end = this.per[p + k - 1].end;
       let secBusy = false;
       for (const sid of u.sectionIds) for (let q = p; q < p + k; q++) if (this.sec[sid][d][q]) secBusy = true;
       if (secBusy) { reasons.section++; continue; }
+      if (this.s.a.labsOverlap === false && this.isLab(u)) {
+        let other = (this.s.pubLabs[d] || []).some(([x, y]) => x < end && start < y);
+        for (let q = p; q < p + k; q++) this.labAt[d][q].forEach(o => { if (o !== u) other = true; });
+        if (other) { reasons.labs++; continue; }
+      }
       let away = false, busy = false;
       for (const key of u.facs) {
         const bl = this.s.blocked[key];
@@ -583,6 +600,18 @@ export function verify(spec, blocks) {
     });
     Object.keys(labDays).forEach(k => { if (labDays[k].size > 1) { const [sid, d] = k.split("|"); const nm = (blocks.find(b => b.sectionId === sid) || {}).sectionName || sid; issues.push(nm + " has more than one lab session on " + DAY_LONG[Number(d)] + "."); } });
   }
+  if (spec.a.labsOverlap === false) {
+    const labs = blocks.filter(b => b.type === "lab" || b.type === "drawing");
+    for (let i = 0; i < labs.length; i++) {
+      for (let j = i + 1; j < labs.length; j++) {
+        const x = labs[i], y = labs[j];
+        if (x.sectionId === y.sectionId || x.day !== y.day || !(x.start < y.end && y.start < x.end)) continue;
+        if (x.combo && x.combo === y.combo) continue;
+        issues.push("Labs of " + x.sectionName + " (" + x.token + ") and " + y.sectionName + " (" + y.token + ") are at the same time on " + DAY_LONG[x.day] + ".");
+      }
+    }
+    labs.forEach(x => { if ((spec.pubLabs[x.day] || []).some(([s, e]) => s < x.end && x.start < e)) issues.push(x.sectionName + " " + x.token + " is at the same time as a lab already published for another section, on " + DAY_LONG[x.day] + "."); });
+  }
   const touched = new Set(Object.keys(per));
   const pubDone = new Set();
   spec.publishedBlocks.forEach(b => (b.faculty || []).forEach(f => {
@@ -620,13 +649,14 @@ function explain(spec, plan, unplaced, people) {
   return unplaced.slice(0, 12).map(u => {
     const b = u.blocks[0];
     const { reasons, who } = plan.why(u);
-    const total = reasons.section + reasons.faculty + reasons.away + reasons.limit;
+    const total = reasons.section + reasons.faculty + reasons.away + reasons.limit + reasons.labs;
     let why = "";
     if (total === 0) why = "no place has " + u.size + " free back-to-back period" + (u.size === 1 ? "" : "s") + " in a row";
     else {
       const top = Object.entries(reasons).sort((x, y) => y[1] - x[1])[0][0];
       const person = who ? (nameOf.get(who) || who) : "a faculty member";
-      why = top === "section" ? "the section's periods are already full where " + person + " could take it"
+      why = top === "labs" ? "you chose that labs of different sections may not run at the same time, and another section's lab is in every period that is free here"
+        : top === "section" ? "the section's periods are already full where " + person + " could take it"
         : top === "faculty" ? person + " is already teaching in every period that is free for the section"
         : top === "away" ? person + " is unavailable, or busy in another year's published timetable, in every period that is free"
         : "every free period would break a daily limit (theory, lab, total or back-to-back) for " + person;

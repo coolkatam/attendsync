@@ -227,6 +227,12 @@ export default function StepSubjects({ a, set, ctx, calc }) {
       <Q title="Labs and drawing">
         <Check checked={a.labOnceADay !== false} onChange={v => set({ labOnceADay: v })}>One lab session a day for a section (labs that run together as batches count as one)</Check>
         <Check checked={a.labAcrossBreak} onChange={v => set({ labAcrossBreak: v })}>A lab session may continue across a break</Check>
+        <div style={{ marginTop: 10 }}>
+          <span style={lbl}>Can labs of different sections run at the same time?</span>
+          <Radio checked={a.labsOverlap !== false} onChange={() => set({ labsOverlap: true })}>Yes, labs of different sections may overlap (each section has its own lab or batches)</Radio>
+          <Radio checked={a.labsOverlap === false} onChange={() => set({ labsOverlap: false })}>No, only one section has a lab at any time (the labs are shared)</Radio>
+          {a.labsOverlap === false && ctx.yearSections.length < 2 && <div style={{ ...small, marginTop: 4 }}>With one section chosen this only matters against labs already published for the year's other sections.</div>}
+        </div>
         <div style={{ marginTop: 8 }}><span style={lbl}>Preferred time for labs</span>
           <select value={a.labPref} onChange={e => set({ labPref: e.target.value })} style={{ ...inp, width: 220 }}>
             <option value="any">No preference</option><option value="morning">Morning</option><option value="afternoon">Afternoon</option>

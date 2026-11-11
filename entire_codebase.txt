@@ -18861,7 +18861,11 @@ service firebase.storage {
       "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_tests.js\")",
       "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_ui2.js\")",
       "Bash(npm run *)",
-      "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File bundle_codebase.ps1)"
+      "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File bundle_codebase.ps1)",
+      "Bash(git commit -q -m 'Timetable design: one combined total in one place, plain app colours, warning when a section'\\\\''s year looks wrong, clearer lab session note *)",
+      "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_labs.js\")",
+      "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_ind.js\")",
+      "Bash(git commit -q -m 'Timetable design: ask whether labs of different sections may overlap, per-version Excel download, minor changes editor with overlap checks, break columns and centred name in individual timetables *)"
     ]
   }
 }
@@ -43267,6 +43271,16 @@ export function buildDesignWorkbook(spec, versions) {
   return wb;
 }
 
+// one version on its own: just its two sheets, TT-n and Ind-n
+export function writeVersionWorkbook(spec, version, n, fileName) {
+  const wb = XLSX.utils.book_new();
+  const sections = sectionsOf(spec);
+  const colourOf = subjectColours(version.blocks);
+  XLSX.utils.book_append_sheet(wb, sectionSheet(version.blocks, sections, colourOf, spec.D, { batchStyle: true }), "TT-" + n);
+  XLSX.utils.book_append_sheet(wb, facultySheet(version.blocks, computeWorkload(version.blocks), sections, colourOf, spec.D), "Ind-" + n);
+  XLSX.writeFile(wb, fileName);
+}
+
 export function writeDesignWorkbook(spec, versions, fileName) {
   XLSX.writeFile(buildDesignWorkbook(spec, versions), fileName);
 }
@@ -43304,6 +43318,7 @@ export function defaultAnswers() {
     labBlock: 3,             // periods in one lab session
     labPref: "any",          // any | morning | afternoon
     repeatSameDay: false,    // may the same subject appear twice in a day for a section
+    labsOverlap: true,       // may labs of different sections run at the same time
     labOnceADay: true,       // at most one lab/drawing session a day for a section
     loads: {},               // subject name -> { periods, block, avoidFirst, avoidLast, perSection: { [sectionId]: n } }
     parallel: [],            // [[subjectName, ...]] lab subjects that run together as batches
@@ -43427,7 +43442,8 @@ import { subjectColours } from "../timetableUpload/reportBuilder";
 import { facultyListOf, guessType } from "../sections/subjectUtils";
 import { defaultAnswers, periodsOn, DAY_ABBR } from "./designModel";
 import { buildSpec, designVersions } from "./generator";
-import { writeDesignWorkbook, sectionsOf } from "./designExport";
+import { writeVersionWorkbook, sectionsOf } from "./designExport";
+import VersionEditor from "./VersionEditor";
 import { publishMaster, mergeSections } from "../timetableUpload/publishMaster";
 import { Q, StepYear, StepTimings, StepTogether, StepLimits, StepAvailability } from "./steps";
 import StepSubjects from "./StepSubjects";
@@ -43525,7 +43541,7 @@ function SectionGrid({ spec, blocks, sectionId, colourOf }) {
   );
 }
 
-function VersionCard({ spec, v, n, colourOf, onPublish }) {
+function VersionCard({ spec, v, n, colourOf, onPublish, onDownload, onEdit, onUndoEdits }) {
   const [sec, setSec] = useState(spec.sections[0] ? spec.sections[0].id : "");
   const load = useMemo(() => computeWorkload(v.blocks).filter(w => !w.external), [v]);
   const most = load.slice().sort((x, y) => y.teaching - x.teaching)[0];
@@ -43534,9 +43550,14 @@ function VersionCard({ spec, v, n, colourOf, onPublish }) {
     <Card style={{ margin: 0, padding: "16px 18px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 8 }}>
         <div style={{ fontWeight: 800, fontSize: 17 }}>Version {n} <span style={{ fontWeight: 500, fontSize: 13, color: P.gray }}>· sheets TT-{n} and Ind-{n}</span></div>
-        <Btn small onClick={onPublish}>Use and publish this version</Btn>
-        <div style={{ fontSize: 13, color: P.gray }}>{v.blocks.length} classes · no overlaps{most ? " · heaviest load " + most.name + " (" + most.teaching + " periods)" : ""}{least && least !== most ? ", lightest " + least.name + " (" + least.teaching + ")" : ""}</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Btn small variant="outline" onClick={onDownload}>Download Excel (TT-{n}, Ind-{n})</Btn>
+          <Btn small variant="outline" onClick={onEdit}>Minor changes</Btn>
+          <Btn small onClick={onPublish}>Use and publish this version</Btn>
+        </div>
+        <div style={{ fontSize: 13, color: P.gray }}>{v.edited ? <b style={{ color: P.blue }}>Changed by you · </b> : null}{v.blocks.length} classes · no overlaps{most ? " · heaviest load " + most.name + " (" + most.teaching + " periods)" : ""}{least && least !== most ? ", lightest " + least.name + " (" + least.teaching + ")" : ""}</div>
       </div>
+      {v.edited && <div style={{ fontSize: 13, marginBottom: 8 }}><span style={{ color: P.gray }}>This version has your minor changes. </span><button onClick={onUndoEdits} style={{ background: "none", border: "none", color: P.blue, fontWeight: 700, cursor: "pointer", padding: 0, fontFamily: "inherit", fontSize: 13 }}>Go back to the version as designed</button></div>}
       {v.relaxed.length > 0 ? (
         <details style={{ marginBottom: 10 }}>
           <summary style={{ fontSize: 13, color: P.amber, fontWeight: 700, cursor: "pointer" }}>{v.relaxed.length} preference{v.relaxed.length === 1 ? "" : "s"} could not be kept</summary>
@@ -43559,6 +43580,7 @@ export default function DesignScreen({ user, onBack }) {
   const [published, setPublished] = useState([]);
   const [year, setYear] = useState("III");
   const [a, setA] = useState(() => loadDraft(user.phone, "III"));
+  const [editN, setEditN] = useState(0);        // the version being given minor changes
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
   const [sets, setSets] = useState([]);       // each: { versions, problems, attempts, completes }
@@ -43658,7 +43680,7 @@ export default function DesignScreen({ user, onBack }) {
 
   function design(more) {
     if (!built || !built.spec) return;
-    setBusy(true);
+    setBusy(true); setEditN(0);
     setTimeout(() => {
       const res = designVersions(built.spec, ctx.people, { count: 3, skip: more ? sigs.current : [], timeMs: 9000 });
       res.versions.forEach(v => sigs.current.push(v.sig));
@@ -43683,6 +43705,14 @@ export default function DesignScreen({ user, onBack }) {
     setPubBusy(false);
   }
 
+  const versionFile = n => "Timetable design - " + (specUsed.sections.length === 1 ? specUsed.sections[0].name : "Year " + year + " (" + specUsed.sections.length + " sections)").replace(/[\\/:*?"<>|]/g, "") + " - Version " + n + ".xlsx";
+  const changeVersion = (i, fn) => setSets(prev => prev.map((st, si) => (si === showSet ? { ...st, versions: st.versions.map((v, vi) => (vi === i ? fn(v) : v)) } : st)));
+  const saveEdit = (i, blocks) => { changeVersion(i, v => ({ ...v, blocks, edited: true, orig: v.orig || v.blocks })); setEditN(0); setPubMsg({ ok: true, text: "Your minor changes to Version " + (i + 1) + " are saved. There are no overlaps. You can download or publish it." }); };
+  const undoEdits = i => { if (window.confirm("Go back to Version " + (i + 1) + " as it was designed? Your minor changes to it are lost.")) changeVersion(i, v => ({ ...v, blocks: v.orig || v.blocks, edited: false, orig: undefined })); };
+  const editOthers = () => {
+    const used = new Set(specUsed.sections.map(x => x.id));
+    return published.flatMap(pb => (pb.blocks || []).filter(b => pb.year !== year || !used.has(b.sectionId)).map(b => ({ ...b, source: "published", publishedYear: pb.year, publishedBy: pb.publishedByName || "" })));
+  };
   const current = sets[showSet];
   const alreadyPublished = published.find(p => p.year === year);
   const colourOf = current && current.versions.length ? subjectColours(current.versions.flatMap(v => v.blocks)) : null;
@@ -43776,11 +43806,10 @@ export default function DesignScreen({ user, onBack }) {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                   <div>
                     <div style={{ fontWeight: 800, fontSize: 16, color: P.green }}>{current.versions.length} clash-free version{current.versions.length === 1 ? "" : "s"} ready</div>
-                    <div style={{ fontSize: 13, color: P.gray, marginTop: 2 }}>The Excel file has {current.versions.length * 2} sheets: {current.versions.map((_, i) => "TT-" + (i + 1) + ", Ind-" + (i + 1)).join(", ")}. TT is every section's timetable, Ind is every faculty member's own.{current.versions.length < 3 ? " Only " + current.versions.length + " genuinely different arrangement" + (current.versions.length === 1 ? "" : "s") + " fit your rules." : ""}</div>
+                    <div style={{ fontSize: 13, color: P.gray, marginTop: 2 }}>Each version has its own Excel file with 2 sheets: TT (every section's timetable) and Ind (every faculty member's own). Use <b>Minor changes</b> on a version to adjust it on screen.{current.versions.length < 3 ? " Only " + current.versions.length + " genuinely different arrangement" + (current.versions.length === 1 ? "" : "s") + " fit your rules." : ""}</div>
                   </div>
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <Btn onClick={() => writeDesignWorkbook(specUsed, current.versions, "Timetable designs - " + (specUsed.sections.length === 1 ? specUsed.sections[0].name : "Year " + year + " (" + specUsed.sections.length + " sections)").replace(/[\\/:*?"<>|]/g, "") + (sets.length > 1 ? " (set " + (showSet + 1) + ")" : "") + ".xlsx")}>Download Excel</Btn>
-                    <Btn variant="outline" disabled={busy} onClick={() => design(true)}>Design another set</Btn>
+                    <Btn variant="outline" disabled={busy} onClick={() => design(true)}>Redesign: another set</Btn>
                   </div>
                 </div>
               </Card>
@@ -43806,8 +43835,14 @@ export default function DesignScreen({ user, onBack }) {
                   </div>
                 </Card>
               )}
-              {current.versions.map((v, i) => <VersionCard key={v.sig} spec={specUsed} v={v} n={i + 1} colourOf={colourOf} onPublish={() => { setPubMsg({ ok: true, text: "" }); setConfirmN(i + 1); }} />)}
-              <div style={{ fontSize: 13, color: P.gray, lineHeight: 1.6 }}>Happy with one? Publish it. To change something first, download the Excel, edit that version's TT sheet, then go back and choose <b>Upload a timetable</b>: it asks which version to read, shows any overlaps your edits cause, can fix them for you, and then publishes.</div>
+              {current.versions.map((v, i) => editN === i + 1
+                ? <VersionEditor key={v.sig + ":edit"} spec={specUsed} n={i + 1} blocks={v.blocks} others={editOthers()} people={ctx.people} colourOf={colourOf} onSave={blocks => saveEdit(i, blocks)} onCancel={() => setEditN(0)} />
+                : <VersionCard key={v.sig} spec={specUsed} v={v} n={i + 1} colourOf={colourOf}
+                    onPublish={() => { setPubMsg({ ok: true, text: "" }); setConfirmN(i + 1); }}
+                    onDownload={() => writeVersionWorkbook(specUsed, v, i + 1, versionFile(i + 1))}
+                    onEdit={() => { setPubMsg({ ok: true, text: "" }); setEditN(i + 1); }}
+                    onUndoEdits={() => undoEdits(i)} />)}
+              <div style={{ fontSize: 13, color: P.gray, lineHeight: 1.6 }}>Happy with one? Publish it. To change something first, press <b>Minor changes</b> on that version: edit it on screen, and every change is checked for overlaps before it is kept. You can also edit the downloaded Excel yourself and bring it back through <b>Upload a timetable</b>.</div>
             </>
           )}
         </>
@@ -43886,7 +43921,8 @@ test("a coordinator can answer the questions and get versions", async () => {
   await screen.findByText("Before I design");
   fireEvent.click(screen.getByText("Design the timetables"));
   await waitFor(() => expect(screen.getByText(/clash-free version/)).toBeTruthy(), { timeout: 15000 });
-  expect(screen.getByText("Download Excel")).toBeTruthy();
+  expect(screen.getAllByText(/Download Excel \(TT-/).length).toBeGreaterThan(0);
+  expect(screen.getAllByText("Minor changes").length).toBeGreaterThan(0);
   expect(screen.getByText("Version 1")).toBeTruthy();
 }, 30000);
 
@@ -44203,8 +44239,12 @@ export function buildSpec({ year, a, sections, people, published = [] }) {
     (pubUnits[f.key] = pubUnits[f.key] || P.map(() => [])); pubUnits[f.key][b.day].push({ cells, teaching: b.type !== "other", size: b.periods || Math.max(1, cells.length), type: b.type, pub: true });
   }));
 
+  // labs already published for other sections of this year: only matters when labs may not overlap
+  const pubLabs = P.map(() => []);
+  published.forEach(b => { if ((b.type === "lab" || b.type === "drawing") && b.day < D && (!b.publishedYear || b.publishedYear === year)) pubLabs[b.day].push([b.start, b.end]); });
+
   const spec = {
-    year, a, timings, D, P, units, dayCap, blocked, pubBusy, pubUnits,
+    year, a, timings, D, P, units, dayCap, blocked, pubBusy, pubUnits, pubLabs,
     sections: sections.map(s => ({ id: s.id, name: s.name })),
     publishedBlocks: published,
     limits: { maxTotal, maxTheory, maxLab, maxRun },
@@ -44302,7 +44342,9 @@ class Plan {
     spec.sections.forEach(x => { this.sec[x.id] = this.P.map(n => new Array(n).fill(null)); this.secDay[x.id] = this.P.map(() => new Set()); });
     this.fac = {}; this.facDay = {};
     this.pos = new Map();
+    this.labAt = this.P.map(n => Array.from({ length: n }, () => new Set()));
   }
+  isLab(u) { return u.type === "lab" || u.type === "drawing"; }
   facRow(key) {
     if (!this.fac[key]) { this.fac[key] = this.P.map(n => new Array(n).fill(null)); this.facDay[key] = this.P.map(() => new Set()); }
     return this.fac[key];
@@ -44318,6 +44360,10 @@ class Plan {
     const k = u.size, start = this.per[p].start, end = this.per[p + k - 1].end;
     const out = new Set();
     for (const sid of u.sectionIds) for (let q = p; q < p + k; q++) { const o = this.sec[sid][d][q]; if (o && o !== u) out.add(o); }
+    if (this.s.a.labsOverlap === false && this.isLab(u)) {
+      if ((this.s.pubLabs[d] || []).some(([x, y]) => x < end && start < y)) return null;
+      for (let q = p; q < p + k; q++) this.labAt[d][q].forEach(o => { if (o !== u && !u.sectionIds.every(s => o.sectionIds.includes(s))) out.add(o); });
+    }
     for (const key of u.facs) {
       const bl = this.s.blocked[key];
       if (bl) for (let q = p; q < p + k; q++) if (bl[d][q]) return null;
@@ -44405,6 +44451,7 @@ class Plan {
   place(u, d, p) {
     for (const sid of u.sectionIds) { for (let q = p; q < p + u.size; q++) this.sec[sid][d][q] = u; this.secDay[sid][d].add(u); }
     for (const key of u.facs) { const row = this.facRow(key)[d]; for (let q = p; q < p + u.size; q++) row[q] = u; this.facDay[key][d].add(u); }
+    if (this.isLab(u)) for (let q = p; q < p + u.size; q++) this.labAt[d][q].add(u);
     this.pos.set(u, { d, p });
   }
   unplace(u) {
@@ -44413,6 +44460,7 @@ class Plan {
     const { d, p } = at;
     for (const sid of u.sectionIds) { for (let q = p; q < p + u.size; q++) this.sec[sid][d][q] = null; this.secDay[sid][d].delete(u); }
     for (const key of u.facs) { const row = this.fac[key][d]; for (let q = p; q < p + u.size; q++) row[q] = null; this.facDay[key][d].delete(u); }
+    if (this.isLab(u)) for (let q = p; q < p + u.size; q++) this.labAt[d][q].delete(u);
     this.pos.delete(u);
   }
   positions(u) {
@@ -44450,13 +44498,18 @@ class Plan {
   }
   // why a unit has nowhere to go, in plain words
   why(u) {
-    const reasons = { section: 0, faculty: 0, away: 0, limit: 0 };
+    const reasons = { section: 0, faculty: 0, away: 0, limit: 0, labs: 0 };
     let who = null;
     for (const [d, p] of this.positions(u)) {
       const k = u.size, start = this.per[p].start, end = this.per[p + k - 1].end;
       let secBusy = false;
       for (const sid of u.sectionIds) for (let q = p; q < p + k; q++) if (this.sec[sid][d][q]) secBusy = true;
       if (secBusy) { reasons.section++; continue; }
+      if (this.s.a.labsOverlap === false && this.isLab(u)) {
+        let other = (this.s.pubLabs[d] || []).some(([x, y]) => x < end && start < y);
+        for (let q = p; q < p + k; q++) this.labAt[d][q].forEach(o => { if (o !== u) other = true; });
+        if (other) { reasons.labs++; continue; }
+      }
       let away = false, busy = false;
       for (const key of u.facs) {
         const bl = this.s.blocked[key];
@@ -44583,6 +44636,18 @@ export function verify(spec, blocks) {
     });
     Object.keys(labDays).forEach(k => { if (labDays[k].size > 1) { const [sid, d] = k.split("|"); const nm = (blocks.find(b => b.sectionId === sid) || {}).sectionName || sid; issues.push(nm + " has more than one lab session on " + DAY_LONG[Number(d)] + "."); } });
   }
+  if (spec.a.labsOverlap === false) {
+    const labs = blocks.filter(b => b.type === "lab" || b.type === "drawing");
+    for (let i = 0; i < labs.length; i++) {
+      for (let j = i + 1; j < labs.length; j++) {
+        const x = labs[i], y = labs[j];
+        if (x.sectionId === y.sectionId || x.day !== y.day || !(x.start < y.end && y.start < x.end)) continue;
+        if (x.combo && x.combo === y.combo) continue;
+        issues.push("Labs of " + x.sectionName + " (" + x.token + ") and " + y.sectionName + " (" + y.token + ") are at the same time on " + DAY_LONG[x.day] + ".");
+      }
+    }
+    labs.forEach(x => { if ((spec.pubLabs[x.day] || []).some(([s, e]) => s < x.end && x.start < e)) issues.push(x.sectionName + " " + x.token + " is at the same time as a lab already published for another section, on " + DAY_LONG[x.day] + "."); });
+  }
   const touched = new Set(Object.keys(per));
   const pubDone = new Set();
   spec.publishedBlocks.forEach(b => (b.faculty || []).forEach(f => {
@@ -44620,13 +44685,14 @@ function explain(spec, plan, unplaced, people) {
   return unplaced.slice(0, 12).map(u => {
     const b = u.blocks[0];
     const { reasons, who } = plan.why(u);
-    const total = reasons.section + reasons.faculty + reasons.away + reasons.limit;
+    const total = reasons.section + reasons.faculty + reasons.away + reasons.limit + reasons.labs;
     let why = "";
     if (total === 0) why = "no place has " + u.size + " free back-to-back period" + (u.size === 1 ? "" : "s") + " in a row";
     else {
       const top = Object.entries(reasons).sort((x, y) => y[1] - x[1])[0][0];
       const person = who ? (nameOf.get(who) || who) : "a faculty member";
-      why = top === "section" ? "the section's periods are already full where " + person + " could take it"
+      why = top === "labs" ? "you chose that labs of different sections may not run at the same time, and another section's lab is in every period that is free here"
+        : top === "section" ? "the section's periods are already full where " + person + " could take it"
         : top === "faculty" ? person + " is already teaching in every period that is free for the section"
         : top === "away" ? person + " is unavailable, or busy in another year's published timetable, in every period that is free"
         : "every free period would break a daily limit (theory, lab, total or back-to-back) for " + person;
@@ -45709,6 +45775,12 @@ export default function StepSubjects({ a, set, ctx, calc }) {
       <Q title="Labs and drawing">
         <Check checked={a.labOnceADay !== false} onChange={v => set({ labOnceADay: v })}>One lab session a day for a section (labs that run together as batches count as one)</Check>
         <Check checked={a.labAcrossBreak} onChange={v => set({ labAcrossBreak: v })}>A lab session may continue across a break</Check>
+        <div style={{ marginTop: 10 }}>
+          <span style={lbl}>Can labs of different sections run at the same time?</span>
+          <Radio checked={a.labsOverlap !== false} onChange={() => set({ labsOverlap: true })}>Yes, labs of different sections may overlap (each section has its own lab or batches)</Radio>
+          <Radio checked={a.labsOverlap === false} onChange={() => set({ labsOverlap: false })}>No, only one section has a lab at any time (the labs are shared)</Radio>
+          {a.labsOverlap === false && ctx.yearSections.length < 2 && <div style={{ ...small, marginTop: 4 }}>With one section chosen this only matters against labs already published for the year's other sections.</div>}
+        </div>
         <div style={{ marginTop: 8 }}><span style={lbl}>Preferred time for labs</span>
           <select value={a.labPref} onChange={e => set({ labPref: e.target.value })} style={{ ...inp, width: 220 }}>
             <option value="any">No preference</option><option value="morning">Morning</option><option value="afternoon">Afternoon</option>
@@ -45724,6 +45796,261 @@ export default function StepSubjects({ a, set, ctx, calc }) {
 
 
 === END_FILE: .\src\timetableDesign\StepSubjects.jsx ===
+
+
+=== START_FILE: .\src\timetableDesign\VersionEditor.jsx ===
+
+// src/timetableDesign/VersionEditor.jsx
+// Minor changes to one designed version: every section's timetable as an editable grid. Click a class to move it,
+// swap it with another class of the same section, or change its faculty. Each change is checked for overlaps first
+// (faculty, section, other published timetables, and labs of different sections when those may not overlap); one that
+// would clash is not made. Nothing is kept until "Save changes".
+
+import React, { useState } from "react";
+import { P, Btn, Card } from "../components/UI";
+import { DAY_NAMES, fmtRange } from "../timetableUpload/timeUtils";
+import { suggestMoves } from "../timetableUpload/overlapCheck";
+import { checkEdit, loadWarnings } from "../timetableUpload/editChecks";
+import { BlockPanel } from "../timetableUpload/PublishedEditor";
+
+const MONO = "'IBM Plex Mono', monospace";
+
+export default function VersionEditor({ spec, n, blocks, others, people, colourOf, onSave, onCancel }) {
+  const [work, setWork] = useState(() => blocks.map(b => ({ ...b })));
+  const [log, setLog] = useState([]);
+  const [secId, setSecId] = useState(spec.sections[0] ? spec.sections[0].id : "");
+  const [pick, setPick] = useState(null);
+  const [msg, setMsg] = useState(null);
+
+  const slots = spec.timings.slots;
+  const section = { ...(spec.sections.find(s => s.id === secId) || spec.sections[0]), slots };
+  const days = spec.D;
+  const noLabOverlap = spec.a.labsOverlap === false;
+  const peopleBy = new Map(people.map(p => [p.phone, p]));
+  const facObj = phone => { const p = peopleBy.get(phone); return p ? { key: phone, name: p.name, phone, external: false } : null; };
+  const teachIdx = start => slots.filter(s => !s.brk && s.start < start).length;     // 0-based
+  const picked = pick ? work.find(b => b.id === pick) : null;
+
+  function apply(result, ofBlock) {
+    if (result.error) { setMsg({ ok: false, text: result.error }); return; }
+    // a short day (a half-day Saturday) has fewer periods
+    const late = result.editedIds.map(id => result.blocks.find(x => x.id === id)).find(b => b && teachIdx(b.start) + (b.periods || 1) > spec.P[b.day]);
+    if (late) { setMsg({ ok: false, text: "Not changed. " + DAY_NAMES[late.day] + " has only " + spec.P[late.day] + " periods, so " + late.token + " can't go there." }); return; }
+    const chk = checkEdit(result.blocks, result.editedIds, others, { noLabOverlap, year: spec.year });
+    if (!chk.ok) {
+      let ideas = [];
+      if (ofBlock) {
+        const all = work.map(b => ({ ...b, source: "upload" })).concat(others);
+        ideas = suggestMoves({ ...ofBlock, source: "upload" }, slots, all).map(o => o.text).slice(0, 3);
+      }
+      setMsg({ ok: false, text: "Not changed. This edit would cause a clash:", problems: chk.problems.map(p => p.text), ideas });
+      return;
+    }
+    const warnings = loadWarnings(result.blocks, result.editedIds, { maxTotal: spec.limits.maxTotal, maxTheory: spec.limits.maxTheory, maxLab: spec.limits.maxLab });
+    if (spec.a.labOnceADay !== false) {
+      const seen = new Set();
+      result.editedIds.forEach(id => {
+        const b = result.blocks.find(x => x.id === id);
+        if (!b || (b.type !== "lab" && b.type !== "drawing")) return;
+        const sessions = new Set(result.blocks.filter(x => x.sectionId === b.sectionId && x.day === b.day && (x.type === "lab" || x.type === "drawing")).map(x => x.start + "-" + x.end));
+        if (sessions.size > 1 && !seen.has(b.sectionId + b.day)) { seen.add(b.sectionId + b.day); warnings.push(b.sectionName + " now has two lab sessions on " + DAY_NAMES[b.day] + "."); }
+      });
+    }
+    setWork(result.blocks);
+    setLog(l => l.concat(result.text));
+    setMsg({ ok: true, text: result.text, warnings });
+    setPick(null);
+  }
+
+  return (
+    <Card style={{ margin: 0, padding: "16px 18px", borderColor: P.blue }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
+        <div style={{ fontWeight: 800, fontSize: 17 }}>Minor changes to Version {n}</div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <Btn variant="outline" onClick={() => (log.length && !window.confirm("Throw away the " + log.length + " change" + (log.length === 1 ? "" : "s") + " you made here?") ? null : onCancel())}>Cancel</Btn>
+          <Btn disabled={!log.length} onClick={() => onSave(work, log)}>Save changes{log.length ? " (" + log.length + ")" : ""}</Btn>
+        </div>
+      </div>
+      <div style={{ fontSize: 13.5, color: P.gray, lineHeight: 1.6, marginBottom: 10 }}>Click a class to move it, swap it with another class of the same section, or change its faculty. Every change is checked for overlaps first, and one that would clash is not made.</div>
+
+      {msg && (
+        <div style={{ fontSize: 13.5, color: msg.ok ? P.green : P.red, background: msg.ok ? P.greenL : P.redL, borderRadius: 10, padding: "12px 16px", marginBottom: 10 }}>
+          <div style={{ fontWeight: 700 }}>{msg.text}</div>
+          {(msg.problems || []).map((t, i) => <div key={i} style={{ marginTop: 4 }}>• {t}</div>)}
+          {(msg.ideas || []).length > 0 && <div style={{ marginTop: 8, color: "#1a2230" }}><b>You could instead:</b>{msg.ideas.map((t, i) => <div key={i}>• {t}</div>)}</div>}
+          {(msg.warnings || []).map((t, i) => <div key={i} style={{ marginTop: 4, color: P.amber }}>⚠ {t} (allowed, but check it is what you want)</div>)}
+        </div>
+      )}
+
+      {spec.sections.length > 1 && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+          {spec.sections.map(s => (
+            <button key={s.id} onClick={() => { setSecId(s.id); setPick(null); }} style={{ padding: "5px 12px", borderRadius: 20, fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", border: "1.5px solid " + (section.id === s.id ? P.blue : P.border), background: section.id === s.id ? P.blue : "#fff", color: section.id === s.id ? "#fff" : P.navy }}>{s.name}</button>
+          ))}
+        </div>
+      )}
+
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ borderCollapse: "separate", borderSpacing: 3, minWidth: 700 }}>
+          <thead>
+            <tr><th />{slots.map((s, i) => <th key={i} style={{ fontSize: 10.5, color: P.gray, fontWeight: 700, padding: "2px 4px", whiteSpace: "nowrap" }}>{s.brk ? (s.label || "Break") : "P" + (slots.slice(0, i).filter(x => !x.brk).length + 1)}<div style={{ fontWeight: 400, fontFamily: MONO }}>{fmtRange(s.start, s.end)}</div></th>)}</tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: days }, (_, d) => {
+              const mine = work.filter(b => b.sectionId === section.id && b.day === d);
+              const cells = [];
+              let i = 0;
+              while (i < slots.length) {
+                const s = slots[i];
+                if (s.brk) { cells.push(<td key={i} style={{ background: "#f6efdc", borderRadius: 5, width: 18 }} />); i++; continue; }
+                const starts = mine.filter(b => b.start === s.start);
+                if (!starts.length) { cells.push(<td key={i} style={{ background: "#fafafa", border: "1px dashed " + P.border, borderRadius: 5, textAlign: "center", color: "#c3c9d0", fontSize: 12 }}>-</td>); i++; continue; }
+                const end = Math.max(...starts.map(b => b.end));
+                let j = i;
+                while (j + 1 < slots.length && slots[j + 1].end <= end) j++;
+                cells.push(
+                  <td key={i} colSpan={j - i + 1}>
+                    <div style={{ display: "grid", gap: 2 }}>
+                      {starts.map(b => {
+                        const [bg, fg] = colourOf(b.token);
+                        const on = pick === b.id;
+                        return <button key={b.id} onClick={() => { setPick(b.id); setMsg(null); }} title={b.faculty.map(f => f.name).join(", ") || "no faculty"} style={{ background: "#" + bg, color: "#" + fg, border: on ? "2.5px solid " + P.navy : "2.5px solid transparent", borderRadius: 5, padding: "6px 6px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", minWidth: 74 }}>{b.token}</button>;
+                      })}
+                    </div>
+                  </td>
+                );
+                i = j + 1;
+              }
+              return <tr key={d}><td style={{ fontSize: 12, fontWeight: 700, paddingRight: 8 }}>{DAY_NAMES[d].slice(0, 3)}</td>{cells}</tr>;
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {picked && <div style={{ marginTop: 14 }}><BlockPanel key={picked.id} b={picked} section={section} slots={slots} days={days} blocks={work} people={people} facObj={facObj} apply={apply} /></div>}
+      {log.length > 0 && <details style={{ marginTop: 10 }}><summary style={{ fontSize: 12.5, color: P.gray, cursor: "pointer" }}>{log.length} change{log.length === 1 ? "" : "s"} so far</summary>{log.map((t, i) => <div key={i} style={{ fontSize: 12.5, padding: "2px 0" }}>• {t}</div>)}</details>}
+    </Card>
+  );
+}
+
+
+=== END_FILE: .\src\timetableDesign\VersionEditor.jsx ===
+
+
+=== START_FILE: .\src\timetableDesign\versions.test.js ===
+
+import React from "react";
+import { render, screen, fireEvent } from "@testing-library/react";
+import * as XLSX from "xlsx-js-style";
+import { buildSpec, designVersions, verify } from "./generator";
+import { defaultAnswers } from "./designModel";
+import { buildDesignWorkbook, sectionsOf } from "./designExport";
+import { facultySheet, subjectColours } from "../timetableUpload/reportBuilder";
+import { computeWorkload } from "../timetableUpload/overlapCheck";
+import { checkEdit } from "../timetableUpload/editChecks";
+
+jest.mock("../firebase", () => ({ db: {} }));
+jest.mock("firebase/firestore", () => ({ collection: () => ({}), doc: () => ({}), getDoc: async () => ({ exists: () => false }), getDocs: async () => ({ forEach: () => {}, docs: [] }), onSnapshot: () => () => {} }));
+const VersionEditor = require("./VersionEditor").default;
+
+const people = [1, 2, 3, 4, 5, 6, 7, 8].map(i => ({ phone: "p" + i, name: "Dr " + i }));
+const mkSec = (id, off) => ({ id, name: "III-" + id, subjects: [
+  { name: "T1", token: "T1", type: "Theory", faculty: ["p" + (1 + off)] }, { name: "T2", token: "T2", type: "Theory", faculty: ["p" + (2 + off)] },
+  { name: "T3", token: "T3", type: "Theory", faculty: ["p" + (3 + off)] }, { name: "L1", token: "L" + id, type: "Lab", faculty: ["p" + (4 + off)] }] });
+function setup(labsOverlap) {
+  const a = defaultAnswers(); a.allowBlank = true; a.labsOverlap = labsOverlap;
+  ["T1", "T2", "T3"].forEach(n => { a.loads[n] = { periods: 4, block: 1 }; }); a.loads.L1 = { periods: 3, block: 3 };
+  const { spec } = buildSpec({ year: "III", a, sections: [mkSec("s1", 0), mkSec("s2", 4)], people, published: [] });
+  return spec;
+}
+const labsClash = blocks => {
+  const labs = blocks.filter(b => b.type === "lab");
+  return labs.some((x, i) => labs.some((y, j) => j > i && x.sectionId !== y.sectionId && x.day === y.day && x.start < y.end && y.start < x.end));
+};
+
+test("labs of different sections never overlap when the coordinator says so", () => {
+  const spec = setup(false);
+  const res = designVersions(spec, people, { count: 3, seed: 3 });
+  expect(res.versions.length).toBeGreaterThan(0);
+  res.versions.forEach(v => { expect(verify(spec, v.blocks)).toEqual([]); expect(labsClash(v.blocks)).toBe(false); });
+});
+
+test("verify reports labs that overlap when they are not allowed, and allows them otherwise", () => {
+  const free = setup(true), strict = setup(false);
+  const res = designVersions(free, people, { count: 6, seed: 11 });
+  const clashing = res.versions.find(v => labsClash(v.blocks));
+  if (clashing) {
+    expect(verify(strict, clashing.blocks).some(t => /same time/.test(t))).toBe(true);
+    expect(verify(free, clashing.blocks)).toEqual([]);
+  }
+});
+
+test("an edit that puts two sections' labs together is refused when labs may not overlap", () => {
+  const spec = setup(false);
+  const v = designVersions(spec, people, { count: 1, seed: 3 }).versions[0];
+  const l1 = v.blocks.find(b => b.type === "lab" && b.sectionId === "s1");
+  const l2 = v.blocks.find(b => b.type === "lab" && b.sectionId === "s2");
+  const moved = v.blocks.map(b => (b.id === l2.id ? { ...b, day: l1.day, start: l1.start, end: l1.end, id: "moved" } : b));
+  expect(checkEdit(moved, ["moved"], [], { noLabOverlap: true }).problems.some(p => /may not overlap/.test(p.text))).toBe(true);
+  expect(checkEdit(moved, ["moved"], [], {}).problems.some(p => /may not overlap/.test(p.text))).toBe(false);
+});
+
+test("the individual timetable shows the breaks, the name in the middle and the load in the corner", () => {
+  const spec = setup(true);
+  const v = designVersions(spec, people, { count: 1, seed: 3 }).versions[0];
+  const ws = facultySheet(v.blocks, computeWorkload(v.blocks), sectionsOf(spec), subjectColours(v.blocks), spec.D);
+  const text = Object.keys(ws).filter(k => k[0] !== "!").map(k => String(ws[k].v));
+  expect(text.some(t => /^Faculty/i.test(t))).toBe(false);            // no "Faculty:" phrase
+  expect(text.some(t => /^DR \d$/.test(t))).toBe(true);               // just the name
+  expect(text.some(t => /^Total load: \d+ periods$/.test(t))).toBe(true);
+  expect(text).toContain("L U N C H");
+  expect(text).toContain("B R E A K");
+  const tall = (ws["!merges"] || []).filter(m => m.s.c === m.e.c && m.e.r - m.s.r === spec.D - 1);
+  expect(tall.length).toBeGreaterThanOrEqual(2);                       // break and lunch run down every day
+  // every cell sits in only one merged range (an overlap would make Excel complain)
+  const covered = new Set();
+  (ws["!merges"] || []).forEach(m => { for (let r = m.s.r; r <= m.e.r; r++) for (let c = m.s.c; c <= m.e.c; c++) { const k = r + ":" + c; expect(covered.has(k)).toBe(false); covered.add(k); } });
+  const wb = buildDesignWorkbook(spec, [v]);
+  expect(wb.SheetNames).toEqual(["TT-1", "Ind-1"]);
+  expect(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }).length).toBeGreaterThan(1000);
+});
+
+test("minor changes: the editor opens a class with move, swap and faculty, but no remove", () => {
+  window.confirm = jest.fn(() => true);
+  const spec = setup(true);
+  const v = designVersions(spec, people, { count: 1, seed: 3 }).versions[0];
+  render(<VersionEditor spec={spec} n={1} blocks={v.blocks} others={[]} people={people} colourOf={subjectColours(v.blocks)} onSave={jest.fn()} onCancel={() => {}} />);
+  expect(screen.getByText("Minor changes to Version 1")).toBeTruthy();
+  expect(screen.getByText(/^Save changes/).closest("button").style.opacity).toBe("0.5");     // nothing changed yet
+  fireEvent.click(screen.getAllByText("T1")[0]);
+  expect(screen.getByText("Move to")).toBeTruthy();
+  expect(screen.getByText("Change faculty")).toBeTruthy();
+  expect(screen.queryByText("Remove this class")).toBeNull();
+});
+
+test("minor changes: swapping two classes of a section is checked and can be saved", () => {
+  const spec = setup(true);
+  const v = designVersions(spec, people, { count: 1, seed: 3 }).versions[0];
+  const onSave = jest.fn();
+  render(<VersionEditor spec={spec} n={1} blocks={v.blocks} others={[]} people={people} colourOf={subjectColours(v.blocks)} onSave={onSave} onCancel={() => {}} />);
+  // try every swap of the first theory class until one is accepted (some would clash for a faculty member)
+  fireEvent.click(screen.getAllByText("T1")[0]);
+  const select = screen.getAllByRole("combobox").find(s => Array.from(s.options).some(o => o.text === "Choose…"));
+  let done = false;
+  for (const o of Array.from(select.options).filter(x => x.value)) {
+    fireEvent.change(select, { target: { value: o.value } });
+    fireEvent.click(screen.getByText("Swap"));
+    if (screen.queryByText(/^Swapped /)) { done = true; break; }
+    fireEvent.click(screen.getAllByText("T1")[0]);
+    break;
+  }
+  const saved = screen.queryByText(/^Save changes \(1\)/);
+  if (done) { expect(saved).toBeTruthy(); fireEvent.click(saved); expect(onSave).toHaveBeenCalled(); expect(onSave.mock.calls[0][0].length).toBe(v.blocks.length); }
+  else expect(screen.getByText(/Not changed/)).toBeTruthy();
+});
+
+
+=== END_FILE: .\src\timetableDesign\versions.test.js ===
 
 
 === START_FILE: .\src\timetableUpload\editChecks.js ===
@@ -45810,7 +46137,8 @@ export function addBlock(blocks, section, day, start, item) {
 }
 
 // is the changed timetable allowed? published = blocks of OTHER years' published timetables
-export function checkEdit(blocks, editedIds, published) {
+// opts.noLabOverlap: labs of different sections may not be at the same time
+export function checkEdit(blocks, editedIds, published, opts = {}) {
   const tagged = blocks.map(b => ({ ...b, source: "upload" }));
   const facultyClashes = detectOverlaps(tagged, published)
     .filter(c => editedIds.includes(c.a.id) || editedIds.includes(c.b.id))
@@ -45826,7 +46154,17 @@ export function checkEdit(blocks, editedIds, published) {
       && !(x.start === b.start && x.end === b.end && LABISH.includes(x.type) && LABISH.includes(b.type)));
     if (o) sectionClashes.push({ text: b.sectionName + " would have two classes at once on " + DAY_NAMES[b.day] + ": " + b.token + " and " + o.token + " (" + fmtRange(Math.max(b.start, o.start), Math.min(b.end, o.end)) + ")." });
   });
-  const problems = facultyClashes.concat(sectionClashes);
+  const labClashes = [];
+  if (opts.noLabOverlap) {
+    editedIds.forEach(id => {
+      const b = blocks.find(x => x.id === id);
+      if (!b || !LABISH.includes(b.type)) return;
+      const o = blocks.find(x => x.id !== id && x.sectionId !== b.sectionId && LABISH.includes(x.type) && x.day === b.day && x.start < b.end && b.start < x.end && !(x.combo && x.combo === b.combo))
+        || (published || []).find(x => LABISH.includes(x.type) && x.day === b.day && x.start < b.end && b.start < x.end && (!opts.year || !x.publishedYear || x.publishedYear === opts.year));
+      if (o) labClashes.push({ text: "You chose that labs of different sections may not overlap, but " + b.sectionName + " " + b.token + " would be at the same time as " + o.sectionName + " " + o.token + " on " + DAY_NAMES[b.day] + "." });
+    });
+  }
+  const problems = facultyClashes.concat(sectionClashes, labClashes);
   return { ok: problems.length === 0, problems };
 }
 
@@ -46273,7 +46611,7 @@ export default function PublishedEditor({ year, user, onBack }) {
   );
 }
 
-function BlockPanel({ b, section, slots, days, blocks, people, facObj, apply, remove }) {
+export function BlockPanel({ b, section, slots, days, blocks, people, facObj, apply, remove }) {
   const opts = startOptions(b, slots);
   const [day, setDay] = useState(b.day);
   const [start, setStart] = useState(b.start);
@@ -46315,7 +46653,7 @@ function BlockPanel({ b, section, slots, days, blocks, people, facObj, apply, re
         {external.length > 0 && <div style={{ fontSize: 12.5, color: P.gray, marginTop: 6 }}>From outside the portal, kept as they are: {external.map(f => f.name).join(", ")}.</div>}
         <div style={{ marginTop: 8 }}><Btn small variant="outline" onClick={() => apply(changeFaculty(blocks, b.id, list.filter(Boolean).map(facObj).filter(Boolean).concat(external)), b)}>Change faculty</Btn></div>
       </div>
-      <div style={{ marginTop: 14, borderTop: "1px solid " + P.border, paddingTop: 12 }}><Btn small variant="danger" onClick={remove}>Remove this class</Btn></div>
+      {remove && <div style={{ marginTop: 14, borderTop: "1px solid " + P.border, paddingTop: 12 }}><Btn small variant="danger" onClick={remove}>Remove this class</Btn></div>}
     </Card>
   );
 }
@@ -46487,15 +46825,6 @@ export function subjectColours(blocks) {
 
 const namesOf = b => b.faculty.map(f => f.name).join(" / ").toUpperCase();
 
-// The distinct non-break periods across every section, in time order.
-function globalColumns(sections) {
-  const cols = [];
-  sections.forEach(s => s.slots.filter(x => !x.brk).forEach(x => {
-    if (!cols.some(c => c.start === x.start && c.end === x.end)) cols.push({ start: x.start, end: x.end });
-  }));
-  return cols.sort((a, b) => a.start - b.start || a.end - b.end);
-}
-
 // Groups blocks starting together on one day (parallel labs share a cell) and gives each group the columns it spans.
 function placeBlocks(list, cols) {
   const groups = new Map();
@@ -46514,40 +46843,75 @@ function placeBlocks(list, cols) {
   return placed;
 }
 
+// Every distinct period and break across the sections, in time order (breaks are columns too).
+function globalSlots(sections) {
+  const cols = [];
+  sections.forEach(s => s.slots.forEach(x => {
+    if (!cols.some(c => c.start === x.start && c.end === x.end && !!c.brk === !!x.brk)) cols.push({ start: x.start, end: x.end, brk: !!x.brk, label: x.label });
+  }));
+  return cols.sort((a, b) => a.start - b.start || a.end - b.end);
+}
+const breakName = x => x.label || (x.start >= 690 ? "Lunch" : "Break");
+
 // ── Sheet-3: one green grid per faculty member ──
+// name in the middle of the top row, total workload in its right-hand corner, break and lunch as tall vertical columns
 export function facultySheet(blocks, workload, sections, colourOf, days = 6) {
   const g = new Grid();
-  const cols = globalColumns(sections);
-  const n = Math.max(cols.length, 1);
-  g.cols = [{ wch: 14 }, ...Array.from({ length: n }, () => ({ wch: 22 }))];
+  const slots = globalSlots(sections);
+  const n = Math.max(slots.length, 1);                       // columns after the Day column
+  const teach = slots.map((x, i) => ({ ...x, i })).filter(x => !x.brk);
+  g.cols = [{ wch: 14 }, ...slots.map(x => ({ wch: x.brk ? 7 : 22 }))];
+  if (!slots.length) g.cols = [{ wch: 14 }, { wch: 22 }];
   let r = 0;
   workload.forEach(w => {
     const mine = blocks.filter(b => b.type !== "note" && b.faculty.some(f => f.key === w.key));
-    g.merge(r, 0, r, n, "Faculty: " + w.name.toUpperCase() + " (Total Load: " + w.overall + " Periods)" + (w.external ? "  · from outside the portal" : ""),
-      st({ bg: GREEN, fg: WHITE, bold: true, size: 12, h: "left" }));
-    g.rows[r] = { hpt: 24 };
+    // top row: [blank] [ NAME, centred ] [ total workload ]
+    const headStyle = h => st({ bg: GREEN, fg: WHITE, bold: true, size: 12, h });
+    const rightFrom = n >= 5 ? n - 1 : n;                    // the last columns hold the workload
+    const nameTo = n >= 5 ? rightFrom - 1 : n - 1;
+    g.set(r, 0, "", headStyle("left"));
+    if (nameTo >= 1) g.merge(r, 1, r, nameTo, w.name.toUpperCase() + (w.external ? "  (outside the portal)" : ""), headStyle("center"));
+    else g.set(r, 1, w.name.toUpperCase(), headStyle("center"));
+    if (rightFrom > nameTo) g.merge(r, rightFrom, r, n, "Total load: " + w.overall + " periods", headStyle("right"));
+    g.rows[r] = { hpt: 26 };
     r++;
     g.set(r, 0, "Day", st({ bg: "2E7D4F", fg: WHITE, bold: true }));
-    cols.forEach((c, i) => g.set(r, i + 1, "P" + (i + 1) + " (" + fmtRange24(c.start, c.end) + ")", st({ bg: "2E7D4F", fg: WHITE, bold: true })));
-    g.rows[r] = { hpt: 22 };
+    let period = 0;
+    slots.forEach((x, i) => {
+      if (x.brk) g.set(r, i + 1, breakName(x), st({ bg: "8A6D1D", fg: WHITE, bold: true, size: 9 }));
+      else { period++; g.set(r, i + 1, "P" + period + " (" + fmtRange24(x.start, x.end) + ")", st({ bg: "2E7D4F", fg: WHITE, bold: true })); }
+    });
+    g.rows[r] = { hpt: 32 };
     r++;
+    const first = r;
+    slots.forEach((x, i) => {
+      if (x.brk) g.merge(first, i + 1, first + days - 1, i + 1, breakName(x).toUpperCase().split("").join(" "), st({ bg: "F1E6C4", fg: "6B4E16", bold: true, size: 11, rot: 90 }));
+    });
+    const cols = teach.map(x => ({ start: x.start, end: x.end }));
     DAY_NAMES.slice(0, days).forEach((dn, d) => {
       const zebra = d % 2 === 1 ? ZEBRA : WHITE;
       g.set(r, 0, dn, st({ bg: "E3EFE7", bold: true, h: "left" }));
-      const taken = new Array(n).fill(false);
-      placeBlocks(mine.filter(b => b.day === d), cols).forEach(p => {
-        let c2 = p.c2;
-        for (let c = p.c1; c <= p.c2; c++) if (taken[c]) { c2 = c - 1; break; }
-        if (c2 < p.c1) return;
-        for (let c = p.c1; c <= c2; c++) taken[c] = true;
-        const [bg, fg] = colourOf(p.blocks[0].token);
-        const text = p.blocks.map(b => {
+      const taken = new Set();
+      placeBlocks(mine.filter(b => b.day === d), cols).forEach(pl => {
+        const from = teach[pl.c1].i, to = teach[pl.c2].i;
+        const [bg, fg] = colourOf(pl.blocks[0].token);
+        const text = pl.blocks.map(b => {
           const me = b.faculty.find(f => f.key === w.key);
           return b.token + (me && me.role === "asst" ? " (Asst. Faculty)" : "") + "\n" + b.sectionName + (b.combo ? " (" + b.combo + ")" : "");
         }).join("\n");
-        g.merge(r, p.c1 + 1, r, c2 + 1, text, st({ bg, fg, bold: true }));
+        // a class that runs across a break is shown in two parts, one each side of the break column
+        let segStart = null;
+        for (let c = from; c <= to + 1; c++) {
+          const usable = c <= to && !slots[c].brk && !taken.has(c);
+          if (usable && segStart === null) segStart = c;
+          if (!usable && segStart !== null) {
+            for (let k = segStart; k < c; k++) taken.add(k);
+            g.merge(r, segStart + 1, r, c, text, st({ bg, fg, bold: true }));
+            segStart = null;
+          }
+        }
       });
-      for (let c = 0; c < n; c++) if (!taken[c]) g.set(r, c + 1, "-", st({ bg: zebra, fg: GREY_TXT }));
+      slots.forEach((x, c) => { if (!x.brk && !taken.has(c)) g.set(r, c + 1, "-", st({ bg: zebra, fg: GREY_TXT })); });
       g.rows[r] = { hpt: 40 };
       r++;
     });
