@@ -57,7 +57,7 @@ test("a coordinator can answer the questions and get versions", async () => {
   expect(screen.getByText("How many periods a week for each subject?")).toBeTruthy();
   expect(screen.getByText(/Other periods in the timetable/)).toBeTruthy();
   expect(screen.getByText("Library")).toBeTruthy();
-  expect(screen.getAllByText(/Total periods covered/).length).toBeGreaterThan(0);
+  expect(screen.getAllByText(/Total periods covered/).length).toBe(1);   // one total, in one place
   next(); next(); next(); next();                           // -> together, limits, availability, review
   await screen.findByText("Before I design");
   fireEvent.click(screen.getByText("Design the timetables"));

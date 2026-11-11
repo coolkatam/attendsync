@@ -18858,7 +18858,10 @@ service firebase.storage {
       "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_editor_grid.js\")",
       "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_reset.js\")",
       "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_choose.js\")",
-      "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_tests.js\")"
+      "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_tests.js\")",
+      "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_ui2.js\")",
+      "Bash(npm run *)",
+      "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File bundle_codebase.ps1)"
     ]
   }
 }
@@ -43418,7 +43421,7 @@ import { collection, onSnapshot, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 import { P, Btn, Card, Spinner } from "../components/UI";
 import { MASTER_ADMIN_PHONE } from "../utils";
-import { yearOfSection, fmtRange } from "../timetableUpload/timeUtils";
+import { yearOfSection, yearFromName, fmtRange } from "../timetableUpload/timeUtils";
 import { computeWorkload } from "../timetableUpload/overlapCheck";
 import { subjectColours } from "../timetableUpload/reportBuilder";
 import { facultyListOf, guessType } from "../sections/subjectUtils";
@@ -43442,6 +43445,33 @@ const STEPS = [
 const TIMING_KEYS = ["days", "satHalf", "satPeriods", "periodsPerDay", "firstStart", "periodMins", "periodOverrides", "breaks"];
 
 const draftKey = (phone, year) => "ttdesign-v1:" + phone + ":" + year;
+
+// A chosen section whose subjects look like another year's: either its name says one year and its saved year another,
+// or most of its subjects are the same as those of sections that belong to a different year.
+export function yearWarningsFor(chosen, rawSections, year) {
+  const names = sec => new Set((sec.subjects || []).map(x => String(x.name || "").trim().toLowerCase()).filter(Boolean));
+  const out = [];
+  chosen.forEach(c => {
+    const raw = rawSections.find(r => r.id === c.id) || {};
+    const fromName = yearFromName(raw.name);
+    if (raw.year && fromName && raw.year !== fromName) {
+      out.push({ id: c.id, text: c.name + " is saved as Year " + raw.year + ", but its name says Year " + fromName + ". If Year " + fromName + " is right, its subjects belong to that year, not this one." });
+      return;
+    }
+    const mine = names(c);
+    if (mine.size < 3) return;
+    const share = o => { const t = names(o); let n = 0; mine.forEach(x => { if (t.has(x)) n++; }); return n / mine.size; };
+    let best = { v: 0, name: "", yr: "" }, same = 0;
+    rawSections.forEach(o => {
+      if (o.id === c.id) return;
+      const v = share(o);
+      if (yearOfSection(o) === year) same = Math.max(same, v);
+      else if (v > best.v) best = { v, name: o.name, yr: yearOfSection(o) };
+    });
+    if (best.v >= 0.6 && best.v > same) out.push({ id: c.id, text: c.name + " is saved as Year " + year + ", but " + Math.round(best.v * 100) + "% of its subjects are the same as " + best.name + (best.yr ? " (Year " + best.yr + ")" : "") + ". Its year may be wrong." });
+  });
+  return out;
+}
 function loadDraft(phone, year) {
   try { const s = localStorage.getItem(draftKey(phone, year)); if (s) return { ...defaultAnswers(), ...JSON.parse(s), sectionIds: [] }; } catch (e) { /* no saved draft */ }
   return defaultAnswers();
@@ -43578,7 +43608,7 @@ export default function DesignScreen({ user, onBack }) {
       if (!byName.has(sub.name)) byName.set(sub.name, { name: sub.name, type: sub.type, sections: [] });
       byName.get(sub.name).sections.push({ id: s.id, name: s.name });
     }));
-    return { yearSections, allSections, selectedIds: yearSections.map(s => s.id), subjects: Array.from(byName.values()), people: people || [] };
+    return { yearSections, allSections, selectedIds: yearSections.map(s => s.id), subjects: Array.from(byName.values()), people: people || [], yearWarnings: yearWarningsFor(yearSections, sections || [], year) };
   }, [sections, people, year, a.sectionIds]);
 
   // every subject gets a starting number; nothing already typed is overwritten
@@ -43851,7 +43881,7 @@ test("a coordinator can answer the questions and get versions", async () => {
   expect(screen.getByText("How many periods a week for each subject?")).toBeTruthy();
   expect(screen.getByText(/Other periods in the timetable/)).toBeTruthy();
   expect(screen.getByText("Library")).toBeTruthy();
-  expect(screen.getAllByText(/Total periods covered/).length).toBeGreaterThan(0);
+  expect(screen.getAllByText(/Total periods covered/).length).toBe(1);   // one total, in one place
   next(); next(); next(); next();                           // -> together, limits, availability, review
   await screen.findByText("Before I design");
   fireEvent.click(screen.getByText("Design the timetables"));
@@ -45118,6 +45148,24 @@ test("Start again clears the answers and returns to the first tab", async () => 
   expect(localStorage.getItem("ttdesign-v1:9:III")).not.toMatch(/timingsConfirmed":true/);
 });
 
+test("a section saved under the wrong year is flagged", () => {
+  const { yearWarningsFor } = require("./DesignScreen");
+  const subj = ["A", "B", "C", "D"].map(n => ({ name: "Sub " + n }));
+  const raw = [
+    { id: "x", name: "III YR I SEM SL-2", year: "IV", subjects: subj },
+    { id: "y", name: "III YR I SEM SL-1", subjects: subj },
+    { id: "z", name: "IV YR I SEM AL-1", subjects: [{ name: "Other 1" }, { name: "Other 2" }, { name: "Other 3" }] },
+  ];
+  const w = yearWarningsFor([{ id: "x", name: raw[0].name }], raw, "IV");
+  expect(w.length).toBe(1);
+  expect(w[0].text).toMatch(/name says Year III/);
+  // a correct section raises nothing
+  expect(yearWarningsFor([{ id: "z", name: raw[2].name }], raw, "IV")).toEqual([]);
+  // no year in the name, but its subjects are another year's
+  const raw2 = [{ id: "x", name: "SL-2", year: "IV", subjects: subj }, { id: "y", name: "III SL-1", subjects: subj }];
+  expect(yearWarningsFor([{ id: "x", name: "SL-2", subjects: subj }], raw2, "IV")[0].text).toMatch(/100%/);
+});
+
 
 === END_FILE: .\src\timetableDesign\sections.test.js ===
 
@@ -45168,6 +45216,18 @@ export function NumIn({ value, onChange, width = 80, min = 0, max, placeholder }
 
 
 // ── Step: year ───────────────────────────────────────────────────────────────────────────
+export function YearWarnings({ ctx }) {
+  const w = (ctx && ctx.yearWarnings) || [];
+  if (!w.length) return null;
+  return (
+    <div style={{ fontSize: 13, color: "#1a2230", background: P.amberL, border: "1px solid " + P.amber, borderRadius: 8, padding: "10px 12px", margin: "10px 0", lineHeight: 1.55 }}>
+      <b style={{ color: P.amber }}>Please check the section's year</b>
+      {w.map(x => <div key={x.id} style={{ marginTop: 4 }}>{x.text}</div>)}
+      <div style={{ marginTop: 6, color: P.gray }}>To correct it: Coordinator Duties › All Sections › Sections & Subjects, and set the right year for that section. Nothing has been changed for you.</div>
+    </div>
+  );
+}
+
 export function StepYear({ ctx, year, setYear, setSelected, published = [] }) {
   const pubDoc = published.find(p => p.year === year);
   const isPublished = id => !!pubDoc && (pubDoc.blocks || []).some(b => b.sectionId === id);
@@ -45214,6 +45274,7 @@ export function StepYear({ ctx, year, setYear, setSelected, published = [] }) {
           {ctx.yearSections.map(s => (
             <div key={s.id} style={{ padding: "3px 0" }}><b style={{ fontFamily: MONO, color: "#1a2230" }}>{s.name}</b> · {s.subjects.length} subjects, {s.subjects.filter(x => x.faculty.length === 0).length === 0 ? "all with faculty" : s.subjects.filter(x => x.faculty.length === 0).length + " without faculty"}</div>
           ))}
+          <YearWarnings ctx={ctx} />
         </div>
       )}
     </>
@@ -45428,7 +45489,7 @@ export function StepAvailability({ a, set, ctx }) {
 import React, { useState } from "react";
 import { P, Btn } from "../components/UI";
 import { newExtra, DAY_LONG, num, periodsOn } from "./designModel";
-import { Q, Radio, Check, NumIn, inp, small, lbl } from "./steps";
+import { Q, Radio, Check, NumIn, YearWarnings, inp, small, lbl } from "./steps";
 
 const MONO = "'IBM Plex Mono', monospace";
 const OTHER_PRESETS = [{ name: "Library", label: "Library" }, { name: "Tutorials", label: "Tutorials" }, { name: "Sports", label: "Sports" }, { name: "Club activities", label: "Club activities / Misc" }];
@@ -45471,24 +45532,24 @@ function SlotsEditor({ a, sections, countOf, fixed, onChange }) {
   );
 }
 
-function TotalLine({ totals, big }) {
-  if (!totals.length) return null;
+// one total for everything ticked, in one place. Sections that differ show a range and the detail underneath.
+function TotalBar({ totals, fallback }) {
+  if (!totals.length) return <div style={{ ...small, margin: "0 0 14px" }}>A week has {fallback || "?"} periods in each section. Fix the timings in Days and periods to see the totals.</div>;
+  const have = totals[0].have;
+  const needs = totals.map(t => t.need), lo = Math.min(...needs), hi = Math.max(...needs);
+  const over = hi > have, short = lo < have;
+  const badge = over ? { text: (hi - have) + " too many: reduce something", bg: P.redL, fg: P.red }
+    : short ? { text: (have - lo) + " more to allot: no blank periods allowed", bg: P.amberL, fg: P.amber }
+    : { text: "Every period is filled", bg: P.greenL, fg: P.green };
   return (
-    <div style={{ display: "grid", gap: big ? 6 : 4, justifyItems: "end", textAlign: "right" }}>
-      {totals.map(t => {
-        const diff = t.have - t.need, ok = diff === 0;
-        return (
-          <div key={t.s.id}>
-            <div style={{ fontWeight: 800, fontSize: big ? 22 : 17, color: ok ? P.green : P.red }}>
-              {totals.length > 1 && <span style={{ fontFamily: MONO, fontSize: big ? 15 : 13, marginRight: 10 }}>{t.s.name}</span>}
-              Total periods covered: {t.need} out of {t.have}
-            </div>
-            <div style={{ fontSize: 13, color: ok ? P.green : P.red, fontWeight: 600 }}>
-              {ok ? "Every period is filled." : diff > 0 ? diff + " more period" + (diff === 1 ? "" : "s") + " to allot: a timetable can't have blank periods." : -diff + " period" + (diff === -1 ? "" : "s") + " too many: reduce something."}
-            </div>
-          </div>
-        );
-      })}
+    <div style={{ border: "1.5px solid " + P.border, borderRadius: 10, padding: "12px 16px", margin: "0 0 16px", background: "#fff" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: P.navy }}>
+          Total periods covered: <span style={{ fontFamily: MONO }}>{lo === hi ? lo : lo + " to " + hi}</span> <span style={{ color: P.gray, fontWeight: 600 }}>out of {have}</span>
+        </div>
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: badge.fg, background: badge.bg, borderRadius: 20, padding: "5px 14px" }}>{badge.text}</span>
+      </div>
+      {lo !== hi && <div style={{ fontSize: 12, color: P.gray, marginTop: 6 }}>The sections you ticked differ: {totals.map(t => t.s.name + " " + t.need).join(", ")}.</div>}
     </div>
   );
 }
@@ -45532,7 +45593,7 @@ export default function StepSubjects({ a, set, ctx, calc }) {
               </select>
             ) : (
               <span style={{ fontSize: 13 }}><NumIn value={l.block} onChange={v => setLoad(s.name, { block: v })} width={60} min={1} max={6} /> <span style={small}>periods per session</span>
-                {(() => { const per = num(l.periods, 0), b = Math.max(1, num(l.block, 3)); if (!per) return null; const full = Math.floor(per / b), rem = per % b; return <div style={{ fontSize: 11.5, marginTop: 3, color: rem ? P.amber : P.green, fontWeight: 600 }}>= {full ? full + " session" + (full === 1 ? "" : "s") + " of " + b : ""}{full && rem ? " + " : ""}{rem ? "1 shorter session of " + rem : ""} a week</div>; })()}
+                {(() => { const per = num(l.periods, 0), b = Math.max(1, num(l.block, 3)); if (!per) return null; if (per <= b) return <div style={{ fontSize: 11.5, marginTop: 3, color: P.green, fontWeight: 600 }}>= 1 session of {per} period{per === 1 ? "" : "s"} a week</div>; const full = Math.floor(per / b), rem = per % b; return <div style={{ fontSize: 11.5, marginTop: 3, color: rem ? P.amber : P.green, fontWeight: 600 }}>= {full + " session" + (full === 1 ? "" : "s") + " of " + b}{rem ? " + 1 shorter session of " + rem : ""} a week</div>; })()}
               </span>
             )}
           </td>
@@ -45616,11 +45677,8 @@ export default function StepSubjects({ a, set, ctx, calc }) {
 
   return (
     <>
-      <div style={{ position: "sticky", top: 0, zIndex: 5, background: "#fff", padding: "12px 0 10px", borderBottom: "1px solid " + P.border, margin: "0 0 4px" }}>
-        {totals.length === 0
-          ? <div style={small}>A week has {haveDefault || "?"} periods in each section. Fix the timings in Days and periods to see the totals.</div>
-          : <TotalLine totals={totals} />}
-      </div>
+      <YearWarnings ctx={ctx} />
+      <TotalBar totals={totals} fallback={haveDefault} />
 
       <Q title="How many periods a week for each subject?" hint="One number per subject applies to every section that has it. Use Options to give one section a different number, or to fix its days and periods. By “hours” I always mean periods. I've filled in usual values: change what is different.">
         <div style={{ overflowX: "auto" }}>
@@ -45629,10 +45687,7 @@ export default function StepSubjects({ a, set, ctx, calc }) {
             <tbody>{ctx.subjects.map(subjectRow)}</tbody>
           </table>
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap", marginTop: 10 }}>
-          <div style={{ ...small, maxWidth: 520 }}>“Avoid” is a wish, not a rule: if the timetable can't be built without it, I'll bend it and tell you where.</div>
-          <TotalLine totals={totals} big />
-        </div>
+        <div style={{ ...small, maxWidth: 560, marginTop: 10 }}>“Avoid” is a wish, not a rule: if the timetable can't be built without it, I'll bend it and tell you where.</div>
       </Q>
 
       <Q title="Other periods in the timetable" hint="Activities that are not subjects in the portal. Put the periods a week for each section; leave 0 if there are none. Use Options if one trainer takes all sections, or if the slots are fixed.">

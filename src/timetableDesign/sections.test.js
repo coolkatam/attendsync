@@ -134,3 +134,21 @@ test("Start again clears the answers and returns to the first tab", async () => 
   await screen.findByText("Which section?");
   expect(localStorage.getItem("ttdesign-v1:9:III")).not.toMatch(/timingsConfirmed":true/);
 });
+
+test("a section saved under the wrong year is flagged", () => {
+  const { yearWarningsFor } = require("./DesignScreen");
+  const subj = ["A", "B", "C", "D"].map(n => ({ name: "Sub " + n }));
+  const raw = [
+    { id: "x", name: "III YR I SEM SL-2", year: "IV", subjects: subj },
+    { id: "y", name: "III YR I SEM SL-1", subjects: subj },
+    { id: "z", name: "IV YR I SEM AL-1", subjects: [{ name: "Other 1" }, { name: "Other 2" }, { name: "Other 3" }] },
+  ];
+  const w = yearWarningsFor([{ id: "x", name: raw[0].name }], raw, "IV");
+  expect(w.length).toBe(1);
+  expect(w[0].text).toMatch(/name says Year III/);
+  // a correct section raises nothing
+  expect(yearWarningsFor([{ id: "z", name: raw[2].name }], raw, "IV")).toEqual([]);
+  // no year in the name, but its subjects are another year's
+  const raw2 = [{ id: "x", name: "SL-2", year: "IV", subjects: subj }, { id: "y", name: "III SL-1", subjects: subj }];
+  expect(yearWarningsFor([{ id: "x", name: "SL-2", subjects: subj }], raw2, "IV")[0].text).toMatch(/100%/);
+});

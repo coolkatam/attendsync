@@ -9,7 +9,7 @@ import { collection, onSnapshot, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 import { P, Btn, Card, Spinner } from "../components/UI";
 import { MASTER_ADMIN_PHONE } from "../utils";
-import { yearOfSection, fmtRange } from "../timetableUpload/timeUtils";
+import { yearOfSection, yearFromName, fmtRange } from "../timetableUpload/timeUtils";
 import { computeWorkload } from "../timetableUpload/overlapCheck";
 import { subjectColours } from "../timetableUpload/reportBuilder";
 import { facultyListOf, guessType } from "../sections/subjectUtils";
@@ -33,6 +33,33 @@ const STEPS = [
 const TIMING_KEYS = ["days", "satHalf", "satPeriods", "periodsPerDay", "firstStart", "periodMins", "periodOverrides", "breaks"];
 
 const draftKey = (phone, year) => "ttdesign-v1:" + phone + ":" + year;
+
+// A chosen section whose subjects look like another year's: either its name says one year and its saved year another,
+// or most of its subjects are the same as those of sections that belong to a different year.
+export function yearWarningsFor(chosen, rawSections, year) {
+  const names = sec => new Set((sec.subjects || []).map(x => String(x.name || "").trim().toLowerCase()).filter(Boolean));
+  const out = [];
+  chosen.forEach(c => {
+    const raw = rawSections.find(r => r.id === c.id) || {};
+    const fromName = yearFromName(raw.name);
+    if (raw.year && fromName && raw.year !== fromName) {
+      out.push({ id: c.id, text: c.name + " is saved as Year " + raw.year + ", but its name says Year " + fromName + ". If Year " + fromName + " is right, its subjects belong to that year, not this one." });
+      return;
+    }
+    const mine = names(c);
+    if (mine.size < 3) return;
+    const share = o => { const t = names(o); let n = 0; mine.forEach(x => { if (t.has(x)) n++; }); return n / mine.size; };
+    let best = { v: 0, name: "", yr: "" }, same = 0;
+    rawSections.forEach(o => {
+      if (o.id === c.id) return;
+      const v = share(o);
+      if (yearOfSection(o) === year) same = Math.max(same, v);
+      else if (v > best.v) best = { v, name: o.name, yr: yearOfSection(o) };
+    });
+    if (best.v >= 0.6 && best.v > same) out.push({ id: c.id, text: c.name + " is saved as Year " + year + ", but " + Math.round(best.v * 100) + "% of its subjects are the same as " + best.name + (best.yr ? " (Year " + best.yr + ")" : "") + ". Its year may be wrong." });
+  });
+  return out;
+}
 function loadDraft(phone, year) {
   try { const s = localStorage.getItem(draftKey(phone, year)); if (s) return { ...defaultAnswers(), ...JSON.parse(s), sectionIds: [] }; } catch (e) { /* no saved draft */ }
   return defaultAnswers();
@@ -169,7 +196,7 @@ export default function DesignScreen({ user, onBack }) {
       if (!byName.has(sub.name)) byName.set(sub.name, { name: sub.name, type: sub.type, sections: [] });
       byName.get(sub.name).sections.push({ id: s.id, name: s.name });
     }));
-    return { yearSections, allSections, selectedIds: yearSections.map(s => s.id), subjects: Array.from(byName.values()), people: people || [] };
+    return { yearSections, allSections, selectedIds: yearSections.map(s => s.id), subjects: Array.from(byName.values()), people: people || [], yearWarnings: yearWarningsFor(yearSections, sections || [], year) };
   }, [sections, people, year, a.sectionIds]);
 
   // every subject gets a starting number; nothing already typed is overwritten

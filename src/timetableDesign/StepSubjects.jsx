@@ -7,7 +7,7 @@
 import React, { useState } from "react";
 import { P, Btn } from "../components/UI";
 import { newExtra, DAY_LONG, num, periodsOn } from "./designModel";
-import { Q, Radio, Check, NumIn, inp, small, lbl } from "./steps";
+import { Q, Radio, Check, NumIn, YearWarnings, inp, small, lbl } from "./steps";
 
 const MONO = "'IBM Plex Mono', monospace";
 const OTHER_PRESETS = [{ name: "Library", label: "Library" }, { name: "Tutorials", label: "Tutorials" }, { name: "Sports", label: "Sports" }, { name: "Club activities", label: "Club activities / Misc" }];
@@ -50,24 +50,24 @@ function SlotsEditor({ a, sections, countOf, fixed, onChange }) {
   );
 }
 
-function TotalLine({ totals, big }) {
-  if (!totals.length) return null;
+// one total for everything ticked, in one place. Sections that differ show a range and the detail underneath.
+function TotalBar({ totals, fallback }) {
+  if (!totals.length) return <div style={{ ...small, margin: "0 0 14px" }}>A week has {fallback || "?"} periods in each section. Fix the timings in Days and periods to see the totals.</div>;
+  const have = totals[0].have;
+  const needs = totals.map(t => t.need), lo = Math.min(...needs), hi = Math.max(...needs);
+  const over = hi > have, short = lo < have;
+  const badge = over ? { text: (hi - have) + " too many: reduce something", bg: P.redL, fg: P.red }
+    : short ? { text: (have - lo) + " more to allot: no blank periods allowed", bg: P.amberL, fg: P.amber }
+    : { text: "Every period is filled", bg: P.greenL, fg: P.green };
   return (
-    <div style={{ display: "grid", gap: big ? 6 : 4, justifyItems: "end", textAlign: "right" }}>
-      {totals.map(t => {
-        const diff = t.have - t.need, ok = diff === 0;
-        return (
-          <div key={t.s.id}>
-            <div style={{ fontWeight: 800, fontSize: big ? 22 : 17, color: ok ? P.green : P.red }}>
-              {totals.length > 1 && <span style={{ fontFamily: MONO, fontSize: big ? 15 : 13, marginRight: 10 }}>{t.s.name}</span>}
-              Total periods covered: {t.need} out of {t.have}
-            </div>
-            <div style={{ fontSize: 13, color: ok ? P.green : P.red, fontWeight: 600 }}>
-              {ok ? "Every period is filled." : diff > 0 ? diff + " more period" + (diff === 1 ? "" : "s") + " to allot: a timetable can't have blank periods." : -diff + " period" + (diff === -1 ? "" : "s") + " too many: reduce something."}
-            </div>
-          </div>
-        );
-      })}
+    <div style={{ border: "1.5px solid " + P.border, borderRadius: 10, padding: "12px 16px", margin: "0 0 16px", background: "#fff" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: P.navy }}>
+          Total periods covered: <span style={{ fontFamily: MONO }}>{lo === hi ? lo : lo + " to " + hi}</span> <span style={{ color: P.gray, fontWeight: 600 }}>out of {have}</span>
+        </div>
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: badge.fg, background: badge.bg, borderRadius: 20, padding: "5px 14px" }}>{badge.text}</span>
+      </div>
+      {lo !== hi && <div style={{ fontSize: 12, color: P.gray, marginTop: 6 }}>The sections you ticked differ: {totals.map(t => t.s.name + " " + t.need).join(", ")}.</div>}
     </div>
   );
 }
@@ -111,7 +111,7 @@ export default function StepSubjects({ a, set, ctx, calc }) {
               </select>
             ) : (
               <span style={{ fontSize: 13 }}><NumIn value={l.block} onChange={v => setLoad(s.name, { block: v })} width={60} min={1} max={6} /> <span style={small}>periods per session</span>
-                {(() => { const per = num(l.periods, 0), b = Math.max(1, num(l.block, 3)); if (!per) return null; const full = Math.floor(per / b), rem = per % b; return <div style={{ fontSize: 11.5, marginTop: 3, color: rem ? P.amber : P.green, fontWeight: 600 }}>= {full ? full + " session" + (full === 1 ? "" : "s") + " of " + b : ""}{full && rem ? " + " : ""}{rem ? "1 shorter session of " + rem : ""} a week</div>; })()}
+                {(() => { const per = num(l.periods, 0), b = Math.max(1, num(l.block, 3)); if (!per) return null; if (per <= b) return <div style={{ fontSize: 11.5, marginTop: 3, color: P.green, fontWeight: 600 }}>= 1 session of {per} period{per === 1 ? "" : "s"} a week</div>; const full = Math.floor(per / b), rem = per % b; return <div style={{ fontSize: 11.5, marginTop: 3, color: rem ? P.amber : P.green, fontWeight: 600 }}>= {full + " session" + (full === 1 ? "" : "s") + " of " + b}{rem ? " + 1 shorter session of " + rem : ""} a week</div>; })()}
               </span>
             )}
           </td>
@@ -195,11 +195,8 @@ export default function StepSubjects({ a, set, ctx, calc }) {
 
   return (
     <>
-      <div style={{ position: "sticky", top: 0, zIndex: 5, background: "#fff", padding: "12px 0 10px", borderBottom: "1px solid " + P.border, margin: "0 0 4px" }}>
-        {totals.length === 0
-          ? <div style={small}>A week has {haveDefault || "?"} periods in each section. Fix the timings in Days and periods to see the totals.</div>
-          : <TotalLine totals={totals} />}
-      </div>
+      <YearWarnings ctx={ctx} />
+      <TotalBar totals={totals} fallback={haveDefault} />
 
       <Q title="How many periods a week for each subject?" hint="One number per subject applies to every section that has it. Use Options to give one section a different number, or to fix its days and periods. By “hours” I always mean periods. I've filled in usual values: change what is different.">
         <div style={{ overflowX: "auto" }}>
@@ -208,10 +205,7 @@ export default function StepSubjects({ a, set, ctx, calc }) {
             <tbody>{ctx.subjects.map(subjectRow)}</tbody>
           </table>
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap", marginTop: 10 }}>
-          <div style={{ ...small, maxWidth: 520 }}>“Avoid” is a wish, not a rule: if the timetable can't be built without it, I'll bend it and tell you where.</div>
-          <TotalLine totals={totals} big />
-        </div>
+        <div style={{ ...small, maxWidth: 560, marginTop: 10 }}>“Avoid” is a wish, not a rule: if the timetable can't be built without it, I'll bend it and tell you where.</div>
       </Q>
 
       <Q title="Other periods in the timetable" hint="Activities that are not subjects in the portal. Put the periods a week for each section; leave 0 if there are none. Use Options if one trainer takes all sections, or if the slots are fixed.">

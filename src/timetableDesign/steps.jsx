@@ -42,6 +42,18 @@ export function NumIn({ value, onChange, width = 80, min = 0, max, placeholder }
 
 
 // ── Step: year ───────────────────────────────────────────────────────────────────────────
+export function YearWarnings({ ctx }) {
+  const w = (ctx && ctx.yearWarnings) || [];
+  if (!w.length) return null;
+  return (
+    <div style={{ fontSize: 13, color: "#1a2230", background: P.amberL, border: "1px solid " + P.amber, borderRadius: 8, padding: "10px 12px", margin: "10px 0", lineHeight: 1.55 }}>
+      <b style={{ color: P.amber }}>Please check the section's year</b>
+      {w.map(x => <div key={x.id} style={{ marginTop: 4 }}>{x.text}</div>)}
+      <div style={{ marginTop: 6, color: P.gray }}>To correct it: Coordinator Duties › All Sections › Sections & Subjects, and set the right year for that section. Nothing has been changed for you.</div>
+    </div>
+  );
+}
+
 export function StepYear({ ctx, year, setYear, setSelected, published = [] }) {
   const pubDoc = published.find(p => p.year === year);
   const isPublished = id => !!pubDoc && (pubDoc.blocks || []).some(b => b.sectionId === id);
@@ -88,6 +100,7 @@ export function StepYear({ ctx, year, setYear, setSelected, published = [] }) {
           {ctx.yearSections.map(s => (
             <div key={s.id} style={{ padding: "3px 0" }}><b style={{ fontFamily: MONO, color: "#1a2230" }}>{s.name}</b> · {s.subjects.length} subjects, {s.subjects.filter(x => x.faculty.length === 0).length === 0 ? "all with faculty" : s.subjects.filter(x => x.faculty.length === 0).length + " without faculty"}</div>
           ))}
+          <YearWarnings ctx={ctx} />
         </div>
       )}
     </>
