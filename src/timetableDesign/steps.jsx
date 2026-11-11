@@ -57,7 +57,7 @@ export function StepYear({ ctx, year, setYear, setSelected, published = [] }) {
         </div>
       </Q>
       {ctx.allSections.length > 0 && (
-        <Q title="Which section?" hint="Design one section at a time, which is the usual way. Tick more than one only if you want them designed together (needed for a class taken by several sections jointly).">
+        <Q title="Which section?" hint="Tick the section you want to design. One section at a time is the usual way; tick more than one only if you want them designed together (needed for a class taken by several sections jointly).">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10 }}>
             {ctx.allSections.map(s => {
               const on = chosen.includes(s.id);
@@ -74,11 +74,13 @@ export function StepYear({ ctx, year, setYear, setSelected, published = [] }) {
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
             <Btn small variant="ghost" onClick={() => setSelected(ctx.allSections.map(s => s.id))}>Select all</Btn>
-            <Btn small variant="ghost" onClick={() => setSelected(ctx.allSections.slice(0, 1).map(s => s.id))}>Only the first</Btn>
+            <Btn small variant="ghost" onClick={() => setSelected([])}>Clear</Btn>
           </div>
         </Q>
       )}
-      {ctx.yearSections.length === 0 ? (
+      {ctx.allSections.length > 0 && ctx.yearSections.length === 0 ? (
+        <div style={{ fontSize: 13.5, color: P.gray, padding: "4px 0" }}>No section is chosen yet. Tick the section you want to design above.</div>
+      ) : ctx.yearSections.length === 0 ? (
         <div style={{ fontSize: 13, color: P.amber, background: P.amberL, borderRadius: 8, padding: "10px 12px" }}>No sections found for Year {year}. Add them under Coordinator Duties › All Sections › Sections & Subjects (section names start with the year, like III-A).</div>
       ) : (
         <div style={{ ...small }}>

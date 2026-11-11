@@ -34,7 +34,7 @@ const TIMING_KEYS = ["days", "satHalf", "satPeriods", "periodsPerDay", "firstSta
 
 const draftKey = (phone, year) => "ttdesign-v1:" + phone + ":" + year;
 function loadDraft(phone, year) {
-  try { const s = localStorage.getItem(draftKey(phone, year)); if (s) return { ...defaultAnswers(), ...JSON.parse(s) }; } catch (e) { /* no saved draft */ }
+  try { const s = localStorage.getItem(draftKey(phone, year)); if (s) return { ...defaultAnswers(), ...JSON.parse(s), sectionIds: [] }; } catch (e) { /* no saved draft */ }
   return defaultAnswers();
 }
 
@@ -151,7 +151,7 @@ export default function DesignScreen({ user, onBack }) {
     return () => { alive = false; unsubPub(); };
   }, []);
 
-  useEffect(() => { try { localStorage.setItem(draftKey(user.phone, year), JSON.stringify(a)); } catch (e) { /* storage off */ } }, [a, user.phone, year]);
+  useEffect(() => { try { localStorage.setItem(draftKey(user.phone, year), JSON.stringify({ ...a, sectionIds: [] })); } catch (e) { /* storage off */ } }, [a, user.phone, year]);
 
   const ctx = useMemo(() => {
     const allSections = (sections || []).filter(s => yearOfSection(s) === year).map(s => ({
@@ -163,7 +163,7 @@ export default function DesignScreen({ user, onBack }) {
     }));
     // one section at a time is the usual way; tick more to design them together
     const chosen = allSections.filter(s => (a.sectionIds || []).includes(s.id));
-    const yearSections = chosen.length ? chosen : allSections.slice(0, 1);
+    const yearSections = chosen;
     const byName = new Map();
     yearSections.forEach(s => s.subjects.forEach(sub => {
       if (!byName.has(sub.name)) byName.set(sub.name, { name: sub.name, type: sub.type, sections: [] });
@@ -210,9 +210,10 @@ export default function DesignScreen({ user, onBack }) {
   const hasSubjects = ctx.yearSections.some(s => s.subjects.length > 0);
   const sid = STEPS[step].id;
   const canNext = sid === "year" ? ctx.yearSections.length > 0 && hasSubjects : true;
+  const noSection = ctx.yearSections.length === 0;
 
   const built = calc;
-  const errors = (a.timingsConfirmed ? [] : [{ level: "error", step: "time", text: "The period timings haven't been checked yet. Open Days and periods, look at the timings, and tick “these timings are correct”." }]).concat(built.problems.filter(p => p.level === "error"));
+  const errors = (noSection ? [{ level: "error", step: "year", text: "No section is chosen. Open the Year tab and tick the section you want to design." }] : []).concat(a.timingsConfirmed ? [] : [{ level: "error", step: "time", text: "The period timings haven't been checked yet. Open Days and periods, look at the timings, and tick “these timings are correct”." }]).concat(built.problems.filter(p => p.level === "error"));
   const warns = built.problems.filter(p => p.level !== "error");
   const goTo = id => { const i = STEPS.findIndex(x => x.id === id); if (i >= 0) { setStep(i); window.scrollTo(0, 0); } };
 
@@ -263,13 +264,20 @@ export default function DesignScreen({ user, onBack }) {
 
       <Card style={{ margin: 0, padding: "10px 22px 18px" }}>
           <div style={{ fontWeight: 800, fontSize: 17, padding: "12px 0 0" }}>{STEPS[step].title}</div>
+          {sid !== "year" && noSection && (
+            <div style={{ padding: "26px 4px 14px" }}>
+              <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>Choose the section first</div>
+              <div style={{ fontSize: 13.5, color: P.gray, marginBottom: 14, lineHeight: 1.6 }}>Nothing is chosen yet, so there are no subjects to show. Go to the Year tab, pick the year, and tick the section you want to design.</div>
+              <Btn onClick={() => goTo("year")}>Go to the Year tab</Btn>
+            </div>
+          )}
           {sid === "year" && <StepYear ctx={ctx} year={year} setYear={changeYear} setSelected={chooseSections} published={published} />}
-          {sid === "time" && <StepTimings a={a} set={set} />}
-          {sid === "subj" && <StepSubjects a={a} set={set} ctx={ctx} calc={calc} />}
-          {sid === "tog" && <StepTogether a={a} set={set} ctx={ctx} />}
-          {sid === "lim" && <StepLimits a={a} set={set} />}
-          {sid === "av" && <StepAvailability a={a} set={set} ctx={ctx} />}
-          {sid === "rev" && (
+          {sid === "time" && !noSection && <StepTimings a={a} set={set} />}
+          {sid === "subj" && !noSection && <StepSubjects a={a} set={set} ctx={ctx} calc={calc} />}
+          {sid === "tog" && !noSection && <StepTogether a={a} set={set} ctx={ctx} />}
+          {sid === "lim" && !noSection && <StepLimits a={a} set={set} />}
+          {sid === "av" && !noSection && <StepAvailability a={a} set={set} ctx={ctx} />}
+          {sid === "rev" && !noSection && (
             <>
               <Q title="Anything else I should know?" hint="Type it here. I can't act on free text, but it is kept with your answers for whoever reads them, and I'll tell you if I couldn't do something you asked for above.">
                 <textarea value={a.notes} onChange={e => set({ notes: e.target.value })} rows={3} style={{ width: "100%", boxSizing: "border-box", border: "1.5px solid " + P.border, borderRadius: 8, padding: "9px 12px", fontSize: 14, fontFamily: "inherit" }} />
@@ -298,6 +306,7 @@ export default function DesignScreen({ user, onBack }) {
               )}
             </>
           )}
+          {sid === "year" && ctx.yearSections.length === 0 && ctx.allSections.length > 0 && <div style={{ fontSize: 13, color: P.amber, textAlign: "right", marginTop: 10 }}>Tick the section you want to design to go on.</div>}
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10, paddingTop: 16, borderTop: "1px solid " + P.border, marginTop: 8 }}>
             <Btn variant="outline" disabled={step === 0} onClick={() => setStep(step - 1)}>← Back</Btn>
             {sid !== "rev"

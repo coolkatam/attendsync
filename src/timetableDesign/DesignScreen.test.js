@@ -46,6 +46,8 @@ test("a coordinator can answer the questions and get versions", async () => {
   localStorage.setItem("ttdesign-v1:9:III", JSON.stringify({ allowBlank: true }));
   render(<DesignScreen user={{ phone: "9", role: "hod", name: "T" }} onBack={() => {}} />);
   const next = () => fireEvent.click(screen.getByText("Next →"));
+  await screen.findByText("Which section?");
+  fireEvent.click(screen.getAllByRole("checkbox")[0]);      // nothing is ticked until you choose
   await screen.findByText(/What the portal has for Year III/);
   next();                                                    // -> timings
   expect(screen.getByText("Here are the timings")).toBeTruthy();
@@ -81,6 +83,8 @@ test("the workbook has TT and Ind sheets in order", () => {
 test("every tab can be opened directly, and a problem points to the tab that fixes it", async () => {
   localStorage.clear();
   render(<DesignScreen user={{ phone: "9", role: "hod", name: "T" }} onBack={() => {}} />);
+  await screen.findByText("Which section?");
+  fireEvent.click(screen.getAllByRole("checkbox")[0]);      // nothing is ticked until you choose
   await screen.findByText(/What the portal has for Year III/);
   fireEvent.click(screen.getByText("7. Review"));
   await screen.findByText("Before I design");

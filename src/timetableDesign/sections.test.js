@@ -86,12 +86,19 @@ test("the Year tab lets you pick the section or sections to design", async () =>
   await screen.findByText("Which section?");
   const boxes = screen.getAllByRole("checkbox");
   expect(boxes.length).toBe(2);
-  expect(boxes[0].checked).toBe(true);        // the first section by default
+  expect(boxes[0].checked).toBe(false);       // nothing is ticked by default
   expect(boxes[1].checked).toBe(false);
-  fireEvent.click(boxes[1]);                  // add the second
+  expect(screen.getByText(/No section is chosen yet/)).toBeTruthy();
+  expect(screen.getByText("Next →").closest("button").style.opacity).toBe("0.5");   // can't go on yet
+  fireEvent.click(boxes[1]);
   expect(screen.getAllByRole("checkbox")[1].checked).toBe(true);
-  fireEvent.click(screen.getByText("Only the first"));
+  fireEvent.click(boxes[0]);                  // two together
+  expect(screen.getAllByRole("checkbox")[0].checked).toBe(true);
+  fireEvent.click(screen.getByText("Clear"));
   expect(screen.getAllByRole("checkbox")[1].checked).toBe(false);
+  // other tabs wait until a section is chosen
+  fireEvent.click(screen.getByText("3. Subjects and periods"));
+  expect(screen.getByText("Choose the section first")).toBeTruthy();
 });
 
 test("a section never has two lab sessions on one day, in any version", () => {
@@ -119,6 +126,7 @@ test("Start again clears the answers and returns to the first tab", async () => 
   window.scrollTo = jest.fn();
   render(<DesignScreen user={{ phone: "9", role: "hod", name: "T" }} onBack={() => {}} />);
   await screen.findByText("Which section?");
+  fireEvent.click(screen.getAllByRole("checkbox")[0]);
   fireEvent.click(screen.getByText("2. Days and periods"));
   expect(screen.getByText("Here are the timings")).toBeTruthy();
   fireEvent.click(screen.getByText("Start again"));
