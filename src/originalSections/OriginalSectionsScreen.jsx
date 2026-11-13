@@ -6,6 +6,7 @@
 // subject, which faculty member is responsible for valuing that subject's
 // papers for that section.
 
+import { contactOf } from "../utils";
 import React, { useState, useEffect, useRef } from "react";
 import { collection, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot } from "firebase/firestore";
 import * as XLSX from "xlsx";
@@ -333,8 +334,8 @@ function ValuationSubjectCard({ sub, section, editId, setEditId, fp, setFp, facu
     .slice()
     .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
     .map(u => {
-      const phoneVal = u.phone || u.id;
-      return { value: phoneVal, label: (u.name || phoneVal) + " · " + phoneVal + (u.role === "admin" ? " (admin)" : "") };
+      const phoneVal = u.id || u.phone;
+      return { value: phoneVal, label: (u.name || phoneVal) + " · " + contactOf(u) + (u.role === "admin" ? " (admin)" : "") };
     });
 
   return (

@@ -8,6 +8,7 @@
 // detail page — this wizard is only about section names, subjects and who
 // teaches what.
 
+import { contactOf } from "../utils";
 import React, { useState, useEffect } from "react";
 import { collection, doc, getDoc, setDoc, updateDoc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
@@ -409,8 +410,8 @@ function StepAssign({ sections, facultyList, onAssign, onBack, onDone }) {
   const facultyOptions = facultyList.slice()
     .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
     .map(u => {
-      const phoneVal = u.phone || u.id;
-      return { value: phoneVal, label: (u.name || phoneVal) + " · " + phoneVal };
+      const phoneVal = u.id || u.phone;
+      return { value: phoneVal, label: (u.name || phoneVal) + " · " + contactOf(u) };
     });
   const nameOf = phone => (facultyOptions.find(o => o.value === phone) || { label: phone }).label.split(" · ")[0];
 

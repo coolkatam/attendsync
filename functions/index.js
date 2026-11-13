@@ -201,3 +201,6 @@ exports.syncFacultyStats = onCall(async (request) => {
 
   return result;
 });
+
+// College-email sign-in (see emailAuth.js)
+Object.assign(exports, require("./emailAuth")({ admin, onCall, HttpsError, compareNames }));

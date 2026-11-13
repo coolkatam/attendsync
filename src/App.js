@@ -4,14 +4,14 @@ import HoDApp from "./hod/HoDApp";
 import { useState, useEffect } from "react";
 import { db, auth, functions } from "./firebase";
 import { httpsCallable } from "firebase/functions";
-import { signInWithCustomToken } from "firebase/auth";
+import { signInWithCustomToken, signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import {
   doc, getDoc, setDoc, onSnapshot,
   collection, getDocs, updateDoc
 } from "firebase/firestore";
 import AdminApp from "./AdminApp";
 import FacultyApp from "./FacultyApp";
-import { MASTER_ADMIN_PHONE } from "./utils";
+import { MASTER_ADMIN_PHONE, normEmail, isCollegeEmail, COLLEGE_DOMAIN } from "./utils";
 
 const P = {
   blue:"#1a56a0", blueL:"#dbeafe",
@@ -121,6 +121,13 @@ function LoginScreen({ onLogin }) {
   const [pin2, setPin2]     = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr]       = useState("");
+  // college-email sign-in
+  const [ident, setIdent]     = useState("");          // what was typed: a mobile number or a college email
+  const [emailInfo, setEmailInfo] = useState(null);    // the person's record, from checkEmail
+  const [pw, setPw]           = useState("");
+  const [notice, setNotice]   = useState("");
+  const emailMode = door !== "master" && /[a-zA-Z@]/.test(ident);
+  const email = normEmail(ident);
 
   // If opened via an admin's invite link (?admin=<phone>), tag new registrations to that admin.
   const invitedBy = (new URLSearchParams(window.location.search).get("admin") || "").replace(/\D/g, "");
@@ -137,6 +144,7 @@ function LoginScreen({ onLogin }) {
     function onPopState() {
       setDoor(null);
       setStep("phone"); setPhone(""); setPin(""); setPin2(""); setErr(""); setUserData(null);
+      setIdent(""); setEmailInfo(null); setPw(""); setNotice("");
     }
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
@@ -200,17 +208,76 @@ function LoginScreen({ onLogin }) {
           setStep("rejected");
         }
       } else {
-        if (door === "faculty") {
-          setStep("register");
-        } else {
-          setErr("Number not found. New registrations are only through the Subject Faculty login (via your coordinator's invite link).");
-        }
+        setErr("Number not found. New faculty: enter your college email (name@" + COLLEGE_DOMAIN + ") instead, in the Subject Faculty login.");
       }
     } catch (e) {
       setErr("Error: " + e.message);
     }
     setLoading(false);
   }
+
+  async function checkEmailAddr() {
+    if (!isCollegeEmail(email)) { setErr("Enter your college email, like name@" + COLLEGE_DOMAIN); return; }
+    setLoading(true); setErr(""); setNotice("");
+    try {
+      const res = await httpsCallable(functions, "checkEmail")({ email });
+      const data = res.data;
+      if (!data.exists) {
+        if (door === "faculty") setStep("email-register");
+        else setErr("This email is not registered. New faculty register through the Subject Faculty login.");
+      } else if (data.status === "approved") {
+        if (!roleAllowed(data)) { setErr(doorErrorMsg(data)); setLoading(false); return; }
+        setEmailInfo(data); setPw(""); setStep("email-pass");
+        if (!data.pwSet) await sendLink(true);        // first time: send the set-password link straight away
+      } else if (data.status === "pending") setStep("pending");
+      else if (data.status === "rejected") setStep("rejected");
+    } catch (e) { setErr(e.message || "Something went wrong."); }
+    setLoading(false);
+  }
+
+  async function sendLink(first) {
+    setErr(""); setNotice("");
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setNotice((first ? "This is your first sign-in. " : "") + "We have emailed a link to " + email + ". Open it to " + (first ? "set" : "set or reset") + " your password, then come back here and sign in. If you do not see it, check Spam or Junk.");
+    } catch (e) {
+      setErr(e.code === "auth/operation-not-allowed" ? "Email sign-in has not been switched on yet. Please tell the administrator." : e.code === "auth/too-many-requests" ? "Too many mails were requested just now. Please try again in a little while." : "Could not send the email (" + (e.code || e.message) + ").");
+    }
+  }
+
+  async function submitEmailPassword() {
+    if (!pw) { setErr("Enter your password"); return; }
+    setLoading(true); setErr("");
+    try {
+      const cred = await signInWithEmailAndPassword(auth, email, pw);
+      if (cred.user.uid !== emailInfo.id) { await auth.signOut(); throw new Error("mismatch"); }
+      updateDoc(doc(db, "users", emailInfo.id), { pwSet: true }).catch(() => {});
+      const { id, exists, hasPin, ...rest } = emailInfo;
+      onLogin({ ...rest, phone: id, pwSet: true });
+    } catch (e) {
+      setErr(e.code === "auth/invalid-credential" || e.code === "auth/wrong-password" || e.code === "auth/user-not-found"
+        ? "Incorrect password. If you have not set one yet, or forgot it, use 'Email me a link'."
+        : e.code === "auth/operation-not-allowed" ? "Email sign-in has not been switched on yet. Please tell the administrator."
+        : e.code === "auth/too-many-requests" ? "Too many attempts. Please wait a few minutes, or use 'Email me a link'."
+        : "Could not sign in. Please try again.");
+      setPw("");
+    }
+    setLoading(false);
+  }
+
+  async function submitEmailRegistration() {
+    if (!form.name.trim()) { setErr("Name is required"); return; }
+    if (!form.designation.trim()) { setErr("Designation is required"); return; }
+    if (!(form.employeeId || "").trim()) { setErr("Employee ID is required"); return; }
+    setLoading(true); setErr("");
+    try {
+      await httpsCallable(functions, "requestEmailAccess")({ email, name: form.name, designation: form.designation, branch: form.branch, employeeId: form.employeeId });
+      setStep("pending");
+    } catch (e) { setErr(e.message || "Something went wrong."); }
+    setLoading(false);
+  }
+
+  const recheck = () => (emailMode ? checkEmailAddr() : checkPhone());
 
   async function submitRegistration() {
     if (!form.name.trim()) { setErr("Name is required"); return; }
@@ -393,15 +460,63 @@ function LoginScreen({ onLogin }) {
         {/* Step 1: Enter phone */}
         {step === "phone" && (
           <div>
-            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>Enter your mobile number</div>
-            <Fld label="Mobile number" value={phone} onChange={v => setPhone(v.replace(/\D/g, ""))} placeholder="10-digit number" type="tel" />
+            {door === "master" ? (
+              <>
+                <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>Enter your mobile number</div>
+                <Fld label="Mobile number" value={phone} onChange={v => setPhone(v.replace(/\D/g, ""))} placeholder="10-digit number" type="tel" />
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>Enter your college email</div>
+                <Fld label="College email" value={ident} onChange={v => { setIdent(v.trim()); setPhone(v.replace(/\D/g, "")); }} placeholder={"name@" + COLLEGE_DOMAIN} type="text" />
+              </>
+            )}
             {err && <div style={{ color: P.red, fontSize: 13, marginBottom: 10 }}>{err}</div>}
-            <Btn full onClick={checkPhone} disabled={loading} style={{ background: d.color }}>{loading ? "Checking…" : "Continue"}</Btn>
-            {door === "faculty" && !invitedBy && (
+            <Btn full onClick={() => (door === "master" || !emailMode ? checkPhone() : checkEmailAddr())} disabled={loading} style={{ background: d.color }}>{loading ? "Checking…" : "Continue"}</Btn>
+            {door !== "master" && (
               <div style={{ marginTop: 16, background: P.bg, borderRadius: 8, padding: "10px 12px" }}>
-                <div style={{ fontSize: 12, color: P.gray }}>New faculty? Use the invite link shared by your class coordinator to register.</div>
+                <div style={{ fontSize: 12, color: P.gray, lineHeight: 1.5 }}>
+                  Sign in with your college email. First time? A link to set your password is emailed to you. {door === "faculty" ? "New faculty can register here too: the HoD approves." : ""} You can still sign in with the mobile number and PIN you used before.
+                </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Email: new joiner asks for access */}
+        {step === "email-register" && (
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>New registration</div>
+            <div style={{ fontSize: 13, color: P.gray, marginBottom: 16 }}>
+              Email: <strong>{email}</strong>{" "}
+              <span style={{ color: P.blue, cursor: "pointer" }} onClick={() => { setStep("phone"); setErr(""); }}>change</span>
+            </div>
+            <Fld label="Full name *" value={form.name} onChange={v => setForm(f => ({...f, name: v}))} placeholder="Your full name" />
+            <Fld label="Designation *" value={form.designation} onChange={v => setForm(f => ({...f, designation: v}))} placeholder="e.g. Assistant Professor" />
+            <Fld label="Employee ID *" value={form.employeeId || ""} onChange={v => setForm(f => ({...f, employeeId: v}))} placeholder="e.g. RE0009" />
+            <Fld label="Department / Branch" value={form.branch} onChange={v => setForm(f => ({...f, branch: v}))} placeholder="e.g. Mechanical Engineering" />
+            {err && <div style={{ color: P.red, fontSize: 13, marginBottom: 10 }}>{err}</div>}
+            <Btn full onClick={submitEmailRegistration} disabled={loading}>{loading ? "Submitting…" : "Submit for approval"}</Btn>
+            <div style={{ fontSize: 12, color: P.gray, marginTop: 10, lineHeight: 1.5 }}>The HoD will approve your request. After that you will get an email with a link to set your password.</div>
+          </div>
+        )}
+
+        {/* Email: password */}
+        {step === "email-pass" && (
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Enter your password</div>
+            <div style={{ fontSize: 13, color: P.gray, marginBottom: 16 }}>
+              Welcome, <strong>{emailInfo?.name}</strong> ({email}){" "}
+              <span style={{ color: P.blue, cursor: "pointer" }} onClick={() => { setStep("phone"); setPw(""); setErr(""); setNotice(""); }}>change</span>
+            </div>
+            {notice && <div style={{ fontSize: 12.5, color: P.green, background: P.greenL, borderRadius: 8, padding: "9px 11px", marginBottom: 12, lineHeight: 1.5 }}>{notice}</div>}
+            <Fld label="Password" value={pw} onChange={setPw} placeholder="Your password" type="password" />
+            {err && <div style={{ color: P.red, fontSize: 13, marginBottom: 10 }}>{err}</div>}
+            <Btn full onClick={submitEmailPassword} disabled={loading}>{loading ? "Checking…" : "Login"}</Btn>
+            <div style={{ marginTop: 12, fontSize: 12.5, color: P.gray, textAlign: "center" }}>
+              First time, or forgot your password?{" "}
+              <span style={{ color: P.blue, cursor: "pointer", fontWeight: 600 }} onClick={() => sendLink(false)}>Email me a link</span>
+            </div>
           </div>
         )}
 
@@ -435,7 +550,7 @@ function LoginScreen({ onLogin }) {
               Your request is pending admin approval.<br />
               Please check back after your admin has approved your account.
             </div>
-            <Btn variant="outline" onClick={checkPhone}>Check status</Btn>
+            <Btn variant="outline" onClick={recheck}>Check status</Btn>
             <div style={{ marginTop: 10 }}>
               <span style={{ fontSize: 12, color: P.gray, cursor: "pointer" }} onClick={() => setStep("phone")}>← Back</span>
             </div>
@@ -523,7 +638,7 @@ export default function App() {
         getDoc(doc(db, "users", u.phone))
           .then(snap => {
             if (snap.exists() && snap.data().status === "approved") {
-              setUser({ phone: u.phone, ...snap.data() });
+              setUser({ ...snap.data(), phone: u.phone });
             } else if (!snap.exists()) {
               localStorage.removeItem("attendsync_user");
             }

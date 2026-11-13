@@ -323,3 +323,10 @@ export function exportXLS(section, sectionAtt) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
+// ── College email sign-in ──
+export const COLLEGE_DOMAIN = "raghuenggcollege.in";
+export function normEmail(e) { return String(e || "").normalize("NFKC").trim().toLowerCase(); }
+export function isCollegeEmail(e) { return new RegExp("^[a-z0-9._%+-]+@" + COLLEGE_DOMAIN.replace(/\./g, "\.") + "$").test(normEmail(e)); }
+// what to show for a person instead of a raw record id: the email, else the mobile number
+export function contactOf(u) { return (u && (u.email || (u.phone && /^\d+$/.test(String(u.phone)) ? u.phone : "") || u.id)) || ""; }
