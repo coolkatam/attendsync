@@ -239,7 +239,7 @@ function LoginScreen({ onLogin }) {
     setErr(""); setNotice("");
     try {
       await sendPasswordResetEmail(auth, email);
-      setNotice((first ? "This is your first sign-in. " : "") + "We have emailed a link to " + email + ". Open it to " + (first ? "set" : "set or reset") + " your password, then come back here and sign in. If you do not see it, check Spam or Junk.");
+      setNotice((first ? "This is your first sign-in. " : "") + "We have emailed a link to " + email + ". Its subject reads \"Reset your password for attendsync-66e55\": that is the right mail. Open it to " + (first ? "set" : "set or reset") + " your password, then come back here and sign in. If you do not see it, check Spam or Junk.");
     } catch (e) {
       setErr(e.code === "auth/operation-not-allowed" ? "Email sign-in has not been switched on yet. Please tell the administrator." : e.code === "auth/too-many-requests" ? "Too many mails were requested just now. Please try again in a little while." : "Could not send the email (" + (e.code || e.message) + ").");
     }

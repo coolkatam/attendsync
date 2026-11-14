@@ -138,7 +138,7 @@ export default function FacultyImport({ user, onBack }) {
           <Card style={{ margin: 0, padding: "16px 18px", borderColor: P.green }}>
             <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>3. Send the password links</div>
             <div style={{ fontSize: 13.5, color: P.gray, lineHeight: 1.6, marginBottom: 10 }}>
-              {okCount} account{okCount === 1 ? "" : "s"} ready{results.length - okCount ? ", " + (results.length - okCount) + " failed (listed below)" : ""}. Each person gets an email with a link to set their own password, and then signs in with their college email.
+              {okCount} account{okCount === 1 ? "" : "s"} ready{results.length - okCount ? ", " + (results.length - okCount) + " failed (listed below)" : ""}. Each person gets an email with a link to set their own password, and then signs in with their college email. The mail is titled \"Reset your password for attendsync-66e55\" (Google's standard wording): tell them it is the right one.
             </div>
             {results.some(r => r.ok && r.note === "already in the portal") && (
               <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13.5, marginBottom: 10 }}>
