@@ -120,8 +120,8 @@ export default function FacultyImport({ user, onBack }) {
                         {r.state === "exists" && <span style={{ color: P.gray }}>Already in the portal ({r.existing})</span>}
                         {(r.state === "new" || r.state === "match") && (
                           <select value={r.state === "match" ? r.matchId : ""} onChange={e => setMatch(i, e.target.value)} style={sel}>
-                            <option value="">New account</option>
-                            {(r.candidates || []).map(c => <option key={c.id} value={c.id}>Attach to existing: {c.name}{c.role !== "faculty" ? " (" + c.role + ")" : ""}</option>)}
+                            <option value="">New account (a different person)</option>
+                            {(r.candidates || []).map(c => <option key={c.id} value={c.id}>{c.same ? "Same name" : "Similar name, check"} - attach to existing: {c.name}{c.detail ? " (" + c.detail + ")" : ""}{c.role !== "faculty" ? " [" + c.role + "]" : ""}</option>)}
                           </select>
                         )}
                       </td>

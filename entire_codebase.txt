@@ -18905,7 +18905,8 @@ service firebase.storage {
       "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_pins2.js\")",
       "Bash(curl -s -m 40 -X POST -H \"Content-Type: application/json\" -d '{\"data\":{\"phone\":\"9502808301\"}}' https://us-central1-attendsync-66e55.cloudfunctions.net/checkPhone)",
       "Bash(curl -s -m 40 -X POST -H \"Content-Type: application/json\" -d '{\"data\":{\"phone\":\"9502808301\",\"pin\":\"0000\"}}' https://us-central1-attendsync-66e55.cloudfunctions.net/verifyLogin)",
-      "Bash(git commit -q -m 'Move PINs out of reach: locked userPins collection, server-side set/reset PIN, tighter user rules \\(no self role changes, no browser access to PINs\\) *)"
+      "Bash(git commit -q -m 'Move PINs out of reach: locked userPins collection, server-side set/reset PIN, tighter user rules \\(no self role changes, no browser access to PINs\\) *)",
+      "Bash(git commit *)"
     ]
   }
 }
@@ -34383,7 +34384,7 @@ function LoginScreen({ onLogin }) {
     setErr(""); setNotice("");
     try {
       await sendPasswordResetEmail(auth, email);
-      setNotice((first ? "This is your first sign-in. " : "") + "We have emailed a link to " + email + ". Open it to " + (first ? "set" : "set or reset") + " your password, then come back here and sign in. If you do not see it, check Spam or Junk.");
+      setNotice((first ? "This is your first sign-in. " : "") + "We have emailed a link to " + email + ". Its subject reads \"Reset your password for attendsync-66e55\": that is the right mail. Open it to " + (first ? "set" : "set or reset") + " your password, then come back here and sign in. If you do not see it, check Spam or Junk.");
     } catch (e) {
       setErr(e.code === "auth/operation-not-allowed" ? "Email sign-in has not been switched on yet. Please tell the administrator." : e.code === "auth/too-many-requests" ? "Too many mails were requested just now. Please try again in a little while." : "Could not send the email (" + (e.code || e.message) + ").");
     }
@@ -37003,8 +37004,8 @@ export default function FacultyImport({ user, onBack }) {
                         {r.state === "exists" && <span style={{ color: P.gray }}>Already in the portal ({r.existing})</span>}
                         {(r.state === "new" || r.state === "match") && (
                           <select value={r.state === "match" ? r.matchId : ""} onChange={e => setMatch(i, e.target.value)} style={sel}>
-                            <option value="">New account</option>
-                            {(r.candidates || []).map(c => <option key={c.id} value={c.id}>Attach to existing: {c.name}{c.role !== "faculty" ? " (" + c.role + ")" : ""}</option>)}
+                            <option value="">New account (a different person)</option>
+                            {(r.candidates || []).map(c => <option key={c.id} value={c.id}>{c.same ? "Same name" : "Similar name, check"} - attach to existing: {c.name}{c.detail ? " (" + c.detail + ")" : ""}{c.role !== "faculty" ? " [" + c.role + "]" : ""}</option>)}
                           </select>
                         )}
                       </td>
@@ -37021,7 +37022,7 @@ export default function FacultyImport({ user, onBack }) {
           <Card style={{ margin: 0, padding: "16px 18px", borderColor: P.green }}>
             <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>3. Send the password links</div>
             <div style={{ fontSize: 13.5, color: P.gray, lineHeight: 1.6, marginBottom: 10 }}>
-              {okCount} account{okCount === 1 ? "" : "s"} ready{results.length - okCount ? ", " + (results.length - okCount) + " failed (listed below)" : ""}. Each person gets an email with a link to set their own password, and then signs in with their college email.
+              {okCount} account{okCount === 1 ? "" : "s"} ready{results.length - okCount ? ", " + (results.length - okCount) + " failed (listed below)" : ""}. Each person gets an email with a link to set their own password, and then signs in with their college email. The mail is titled \"Reset your password for attendsync-66e55\" (Google's standard wording): tell them it is the right one.
             </div>
             {results.some(r => r.ok && r.note === "already in the portal") && (
               <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13.5, marginBottom: 10 }}>
@@ -37097,6 +37098,10 @@ export function readFacultySheet(wb) {
   return [];
 }
 
+const TITLES = new Set(["dr", "prof", "professor", "mr", "mrs", "ms", "er", "smt", "sri", "shri"]);
+// the name as words in order, without titles, dots or capitals
+const nameKey = n => clean(n).toLowerCase().replace(/[^a-z\s]/g, " ").split(/\s+/).filter(w => w && !TITLES.has(w)).join(" ");
+
 // users: [{ id, name, email, role, status, ... }]
 // state: bad (a problem, with `problem`), exists (that email is already in the portal), match (attach to an existing
 // account: `matchId`, changeable), new (a new account)
@@ -37112,13 +37117,17 @@ export function planImport(rows, users) {
     if (seen.has(base.email)) return { ...base, state: "bad", problem: "Same email as row " + seen.get(base.email) + "." };
     seen.set(base.email, r.rowNo);
     if (byEmail.has(base.email)) return { ...base, state: "exists", existing: byEmail.get(base.email).name || r.email };
-    const scored = free.map(u => ({ id: u.id, name: u.name || u.id, role: u.role || "faculty", score: scoreNames(r.name, u.name || "") }))
-      .filter(c => c.score >= 40).sort((a, b) => b.score - a.score).slice(0, 5);
-    const best = scored[0], next = scored[1];
-    // attach automatically only when one account is clearly the person
-    const sure = best && best.score >= 85 && (!next || best.score - next.score >= 12) && best.role === "faculty" && !taken.has(best.id);
-    if (sure) taken.add(best.id);
-    return { ...base, state: sure ? "match" : "new", matchId: sure ? best.id : "", candidates: scored };
+    const scored = free.map(u => ({
+      id: u.id, name: u.name || u.id, role: u.role || "faculty", score: scoreNames(r.name, u.name || ""),
+      detail: [u.designation, /^\d{10}$/.test(u.id) ? "mobile ending " + u.id.slice(-4) : ""].filter(Boolean).join(", "),
+      same: nameKey(r.name) === nameKey(u.name || ""),
+    })).filter(c => c.score >= 55).sort((a, b) => b.score - a.score).slice(0, 5);
+    // Attach by itself ONLY when the name is exactly the same (apart from Dr/Prof and dots) and it is the only one.
+    // A similar name is just a suggestion the HoD must choose: two different people can look alike (K Arun / Karun).
+    const same = scored.filter(c => c.same);
+    const sure = same.length === 1 && same[0].role === "faculty" && !taken.has(same[0].id);
+    if (sure) taken.add(same[0].id);
+    return { ...base, state: sure ? "match" : "new", matchId: sure ? same[0].id : "", candidates: scored };
   });
 }
 
@@ -37175,6 +37184,11 @@ test("each row is new, attached to an existing account, already there, or a prob
   ];
   const p = planImport(rows, users);
   expect(p[0]).toMatchObject({ state: "match", matchId: "9111111111" });
+  // a similar name is only a suggestion: K Arun Kumar and Karun Kumar are different people
+  const q = planImport([{ rowNo: 2, name: "K Arun Kumar", email: "a2@raghuenggcollege.in" }], [{ id: "9444444444", name: "Dr. Karun Kumar", role: "faculty", status: "approved" }]);
+  expect(q[0].state).toBe("new");
+  expect(q[0].matchId).toBe("");
+  expect(q[0].candidates[0].id).toBe("9444444444");
   expect(p[1].state).toBe("new");
   expect(p[1].candidates.length).toBeGreaterThan(0);
   expect(p[2].state).toBe("new");
