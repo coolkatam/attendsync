@@ -28,7 +28,7 @@ import FacultyWorkload from "./timetable/FacultyWorkload";
 import TimetableEntry from "./timetableUpload/TimetableEntry";
 import RosterCheck from "./roster/RosterCheck";
 import FacultyImport from "./facultyImport/FacultyImport";
-import { approveUser as approveUserShared, sendSetPasswordLink } from "./userActions";
+import { approveUser as approveUserShared, resetPin as resetPinShared, sendSetPasswordLink } from "./userActions";
 import { IconAttendance, IconSections, IconMarks, IconMentor, IconSearch, IconUsers, IconTrash, IconUserCircle, IconIdCard, IconPhone, IconCalendar, IconWorkload, IconBuilding } from "./components/Icons";
 import { contactOf } from "./utils";
 import { today, calcPct, parseCSV, downloadTemplate, exportXLS, makeKey, parseKey, groupByDateBatched, rowColor, MASTER_ADMIN_PHONE, fmtDate, validateBatches, studentsInBatch, readStatus, batchSlotKey } from "./utils";
@@ -136,9 +136,7 @@ export default function AdminApp({ user, onLogout }) {
   }, [user.phone, isMaster]);
 
   const approveUser = approveUserShared;
-  async function resetPin(phone) {
-    await updateDoc(doc(db, "users", phone), { pin: "" });
-  }
+  const resetPin = resetPinShared;
   async function rejectUser(phone) {
     await updateDoc(doc(db, "users", phone), { status: "rejected" });
   }
@@ -1145,7 +1143,7 @@ export function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReje
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
                     {u.email
                       ? <><span style={{ width: 7, height: 7, borderRadius: "50%", background: u.pwSet ? P.green : P.amber, flexShrink: 0 }} /><span style={{ fontSize: 11, color: P.gray }}>{u.pwSet ? "Password set" : "Password not set yet"}</span></>
-                      : <><span style={{ width: 7, height: 7, borderRadius: "50%", background: u.pin ? P.green : P.amber, flexShrink: 0 }} /><span style={{ fontSize: 11, color: P.gray }}>{u.pin ? "PIN set" : "No PIN yet"}</span></>}
+                      : <><span style={{ width: 7, height: 7, borderRadius: "50%", background: (u.pinSet || u.pin) ? P.green : P.amber, flexShrink: 0 }} /><span style={{ fontSize: 11, color: P.gray }}>{(u.pinSet || u.pin) ? "PIN set" : "No PIN yet"}</span></>}
                   </div>
                 )}
 
@@ -1175,7 +1173,7 @@ export function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReje
                     {isMaster && !isPending && !isRejected && u.role !== "hod" && (
                       <Btn small variant="outline" onClick={() => onMakeHod(u.id)}>Make HoD</Btn>
                     )}
-                    {u.status === "approved" && u.pin && !u.email && (
+                    {u.status === "approved" && (u.pinSet || u.pin) && !u.email && (
                       <Btn small variant="ghost" onClick={() => { if (window.confirm("Reset PIN for " + u.name + "? They will be asked to set a new PIN on next login.")) onResetPin(u.id); }}>
                         Reset PIN
                       </Btn>

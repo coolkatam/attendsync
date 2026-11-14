@@ -28,9 +28,13 @@ exports.verifyLogin = onCall(async (request) => {
     throw new HttpsError("permission-denied", "This account is not approved yet.");
   }
 
-  if (!data.pin || data.pin !== pin) {
+  const stored = await pinsApi.pinOf(phone, data);
+  if (!stored || stored !== pin) {
     throw new HttpsError("unauthenticated", "Incorrect PIN.");
   }
+
+  // a PIN still held in the users record is moved to the locked collection on a successful login
+  if (data.pin) pinsApi.moveToLocked(phone, String(data.pin)).catch(() => {});
 
   const customToken = await admin.auth().createCustomToken(phone, {
     role: data.role || "faculty",
@@ -146,7 +150,7 @@ exports.checkPhone = onCall(async (request) => {
   return {
     exists: true,
     ...safeData,
-    hasPin: !!pin,
+    hasPin: !!(await pinsApi.pinOf(phone, data)),
   };
 });
 
@@ -204,3 +208,8 @@ exports.syncFacultyStats = onCall(async (request) => {
 
 // College-email sign-in (see emailAuth.js)
 Object.assign(exports, require("./emailAuth")({ admin, onCall, HttpsError, compareNames }));
+
+// PINs in a locked collection of their own (see pins.js)
+const pinsApi = require("./pins")({ admin, onCall, HttpsError });
+exports.setPin = pinsApi.setPin;
+exports.resetPin = pinsApi.resetPin;

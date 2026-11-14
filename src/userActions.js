@@ -32,7 +32,7 @@ export async function resetPin(phone) {
   // lets a not-yet-logged-in user set their own new PIN only fires when the
   // pin field is entirely absent (!('pin' in resource.data)). Leaving an
   // empty-string pin behind blocks them from ever completing that flow.
-  await updateDoc(doc(db, "users", phone), { pin: deleteField() });
+  await httpsCallable(functions, "resetPin")({ id: phone });
 }
 export async function rejectUser(phone) {
   await updateDoc(doc(db, "users", phone), { status: "rejected" });

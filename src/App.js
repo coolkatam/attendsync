@@ -316,9 +316,10 @@ function LoginScreen({ onLogin }) {
     if (pin !== pin2) { setErr("PINs don't match"); return; }
     setLoading(true); setErr("");
     try {
-      await updateDoc(doc(db, "users", phone), { pin });
-      await verifyLoginAndSignIn(phone, pin);
-      onLogin({ phone, ...userData, pin });
+      // the PIN is kept on the server, out of reach of every browser
+      const res = await httpsCallable(functions, "setPin")({ phone, pin });
+      await signInWithCustomToken(auth, res.data.token);
+      onLogin({ ...userData, phone, hasPin: true });
     } catch (e) {
       setErr("Error: " + e.message);
     }

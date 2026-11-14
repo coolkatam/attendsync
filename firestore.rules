@@ -33,6 +33,15 @@ service cloud.firestore {
         .hasAny(['deleted', 'deletedAt', 'deletedBy']);
     }
 
+    function isHodOrMaster() {
+      return isSignedIn() && (myRole() == 'hod' || isMasterAdmin());
+    }
+
+    // PINs are kept on the server only (collection userPins), never in a users record
+    function touchesPin() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny(['pin', 'pinSet']);
+    }
+
     function isAssignedTeacher(collectionName, sectionId, subjectId) {
       return isSignedIn() &&
         get(/databases/$(database)/documents/$(collectionName)/$(sectionId)/subjects/$(subjectId)).data.teacherPhone == request.auth.uid;
@@ -42,17 +51,20 @@ service cloud.firestore {
     match /users/{phone} {
       allow read: if isSignedIn();
 
+      // a registration can only ask to be a plain faculty member, and never carries a PIN
       allow create: if request.resource.data.status == 'pending'
-                    && !('pin' in request.resource.data);
+                    && !('pin' in request.resource.data)
+                    && !('pinSet' in request.resource.data)
+                    && (!('role' in request.resource.data) || request.resource.data.role == 'faculty');
 
-      allow update: if
-        (isSignedIn() && request.auth.uid == phone) ||
-        isAdmin() ||
-        (
-          resource.data.status == 'approved' &&
-          !('pin' in resource.data) &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pin'])
-        );
+      // Nobody can change a PIN from a browser. A person can edit their own record but not their role,
+      // approval, email or PIN; only the HoD or master admin change roles and approvals.
+      allow update: if !touchesPin() && (
+        (isSignedIn() && request.auth.uid == phone &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'status', 'email'])) ||
+        (isAdmin() &&
+          (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'status']) || isHodOrMaster()))
+      );
 
       // Only the master admin can permanently delete a user account.
       allow delete: if isMasterAdmin();
@@ -177,6 +189,11 @@ service cloud.firestore {
            resource.data.teacherPhone == request.auth.uid &&
            request.resource.data.teacherPhone == resource.data.teacherPhone);
       }
+    }
+
+    // ── PINs: only the server functions can touch these ──
+    match /userPins/{id} {
+      allow read, write: if false;
     }
 
     // ── Everything else: locked by default ───────────────

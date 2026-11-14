@@ -181,6 +181,15 @@ service cloud.firestore {
         .hasAny(['deleted', 'deletedAt', 'deletedBy']);
     }
 
+    function isHodOrMaster() {
+      return isSignedIn() && (myRole() == 'hod' || isMasterAdmin());
+    }
+
+    // PINs are kept on the server only (collection userPins), never in a users record
+    function touchesPin() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny(['pin', 'pinSet']);
+    }
+
     function isAssignedTeacher(collectionName, sectionId, subjectId) {
       return isSignedIn() &&
         get(/databases/$(database)/documents/$(collectionName)/$(sectionId)/subjects/$(subjectId)).data.teacherPhone == request.auth.uid;
@@ -190,17 +199,20 @@ service cloud.firestore {
     match /users/{phone} {
       allow read: if isSignedIn();
 
+      // a registration can only ask to be a plain faculty member, and never carries a PIN
       allow create: if request.resource.data.status == 'pending'
-                    && !('pin' in request.resource.data);
+                    && !('pin' in request.resource.data)
+                    && !('pinSet' in request.resource.data)
+                    && (!('role' in request.resource.data) || request.resource.data.role == 'faculty');
 
-      allow update: if
-        (isSignedIn() && request.auth.uid == phone) ||
-        isAdmin() ||
-        (
-          resource.data.status == 'approved' &&
-          !('pin' in resource.data) &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pin'])
-        );
+      // Nobody can change a PIN from a browser. A person can edit their own record but not their role,
+      // approval, email or PIN; only the HoD or master admin change roles and approvals.
+      allow update: if !touchesPin() && (
+        (isSignedIn() && request.auth.uid == phone &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'status', 'email'])) ||
+        (isAdmin() &&
+          (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'status']) || isHodOrMaster()))
+      );
 
       // Only the master admin can permanently delete a user account.
       allow delete: if isMasterAdmin();
@@ -325,6 +337,11 @@ service cloud.firestore {
            resource.data.teacherPhone == request.auth.uid &&
            request.resource.data.teacherPhone == resource.data.teacherPhone);
       }
+    }
+
+    // â”€â”€ PINs: only the server functions can touch these â”€â”€
+    match /userPins/{id} {
+      allow read, write: if false;
     }
 
     // â”€â”€ Everything else: locked by default â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -18880,7 +18897,15 @@ service firebase.storage {
       "Bash(grep -A12 \"^src\\\\\\\\\\\\\\\\App.js\\\\|^src\\\\\\\\\\\\\\\\AdminApp.js\")",
       "Bash(timeout 280 npm run build > /tmp/b.log 2>&1; grep -n \"App.js\" -A10 /tmp/b.log | head -40)",
       "Bash(grep -vi \"^$\")",
-      "Bash(git commit -q -m 'College-email sign-in: upload faculty list, set-password links, new joiners approved by the HoD, mobile and PIN login still works *)"
+      "Bash(git commit -q -m 'College-email sign-in: upload faculty list, set-password links, new joiners approved by the HoD, mobile and PIN login still works *)",
+      "Bash(node --check functions/index.js)",
+      "Bash(node --check functions/pins.js)",
+      "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_pins.js\")",
+      "Bash(node --check functions/tempMigrate.js)",
+      "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_pins2.js\")",
+      "Bash(curl -s -m 40 -X POST -H \"Content-Type: application/json\" -d '{\"data\":{\"phone\":\"9502808301\"}}' https://us-central1-attendsync-66e55.cloudfunctions.net/checkPhone)",
+      "Bash(curl -s -m 40 -X POST -H \"Content-Type: application/json\" -d '{\"data\":{\"phone\":\"9502808301\",\"pin\":\"0000\"}}' https://us-central1-attendsync-66e55.cloudfunctions.net/verifyLogin)",
+      "Bash(git commit -q -m 'Move PINs out of reach: locked userPins collection, server-side set/reset PIN, tighter user rules \\(no self role changes, no browser access to PINs\\) *)"
     ]
   }
 }
@@ -19080,9 +19105,13 @@ exports.verifyLogin = onCall(async (request) => {
     throw new HttpsError("permission-denied", "This account is not approved yet.");
   }
 
-  if (!data.pin || data.pin !== pin) {
+  const stored = await pinsApi.pinOf(phone, data);
+  if (!stored || stored !== pin) {
     throw new HttpsError("unauthenticated", "Incorrect PIN.");
   }
+
+  // a PIN still held in the users record is moved to the locked collection on a successful login
+  if (data.pin) pinsApi.moveToLocked(phone, String(data.pin)).catch(() => {});
 
   const customToken = await admin.auth().createCustomToken(phone, {
     role: data.role || "faculty",
@@ -19198,7 +19227,7 @@ exports.checkPhone = onCall(async (request) => {
   return {
     exists: true,
     ...safeData,
-    hasPin: !!pin,
+    hasPin: !!(await pinsApi.pinOf(phone, data)),
   };
 });
 
@@ -19256,6 +19285,11 @@ exports.syncFacultyStats = onCall(async (request) => {
 
 // College-email sign-in (see emailAuth.js)
 Object.assign(exports, require("./emailAuth")({ admin, onCall, HttpsError, compareNames }));
+
+// PINs in a locked collection of their own (see pins.js)
+const pinsApi = require("./pins")({ admin, onCall, HttpsError });
+exports.setPin = pinsApi.setPin;
+exports.resetPin = pinsApi.resetPin;
 
 
 === END_FILE: .\functions\index.js ===
@@ -26808,6 +26842,88 @@ Object.assign(exports, require("./emailAuth")({ admin, onCall, HttpsError, compa
 === END_FILE: .\functions\package.json ===
 
 
+=== START_FILE: .\functions\pins.js ===
+
+// PINs live in their own collection, userPins/{id}, which the security rules lock against every browser.
+// Only these server functions read or write it. The users record keeps just a yes/no flag, pinSet, for the screens.
+// Older records may still hold the PIN inside the users document until it is moved (the move happens on login and
+// through the one-time migration).
+
+const MASTER_UID = "9502808301";
+
+module.exports = function build({ admin, onCall, HttpsError }) {
+  const db = () => admin.firestore();
+
+  // the PIN for a person: the locked collection first, then (if not moved yet) the old field
+  async function pinOf(id, userData) {
+    const p = await db().collection("userPins").doc(id).get();
+    if (p.exists && p.data().pin) return String(p.data().pin);
+    return userData && userData.pin ? String(userData.pin) : "";
+  }
+
+  // move one person's PIN out of the users record
+  async function moveToLocked(id, pin) {
+    await db().collection("userPins").doc(id).set({ pin, movedAt: new Date().toISOString() });
+    await db().collection("users").doc(id).update({ pin: admin.firestore.FieldValue.delete(), pinSet: true });
+  }
+
+  async function callerCanReset(request) {
+    if (!request.auth) throw new HttpsError("unauthenticated", "You must be signed in.");
+    if (request.auth.uid === MASTER_UID) return true;
+    const d = await db().collection("users").doc(request.auth.uid).get();
+    const role = d.exists ? d.data().role : "";
+    if (role === "hod" || role === "admin") return true;
+    throw new HttpsError("permission-denied", "Only the HoD or a Class Coordinator can reset a PIN.");
+  }
+
+  // First-time PIN for an approved person who has none yet; signs them in.
+  const setPin = onCall(async (request) => {
+    const phone = String((request.data && request.data.phone) || "").replace(/\D/g, "");
+    const pin = String((request.data && request.data.pin) || "").trim();
+    if (!/^\d{10}$/.test(phone) || !/^\d{4}$/.test(pin)) throw new HttpsError("invalid-argument", "Enter a valid number and a 4-digit PIN.");
+    const ref = db().collection("users").doc(phone);
+    const u = await ref.get();
+    if (!u.exists || u.data().status !== "approved") throw new HttpsError("permission-denied", "This account is not approved.");
+    if (await pinOf(phone, u.data())) throw new HttpsError("failed-precondition", "A PIN is already set. Ask the HoD to reset it.");
+    await db().collection("userPins").doc(phone).set({ pin, movedAt: new Date().toISOString() });
+    await ref.update({ pinSet: true, pin: admin.firestore.FieldValue.delete() });
+    const token = await admin.auth().createCustomToken(phone, { role: u.data().role || "faculty" });
+    return { token };
+  });
+
+  // HoD, Coordinator or master: clear someone's PIN so they set a new one at next login
+  const resetPin = onCall(async (request) => {
+    await callerCanReset(request);
+    const id = String((request.data && request.data.id) || "");
+    if (!id) throw new HttpsError("invalid-argument", "Who?");
+    await db().collection("userPins").doc(id).delete();
+    const ref = db().collection("users").doc(id);
+    if ((await ref.get()).exists) await ref.update({ pin: admin.firestore.FieldValue.delete(), pinSet: false });
+    return { ok: true };
+  });
+
+  // Move every PIN still sitting in a users record into the locked collection. Returns the counts.
+  async function movePinsNow() {
+    const snap = await db().collection("users").get();
+    let moved = 0, already = 0, empty = 0;
+    for (const d of snap.docs) {
+      const pin = d.data().pin;
+      if (pin === undefined) { if (d.data().pinSet) already++; continue; }
+      if (!pin) { await d.ref.update({ pin: admin.firestore.FieldValue.delete() }); empty++; continue; }
+      await moveToLocked(d.id, String(pin));
+      moved++;
+    }
+    const left = (await db().collection("users").get()).docs.filter(d => d.data().pin !== undefined).length;
+    return { users: snap.size, moved, alreadyMoved: already, emptyRemoved: empty, stillInUsersRecord: left };
+  }
+
+  return { setPin, resetPin, pinOf, moveToLocked, movePinsNow };
+};
+
+
+=== END_FILE: .\functions\pins.js ===
+
+
 === START_FILE: .\letters\Letter_to_Chairman_Mech_EMS.docx ===
 
 PK    ¡k]yn3×è   ­     [Content_Types].xml}PÉNÃ0ık®(qà€ŠÓË8”Ù“Äª7yÜÒş=N[z@…ãÌ[õúÕŞ;±£Ì6·m‚‚Æ†IÁçúµy ÁƒA)8Ãjè×‡D,ª6°‚¹”ô(%ë™<r…ŠŒ1{,õÌ“L¨78‘¼ëº{©c(JSúgqëŠxÙ×÷©G&Ç NÄ%K¦ä¬ÆRq¹æWJsNh«òÈáÙ&¾©Wäï€³î½“­!ñ¹¼¡¯,ù³‘&ê­¯Êö›+=ã8ZMıâ–rÔÄ\÷®½ møé/sßPK    ¡k]›ı7ê­   )     _rels/.relsÏ;Â0à«DŞiZ„PÓ.©+*°7­hJÂ£·'EŒ¶–ëöifv§'gTE	Œ¬tj²ZÀ¥?möÀbB«pv–,¡mê3Í˜òJ'Y6l0¦äœG9’ÁX8O6O¦\Í=Ê+jâÛ²ÜñğiÀÚd:UëOÿØn&IG'o†lúqâ+‘eš’€‡Š«w»È,ğ¦æ«›PK    ¡k]ö¡ßÉ  a,     word/document.xmlíZÛv·ı,>ô‰"u±…µœÅê’j%²UKY}Èê8s†ƒLÇìS¿%Ÿ–/é>ÀIËiªšY¥¬ú…·Á ç²Ï>—á«oŞWZ,ÈyeÍéà`´?d2›+3?üpw¹w2>H“Km–äß¼~ÕNr›5™ °ñ“ötP†POÆcŸ•TI?²5\+¬«dÀW7·Öåµ³yı+=>Üß?WR™o9³ù’ßëørãøÍ×2ÃZ«„­ $l'²äºÏZ±`‡Ç/ú/ïdì`üúÕxµWzé>_Z<ïä3¥NgR«™S¼E95~ã—qã¸°çv›vED1qfíÈ“[Ğàõò¢–&)n%‰³R*8Öl«%ğdõüñÊø Bâ¬èoŸ²³OSù¶™ıDY˜ˆ4İ…$×”•ââúVì‰©hi&d]k•ÉèŒ+1k”&¶q"§ZºÀt´¥‡Ÿ.ß‘¯áÊÅ­rÏ9îŞ6AØBÔÈJÖH-”Èä>z_këX¯éÕDñlo‹ĞJG Â‚´­	ÃJ¤@â¹¶x€£?6iğ«f3P<b«¡h8e‰3-›ìgsŠ©	¥³µÊş këÿè!’H©SkõH\AdãµZ`yTCf_„_BîJ„RèikMBÛ9+ˆT‹³°œ?¨¸kŒáMmÖsõH´22¹_šlïø˜^¾A»´Ã¹BVÂ—2*¡R˜,YOeR:fİyˆfí=oÚ²$XšI#r;Ú6ŒwGt/…±¿vúæ–üV¶Ìûí3MÒ±,™;]ğµPW/...§ìÓB'O=ŒÄİÕõÅİôOß_€ƒr¾–nÎaXÙb~Çñi%ˆE9©Œ@73ÁÜxáSşòÀ(ò1`/
@@ -28959,6 +29075,12 @@ startxref
 %%EOF
 
 === END_FILE: .\letters\Letter_to_Principal_Mech_EMS.pdf ===
+
+
+=== START_FILE: .\letters\New Text Document.txt ===
+
+
+=== END_FILE: .\letters\New Text Document.txt ===
 
 
 === START_FILE: .\public\favicon.ico ===
@@ -31931,7 +32053,7 @@ import FacultyWorkload from "./timetable/FacultyWorkload";
 import TimetableEntry from "./timetableUpload/TimetableEntry";
 import RosterCheck from "./roster/RosterCheck";
 import FacultyImport from "./facultyImport/FacultyImport";
-import { approveUser as approveUserShared, sendSetPasswordLink } from "./userActions";
+import { approveUser as approveUserShared, resetPin as resetPinShared, sendSetPasswordLink } from "./userActions";
 import { IconAttendance, IconSections, IconMarks, IconMentor, IconSearch, IconUsers, IconTrash, IconUserCircle, IconIdCard, IconPhone, IconCalendar, IconWorkload, IconBuilding } from "./components/Icons";
 import { contactOf } from "./utils";
 import { today, calcPct, parseCSV, downloadTemplate, exportXLS, makeKey, parseKey, groupByDateBatched, rowColor, MASTER_ADMIN_PHONE, fmtDate, validateBatches, studentsInBatch, readStatus, batchSlotKey } from "./utils";
@@ -32039,9 +32161,7 @@ export default function AdminApp({ user, onLogout }) {
   }, [user.phone, isMaster]);
 
   const approveUser = approveUserShared;
-  async function resetPin(phone) {
-    await updateDoc(doc(db, "users", phone), { pin: "" });
-  }
+  const resetPin = resetPinShared;
   async function rejectUser(phone) {
     await updateDoc(doc(db, "users", phone), { status: "rejected" });
   }
@@ -33048,7 +33168,7 @@ export function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReje
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
                     {u.email
                       ? <><span style={{ width: 7, height: 7, borderRadius: "50%", background: u.pwSet ? P.green : P.amber, flexShrink: 0 }} /><span style={{ fontSize: 11, color: P.gray }}>{u.pwSet ? "Password set" : "Password not set yet"}</span></>
-                      : <><span style={{ width: 7, height: 7, borderRadius: "50%", background: u.pin ? P.green : P.amber, flexShrink: 0 }} /><span style={{ fontSize: 11, color: P.gray }}>{u.pin ? "PIN set" : "No PIN yet"}</span></>}
+                      : <><span style={{ width: 7, height: 7, borderRadius: "50%", background: (u.pinSet || u.pin) ? P.green : P.amber, flexShrink: 0 }} /><span style={{ fontSize: 11, color: P.gray }}>{(u.pinSet || u.pin) ? "PIN set" : "No PIN yet"}</span></>}
                   </div>
                 )}
 
@@ -33078,7 +33198,7 @@ export function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReje
                     {isMaster && !isPending && !isRejected && u.role !== "hod" && (
                       <Btn small variant="outline" onClick={() => onMakeHod(u.id)}>Make HoD</Btn>
                     )}
-                    {u.status === "approved" && u.pin && !u.email && (
+                    {u.status === "approved" && (u.pinSet || u.pin) && !u.email && (
                       <Btn small variant="ghost" onClick={() => { if (window.confirm("Reset PIN for " + u.name + "? They will be asked to set a new PIN on next login.")) onResetPin(u.id); }}>
                         Reset PIN
                       </Btn>
@@ -34340,9 +34460,10 @@ function LoginScreen({ onLogin }) {
     if (pin !== pin2) { setErr("PINs don't match"); return; }
     setLoading(true); setErr("");
     try {
-      await updateDoc(doc(db, "users", phone), { pin });
-      await verifyLoginAndSignIn(phone, pin);
-      onLogin({ phone, ...userData, pin });
+      // the PIN is kept on the server, out of reach of every browser
+      const res = await httpsCallable(functions, "setPin")({ phone, pin });
+      await signInWithCustomToken(auth, res.data.token);
+      onLogin({ ...userData, phone, hasPin: true });
     } catch (e) {
       setErr("Error: " + e.message);
     }
@@ -35792,7 +35913,7 @@ export async function resetPin(phone) {
   // lets a not-yet-logged-in user set their own new PIN only fires when the
   // pin field is entirely absent (!('pin' in resource.data)). Leaving an
   // empty-string pin behind blocks them from ever completing that flow.
-  await updateDoc(doc(db, "users", phone), { pin: deleteField() });
+  await httpsCallable(functions, "resetPin")({ id: phone });
 }
 export async function rejectUser(phone) {
   await updateDoc(doc(db, "users", phone), { status: "rejected" });
