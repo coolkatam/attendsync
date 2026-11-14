@@ -18908,7 +18908,9 @@ service firebase.storage {
       "Bash(git commit -q -m 'Move PINs out of reach: locked userPins collection, server-side set/reset PIN, tighter user rules \\(no self role changes, no browser access to PINs\\) *)",
       "Bash(git commit *)",
       "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_noattach.js\")",
-      "Bash(node --check functions/emailAuth.js)"
+      "Bash(node --check functions/emailAuth.js)",
+      "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_removed.js\")",
+      "Bash(curl -s -m 30 -o /dev/null -w \"%{http_code}\\\\n\" https://us-central1-attendsync-66e55.cloudfunctions.net/tempRemoveUsers)"
     ]
   }
 }
@@ -19276,6 +19278,7 @@ Object.assign(exports, require("./emailAuth")({ admin, onCall, HttpsError, compa
 const pinsApi = require("./pins")({ admin, onCall, HttpsError });
 exports.setPin = pinsApi.setPin;
 exports.resetPin = pinsApi.resetPin;
+
 
 
 === END_FILE: .\functions\index.js ===
@@ -32039,7 +32042,7 @@ import FacultyWorkload from "./timetable/FacultyWorkload";
 import TimetableEntry from "./timetableUpload/TimetableEntry";
 import RosterCheck from "./roster/RosterCheck";
 import FacultyImport from "./facultyImport/FacultyImport";
-import { approveUser as approveUserShared, resetPin as resetPinShared, sendSetPasswordLink } from "./userActions";
+import { approveUser as approveUserShared, resetPin as resetPinShared, sendSetPasswordLink, restoreUser, removeUser } from "./userActions";
 import { IconAttendance, IconSections, IconMarks, IconMentor, IconSearch, IconUsers, IconTrash, IconUserCircle, IconIdCard, IconPhone, IconCalendar, IconWorkload, IconBuilding } from "./components/Icons";
 import { contactOf } from "./utils";
 import { today, calcPct, parseCSV, downloadTemplate, exportXLS, makeKey, parseKey, groupByDateBatched, rowColor, MASTER_ADMIN_PHONE, fmtDate, validateBatches, studentsInBatch, readStatus, batchSlotKey } from "./utils";
@@ -33029,6 +33032,8 @@ export function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReje
   if (showImport) return <FacultyImport user={currentUser} onBack={() => setShowImport(false)} />;
 
   const filtered = allUsers.filter(u => {
+    if (filter === "removed")  return u.status === "removed";
+    if (filter === "all")      return u.status !== "removed";
     if (filter === "pending")  return u.status === "pending";
     if (filter === "approved") return u.status === "approved" && u.role === "faculty";
     if (filter === "admin")    return u.role === "admin";
@@ -33036,10 +33041,11 @@ export function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReje
   });
 
   const tabs = [
-    { id: "all",      label: "All (" + allUsers.length + ")" },
+    { id: "all",      label: "All (" + allUsers.filter(u => u.status !== "removed").length + ")" },
     { id: "pending",  label: "Pending (" + allUsers.filter(u => u.status === "pending").length + ")" },
     { id: "approved", label: "Faculty (" + allUsers.filter(u => u.status === "approved" && u.role === "faculty").length + ")" },
   ];
+  if (allUsers.some(u => u.status === "removed")) tabs.push({ id: "removed", label: "Removed (" + allUsers.filter(u => u.status === "removed").length + ")" });
   if (isMaster) {
     tabs.push({ id: "admin", label: "Admins (" + allUsers.filter(u => u.role === "admin").length + ")" });
   }
@@ -33141,7 +33147,8 @@ export function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReje
                   {isAdmin && <Badge color="blue">Admin</Badge>}
                   {isPending && <Badge color="amber">Pending</Badge>}
                   {isRejected && <Badge color="red">Rejected</Badge>}
-                  {!isAdmin && !isPending && !isRejected && <Badge color="green">Faculty</Badge>}
+                  {u.status === "removed" && <Badge color="gray">Removed</Badge>}
+                  {!isAdmin && !isPending && !isRejected && u.status !== "removed" && <Badge color="green">Faculty</Badge>}
                 </div>
 
                 <div style={{ fontSize: 12, color: P.gray }}>{u.designation}{u.designation && u.branch ? " · " : ""}{u.branch}</div>
@@ -33168,6 +33175,12 @@ export function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReje
                       </>
                     )}
                     {isPending && !canApprove && <span style={{ fontSize: 11.5, color: P.gray }}>Waiting for the HoD</span>}
+                    {u.status === "removed" && canApprove && (
+                      <Btn small variant="outline" onClick={() => restoreUser(u.id)}>Restore</Btn>
+                    )}
+                    {u.status === "approved" && canApprove && u.role !== "hod" && u.role !== "admin" && (
+                      <Btn small variant="ghost" onClick={() => removeUser(u.id, u.name)}>Remove</Btn>
+                    )}
                     {isRejected && canApprove && (
                       <Btn small variant="outline" onClick={() => onApprove(u.id)}>Re-approve</Btn>
                     )}
@@ -34336,6 +34349,8 @@ function LoginScreen({ onLogin }) {
           setStep("pending");
         } else if (data.status === "rejected") {
           setStep("rejected");
+        } else if (data.status === "removed") {
+          setErr("This account has been removed. Please contact the HoD.");
         }
       } else {
         setErr("Number not found. New faculty: enter your college email (name@" + COLLEGE_DOMAIN + ") instead, in the Subject Faculty login.");
@@ -34361,6 +34376,7 @@ function LoginScreen({ onLogin }) {
         if (!data.pwSet) await sendLink(true);        // first time: send the set-password link straight away
       } else if (data.status === "pending") setStep("pending");
       else if (data.status === "rejected") setStep("rejected");
+      else if (data.status === "removed") setErr("This account has been removed. Please contact the HoD.");
     } catch (e) { setErr(e.message || "Something went wrong."); }
     setLoading(false);
   }
@@ -35901,6 +35917,16 @@ export async function resetPin(phone) {
   // empty-string pin behind blocks them from ever completing that flow.
   await httpsCallable(functions, "resetPin")({ id: phone });
 }
+// "Removed" keeps the record (nothing is deleted): the person can't log in and is out of every list until restored
+export async function restoreUser(id) {
+  const u = (await getDoc(doc(db, "users", id))).data() || {};
+  await updateDoc(doc(db, "users", id), { status: u.removedFrom || "approved", removedFrom: deleteField(), removedAt: deleteField() });
+}
+export async function removeUser(id, name) {
+  if (!window.confirm("Remove " + name + "? They can no longer log in and disappear from every list. Nothing is deleted, and you can restore them any time.")) return;
+  const u = (await getDoc(doc(db, "users", id))).data() || {};
+  await updateDoc(doc(db, "users", id), { status: "removed", removedFrom: u.status || "approved", removedAt: new Date().toISOString() });
+}
 export async function rejectUser(phone) {
   await updateDoc(doc(db, "users", phone), { status: "rejected" });
 }
@@ -36636,6 +36662,7 @@ export function Badge({ children, color = "blue" }) {
     red:   { bg: P.redL,   fg: P.red   },
     amber: { bg: P.amberL, fg: P.amber },
     teal:  { bg: P.tealL,  fg: P.teal  },
+    gray:  { bg: P.bg,     fg: P.gray  },
   };
   const c = map[color] || map.blue;
   return (

@@ -28,7 +28,7 @@ import FacultyWorkload from "./timetable/FacultyWorkload";
 import TimetableEntry from "./timetableUpload/TimetableEntry";
 import RosterCheck from "./roster/RosterCheck";
 import FacultyImport from "./facultyImport/FacultyImport";
-import { approveUser as approveUserShared, resetPin as resetPinShared, sendSetPasswordLink } from "./userActions";
+import { approveUser as approveUserShared, resetPin as resetPinShared, sendSetPasswordLink, restoreUser, removeUser } from "./userActions";
 import { IconAttendance, IconSections, IconMarks, IconMentor, IconSearch, IconUsers, IconTrash, IconUserCircle, IconIdCard, IconPhone, IconCalendar, IconWorkload, IconBuilding } from "./components/Icons";
 import { contactOf } from "./utils";
 import { today, calcPct, parseCSV, downloadTemplate, exportXLS, makeKey, parseKey, groupByDateBatched, rowColor, MASTER_ADMIN_PHONE, fmtDate, validateBatches, studentsInBatch, readStatus, batchSlotKey } from "./utils";
@@ -1018,6 +1018,8 @@ export function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReje
   if (showImport) return <FacultyImport user={currentUser} onBack={() => setShowImport(false)} />;
 
   const filtered = allUsers.filter(u => {
+    if (filter === "removed")  return u.status === "removed";
+    if (filter === "all")      return u.status !== "removed";
     if (filter === "pending")  return u.status === "pending";
     if (filter === "approved") return u.status === "approved" && u.role === "faculty";
     if (filter === "admin")    return u.role === "admin";
@@ -1025,10 +1027,11 @@ export function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReje
   });
 
   const tabs = [
-    { id: "all",      label: "All (" + allUsers.length + ")" },
+    { id: "all",      label: "All (" + allUsers.filter(u => u.status !== "removed").length + ")" },
     { id: "pending",  label: "Pending (" + allUsers.filter(u => u.status === "pending").length + ")" },
     { id: "approved", label: "Faculty (" + allUsers.filter(u => u.status === "approved" && u.role === "faculty").length + ")" },
   ];
+  if (allUsers.some(u => u.status === "removed")) tabs.push({ id: "removed", label: "Removed (" + allUsers.filter(u => u.status === "removed").length + ")" });
   if (isMaster) {
     tabs.push({ id: "admin", label: "Admins (" + allUsers.filter(u => u.role === "admin").length + ")" });
   }
@@ -1130,7 +1133,8 @@ export function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReje
                   {isAdmin && <Badge color="blue">Admin</Badge>}
                   {isPending && <Badge color="amber">Pending</Badge>}
                   {isRejected && <Badge color="red">Rejected</Badge>}
-                  {!isAdmin && !isPending && !isRejected && <Badge color="green">Faculty</Badge>}
+                  {u.status === "removed" && <Badge color="gray">Removed</Badge>}
+                  {!isAdmin && !isPending && !isRejected && u.status !== "removed" && <Badge color="green">Faculty</Badge>}
                 </div>
 
                 <div style={{ fontSize: 12, color: P.gray }}>{u.designation}{u.designation && u.branch ? " · " : ""}{u.branch}</div>
@@ -1157,6 +1161,12 @@ export function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReje
                       </>
                     )}
                     {isPending && !canApprove && <span style={{ fontSize: 11.5, color: P.gray }}>Waiting for the HoD</span>}
+                    {u.status === "removed" && canApprove && (
+                      <Btn small variant="outline" onClick={() => restoreUser(u.id)}>Restore</Btn>
+                    )}
+                    {u.status === "approved" && canApprove && u.role !== "hod" && u.role !== "admin" && (
+                      <Btn small variant="ghost" onClick={() => removeUser(u.id, u.name)}>Remove</Btn>
+                    )}
                     {isRejected && canApprove && (
                       <Btn small variant="outline" onClick={() => onApprove(u.id)}>Re-approve</Btn>
                     )}

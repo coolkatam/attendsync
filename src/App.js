@@ -206,6 +206,8 @@ function LoginScreen({ onLogin }) {
           setStep("pending");
         } else if (data.status === "rejected") {
           setStep("rejected");
+        } else if (data.status === "removed") {
+          setErr("This account has been removed. Please contact the HoD.");
         }
       } else {
         setErr("Number not found. New faculty: enter your college email (name@" + COLLEGE_DOMAIN + ") instead, in the Subject Faculty login.");
@@ -231,6 +233,7 @@ function LoginScreen({ onLogin }) {
         if (!data.pwSet) await sendLink(true);        // first time: send the set-password link straight away
       } else if (data.status === "pending") setStep("pending");
       else if (data.status === "rejected") setStep("rejected");
+      else if (data.status === "removed") setErr("This account has been removed. Please contact the HoD.");
     } catch (e) { setErr(e.message || "Something went wrong."); }
     setLoading(false);
   }

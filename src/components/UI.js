@@ -71,6 +71,7 @@ export function Badge({ children, color = "blue" }) {
     red:   { bg: P.redL,   fg: P.red   },
     amber: { bg: P.amberL, fg: P.amber },
     teal:  { bg: P.tealL,  fg: P.teal  },
+    gray:  { bg: P.bg,     fg: P.gray  },
   };
   const c = map[color] || map.blue;
   return (

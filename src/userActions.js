@@ -34,6 +34,16 @@ export async function resetPin(phone) {
   // empty-string pin behind blocks them from ever completing that flow.
   await httpsCallable(functions, "resetPin")({ id: phone });
 }
+// "Removed" keeps the record (nothing is deleted): the person can't log in and is out of every list until restored
+export async function restoreUser(id) {
+  const u = (await getDoc(doc(db, "users", id))).data() || {};
+  await updateDoc(doc(db, "users", id), { status: u.removedFrom || "approved", removedFrom: deleteField(), removedAt: deleteField() });
+}
+export async function removeUser(id, name) {
+  if (!window.confirm("Remove " + name + "? They can no longer log in and disappear from every list. Nothing is deleted, and you can restore them any time.")) return;
+  const u = (await getDoc(doc(db, "users", id))).data() || {};
+  await updateDoc(doc(db, "users", id), { status: "removed", removedFrom: u.status || "approved", removedAt: new Date().toISOString() });
+}
 export async function rejectUser(phone) {
   await updateDoc(doc(db, "users", phone), { status: "rejected" });
 }

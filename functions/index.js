@@ -213,3 +213,4 @@ Object.assign(exports, require("./emailAuth")({ admin, onCall, HttpsError, compa
 const pinsApi = require("./pins")({ admin, onCall, HttpsError });
 exports.setPin = pinsApi.setPin;
 exports.resetPin = pinsApi.resetPin;
+
