@@ -18906,7 +18906,9 @@ service firebase.storage {
       "Bash(curl -s -m 40 -X POST -H \"Content-Type: application/json\" -d '{\"data\":{\"phone\":\"9502808301\"}}' https://us-central1-attendsync-66e55.cloudfunctions.net/checkPhone)",
       "Bash(curl -s -m 40 -X POST -H \"Content-Type: application/json\" -d '{\"data\":{\"phone\":\"9502808301\",\"pin\":\"0000\"}}' https://us-central1-attendsync-66e55.cloudfunctions.net/verifyLogin)",
       "Bash(git commit -q -m 'Move PINs out of reach: locked userPins collection, server-side set/reset PIN, tighter user rules \\(no self role changes, no browser access to PINs\\) *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_noattach.js\")",
+      "Bash(node --check functions/emailAuth.js)"
     ]
   }
 }
@@ -19014,9 +19016,9 @@ module.exports = function build({ admin, onCall, HttpsError, compareNames }) {
   });
 
   // The uploaded list: [{ name, email, employeeId, designation, matchId }]
-  // matchId = an existing record to attach the email to, so nothing already entered is lost
+  // every row becomes a new account; an existing account is never changed
   const importFaculty = onCall({ timeoutSeconds: 300 }, async (request) => {
-    const role = await callerRole(request);
+    await callerRole(request);
     const rows = Array.isArray(request.data && request.data.rows) ? request.data.rows.slice(0, 500) : [];
     const db = admin.firestore();
     const results = [];
@@ -19030,23 +19032,6 @@ module.exports = function build({ admin, onCall, HttpsError, compareNames }) {
         if (existing) {
           if (existing.data.status === "approved") await ensureAuthUser(existing.id, email, existing.data.name);
           results.push({ email, ok: true, id: existing.id, note: "already in the portal", canSend: existing.data.status === "approved" });
-          continue;
-        }
-        if (row.matchId) {
-          const id = String(row.matchId);
-          if (id === MASTER_UID) throw new Error("The Master Admin account is not changed.");
-          const ref = db.collection("users").doc(id);
-          const d = await ref.get();
-          if (!d.exists) throw new Error("The matching account was not found.");
-          const t = d.data();
-          if ((t.role || "faculty") !== "faculty" && role !== "hod" && role !== "master") throw new Error("Only the HoD can attach an email to a Coordinator or HoD account.");
-          if (t.email) throw new Error("That account already has the email " + t.email + ".");
-          if (t.status === "rejected") throw new Error("That account was rejected. Approve it first.");
-          const patch = { email, status: "approved" };
-          if (row.employeeId && !t.employeeId) patch.employeeId = String(row.employeeId).trim();
-          await ref.update(patch);
-          await ensureAuthUser(id, email, t.name);
-          results.push({ email, ok: true, id, note: "attached to " + (t.name || id), canSend: true });
           continue;
         }
         const id = idFromEmail(email);
@@ -36937,14 +36922,13 @@ export default function FacultyImport({ user, onBack }) {
     reader.readAsArrayBuffer(file);
   }
 
-  const setMatch = (i, matchId) => setPlan(p => p.map((r, k) => (k === i ? { ...r, matchId, state: matchId ? "match" : "new" } : r)));
-  const doable = (plan || []).filter(r => r.state === "new" || r.state === "match" || r.state === "exists");
+  const doable = (plan || []).filter(r => r.state === "new" || r.state === "exists");
 
   async function create() {
     setBusy(true); setMsg("");
     try {
       const fn = httpsCallable(functions, "importFaculty");
-      const res = await fn({ rows: doable.map(r => ({ name: r.name, email: r.email, employeeId: r.employeeId, designation: r.designation, matchId: r.state === "match" ? r.matchId : "" })) });
+      const res = await fn({ rows: doable.map(r => ({ name: r.name, email: r.email, employeeId: r.employeeId, designation: r.designation, })) });
       setResults(res.data.results);
     } catch (e) { setMsg("Could not create the accounts (" + e.message + "). Nothing was sent."); }
     setBusy(false);
@@ -36973,7 +36957,7 @@ export default function FacultyImport({ user, onBack }) {
       <div style={{ padding: "20px clamp(14px, 3vw, 32px) 80px", maxWidth: 1100, margin: "0 auto", display: "grid", gap: 14 }}>
         <Card style={{ margin: 0, padding: "16px 18px" }}>
           <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>1. Choose the Excel file</div>
-          <div style={{ fontSize: 13.5, color: P.gray, lineHeight: 1.6, marginBottom: 12 }}>Name and college email (<b>@{COLLEGE_DOMAIN}</b>) for each faculty member. Employee ID and designation are optional. Someone who already has an account here is recognised by name, so what is already entered for them stays with them.</div>
+          <div style={{ fontSize: 13.5, color: P.gray, lineHeight: 1.6, marginBottom: 12 }}>Name and college email (<b>@{COLLEGE_DOMAIN}</b>) for each faculty member. Employee ID and designation are optional. Every row becomes a new account.</div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             <Btn small variant="outline" onClick={downloadFacultyTemplate}>Download template</Btn>
             <label>
@@ -36988,7 +36972,7 @@ export default function FacultyImport({ user, onBack }) {
           <Card style={{ margin: 0, padding: "16px 18px" }}>
             <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>2. Check what will happen</div>
             <div style={{ fontSize: 13.5, color: P.gray, marginBottom: 10 }}>
-              {plan.length} rows: {counts.new || 0} new, {counts.match || 0} attached to an existing account, {counts.exists || 0} already in the portal{counts.bad ? ", " + counts.bad + " with a problem (skipped)" : ""}. Nothing is created or emailed until you press the button below.
+              {plan.length} rows: {counts.new || 0} new accounts, {counts.exists || 0} already in the portal{counts.bad ? ", " + counts.bad + " with a problem (skipped)" : ""}. Nothing is created or emailed until you press the button below.
             </div>
             <div style={{ overflowX: "auto" }}>
               <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 760 }}>
@@ -37002,12 +36986,7 @@ export default function FacultyImport({ user, onBack }) {
                       <td style={td}>
                         {r.state === "bad" && <span style={{ color: P.red }}>{r.problem}</span>}
                         {r.state === "exists" && <span style={{ color: P.gray }}>Already in the portal ({r.existing})</span>}
-                        {(r.state === "new" || r.state === "match") && (
-                          <select value={r.state === "match" ? r.matchId : ""} onChange={e => setMatch(i, e.target.value)} style={sel}>
-                            <option value="">New account (a different person)</option>
-                            {(r.candidates || []).map(c => <option key={c.id} value={c.id}>{c.same ? "Same name" : "Similar name, check"} - attach to existing: {c.name}{c.detail ? " (" + c.detail + ")" : ""}{c.role !== "faculty" ? " [" + c.role + "]" : ""}</option>)}
-                          </select>
-                        )}
+                        {r.state === "new" && <span style={{ color: P.green, fontWeight: 600 }}>New account</span>}
                       </td>
                     </tr>
                   ))}
@@ -37052,11 +37031,11 @@ export default function FacultyImport({ user, onBack }) {
 
 // src/facultyImport/importLogic.js
 // Reading the uploaded faculty list (name, college email, and optionally Employee ID and designation) and working
-// out, for every row, whether the person is new, already has an account to attach the email to, or has a problem.
+// out, for every row, whether the person gets a new account, is already in the portal, or has a problem.
+// Nobody is ever attached to an existing account: every new row becomes a new account.
 
 import * as XLSX from "xlsx";
-import { normEmail, isCollegeEmail, MASTER_ADMIN_PHONE } from "../utils";
-import { scoreNames } from "../timetableUpload/smartParser";
+import { normEmail, isCollegeEmail } from "../utils";
 
 const clean = v => String(v == null ? "" : v).normalize("NFKC").replace(/[​-‍﻿]/g, "").trim();
 const key = v => clean(v).toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -37098,18 +37077,11 @@ export function readFacultySheet(wb) {
   return [];
 }
 
-const TITLES = new Set(["dr", "prof", "professor", "mr", "mrs", "ms", "er", "smt", "sri", "shri"]);
-// the name as words in order, without titles, dots or capitals
-const nameKey = n => clean(n).toLowerCase().replace(/[^a-z\s]/g, " ").split(/\s+/).filter(w => w && !TITLES.has(w)).join(" ");
-
-// users: [{ id, name, email, role, status, ... }]
-// state: bad (a problem, with `problem`), exists (that email is already in the portal), match (attach to an existing
-// account: `matchId`, changeable), new (a new account)
+// users: [{ id, name, email, ... }]
+// state: bad (a problem, with `problem`), exists (that email is already in the portal), new (a new account)
 export function planImport(rows, users) {
   const byEmail = new Map(users.filter(u => u.email).map(u => [normEmail(u.email), u]));
-  const free = users.filter(u => !u.email && u.id !== MASTER_ADMIN_PHONE && u.status !== "rejected");
   const seen = new Map();
-  const taken = new Set();
   return rows.map(r => {
     const base = { ...r, email: normEmail(r.email) };
     if (!r.name) return { ...base, state: "bad", problem: "No name." };
@@ -37117,17 +37089,7 @@ export function planImport(rows, users) {
     if (seen.has(base.email)) return { ...base, state: "bad", problem: "Same email as row " + seen.get(base.email) + "." };
     seen.set(base.email, r.rowNo);
     if (byEmail.has(base.email)) return { ...base, state: "exists", existing: byEmail.get(base.email).name || r.email };
-    const scored = free.map(u => ({
-      id: u.id, name: u.name || u.id, role: u.role || "faculty", score: scoreNames(r.name, u.name || ""),
-      detail: [u.designation, /^\d{10}$/.test(u.id) ? "mobile ending " + u.id.slice(-4) : ""].filter(Boolean).join(", "),
-      same: nameKey(r.name) === nameKey(u.name || ""),
-    })).filter(c => c.score >= 55).sort((a, b) => b.score - a.score).slice(0, 5);
-    // Attach by itself ONLY when the name is exactly the same (apart from Dr/Prof and dots) and it is the only one.
-    // A similar name is just a suggestion the HoD must choose: two different people can look alike (K Arun / Karun).
-    const same = scored.filter(c => c.same);
-    const sure = same.length === 1 && same[0].role === "faculty" && !taken.has(same[0].id);
-    if (sure) taken.add(same[0].id);
-    return { ...base, state: sure ? "match" : "new", matchId: sure ? same[0].id : "", candidates: scored };
+    return { ...base, state: "new" };
   });
 }
 
@@ -37164,7 +37126,7 @@ test("a sheet with no headings is read as name then email", () => {
   expect(readFacultySheet(book([["nothing", "useful"]]))).toEqual([]);
 });
 
-test("each row is new, attached to an existing account, already there, or a problem", () => {
+test("each row is new, already there, or a problem", () => {
   const users = [
     { id: "9111111111", name: "Dr K Arun Kumar", role: "faculty", status: "approved" },
     { id: "9222222222", name: "Rama Rao", role: "faculty", status: "approved" },
@@ -37183,20 +37145,16 @@ test("each row is new, attached to an existing account, already there, or a prob
     { rowNo: 9, name: "Master", email: "master@raghuenggcollege.in" },     // the master account is never offered
   ];
   const p = planImport(rows, users);
-  expect(p[0]).toMatchObject({ state: "match", matchId: "9111111111" });
-  // a similar name is only a suggestion: K Arun Kumar and Karun Kumar are different people
-  const q = planImport([{ rowNo: 2, name: "K Arun Kumar", email: "a2@raghuenggcollege.in" }], [{ id: "9444444444", name: "Dr. Karun Kumar", role: "faculty", status: "approved" }]);
-  expect(q[0].state).toBe("new");
-  expect(q[0].matchId).toBe("");
-  expect(q[0].candidates[0].id).toBe("9444444444");
+  // nobody is ever attached to an existing account, however alike the names are
+  expect(p[0].state).toBe("new");
+  expect(p[0].matchId).toBeUndefined();
   expect(p[1].state).toBe("new");
-  expect(p[1].candidates.length).toBeGreaterThan(0);
   expect(p[2].state).toBe("new");
   expect(p[3].state).toBe("exists");
   expect(p[4]).toMatchObject({ state: "bad" });
   expect(p[5]).toMatchObject({ state: "bad" });
   expect(p[6]).toMatchObject({ state: "bad" });
-  expect(p[7].matchId || "").toBe("");
+  expect(p.every(x => x.matchId === undefined)).toBe(true);
 });
 
 test("contactOf shows the email, else the mobile number", () => {

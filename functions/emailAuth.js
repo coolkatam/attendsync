@@ -87,9 +87,9 @@ module.exports = function build({ admin, onCall, HttpsError, compareNames }) {
   });
 
   // The uploaded list: [{ name, email, employeeId, designation, matchId }]
-  // matchId = an existing record to attach the email to, so nothing already entered is lost
+  // every row becomes a new account; an existing account is never changed
   const importFaculty = onCall({ timeoutSeconds: 300 }, async (request) => {
-    const role = await callerRole(request);
+    await callerRole(request);
     const rows = Array.isArray(request.data && request.data.rows) ? request.data.rows.slice(0, 500) : [];
     const db = admin.firestore();
     const results = [];
@@ -103,23 +103,6 @@ module.exports = function build({ admin, onCall, HttpsError, compareNames }) {
         if (existing) {
           if (existing.data.status === "approved") await ensureAuthUser(existing.id, email, existing.data.name);
           results.push({ email, ok: true, id: existing.id, note: "already in the portal", canSend: existing.data.status === "approved" });
-          continue;
-        }
-        if (row.matchId) {
-          const id = String(row.matchId);
-          if (id === MASTER_UID) throw new Error("The Master Admin account is not changed.");
-          const ref = db.collection("users").doc(id);
-          const d = await ref.get();
-          if (!d.exists) throw new Error("The matching account was not found.");
-          const t = d.data();
-          if ((t.role || "faculty") !== "faculty" && role !== "hod" && role !== "master") throw new Error("Only the HoD can attach an email to a Coordinator or HoD account.");
-          if (t.email) throw new Error("That account already has the email " + t.email + ".");
-          if (t.status === "rejected") throw new Error("That account was rejected. Approve it first.");
-          const patch = { email, status: "approved" };
-          if (row.employeeId && !t.employeeId) patch.employeeId = String(row.employeeId).trim();
-          await ref.update(patch);
-          await ensureAuthUser(id, email, t.name);
-          results.push({ email, ok: true, id, note: "attached to " + (t.name || id), canSend: true });
           continue;
         }
         const id = idFromEmail(email);

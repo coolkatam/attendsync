@@ -53,14 +53,13 @@ export default function FacultyImport({ user, onBack }) {
     reader.readAsArrayBuffer(file);
   }
 
-  const setMatch = (i, matchId) => setPlan(p => p.map((r, k) => (k === i ? { ...r, matchId, state: matchId ? "match" : "new" } : r)));
-  const doable = (plan || []).filter(r => r.state === "new" || r.state === "match" || r.state === "exists");
+  const doable = (plan || []).filter(r => r.state === "new" || r.state === "exists");
 
   async function create() {
     setBusy(true); setMsg("");
     try {
       const fn = httpsCallable(functions, "importFaculty");
-      const res = await fn({ rows: doable.map(r => ({ name: r.name, email: r.email, employeeId: r.employeeId, designation: r.designation, matchId: r.state === "match" ? r.matchId : "" })) });
+      const res = await fn({ rows: doable.map(r => ({ name: r.name, email: r.email, employeeId: r.employeeId, designation: r.designation, })) });
       setResults(res.data.results);
     } catch (e) { setMsg("Could not create the accounts (" + e.message + "). Nothing was sent."); }
     setBusy(false);
@@ -89,7 +88,7 @@ export default function FacultyImport({ user, onBack }) {
       <div style={{ padding: "20px clamp(14px, 3vw, 32px) 80px", maxWidth: 1100, margin: "0 auto", display: "grid", gap: 14 }}>
         <Card style={{ margin: 0, padding: "16px 18px" }}>
           <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>1. Choose the Excel file</div>
-          <div style={{ fontSize: 13.5, color: P.gray, lineHeight: 1.6, marginBottom: 12 }}>Name and college email (<b>@{COLLEGE_DOMAIN}</b>) for each faculty member. Employee ID and designation are optional. Someone who already has an account here is recognised by name, so what is already entered for them stays with them.</div>
+          <div style={{ fontSize: 13.5, color: P.gray, lineHeight: 1.6, marginBottom: 12 }}>Name and college email (<b>@{COLLEGE_DOMAIN}</b>) for each faculty member. Employee ID and designation are optional. Every row becomes a new account.</div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             <Btn small variant="outline" onClick={downloadFacultyTemplate}>Download template</Btn>
             <label>
@@ -104,7 +103,7 @@ export default function FacultyImport({ user, onBack }) {
           <Card style={{ margin: 0, padding: "16px 18px" }}>
             <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>2. Check what will happen</div>
             <div style={{ fontSize: 13.5, color: P.gray, marginBottom: 10 }}>
-              {plan.length} rows: {counts.new || 0} new, {counts.match || 0} attached to an existing account, {counts.exists || 0} already in the portal{counts.bad ? ", " + counts.bad + " with a problem (skipped)" : ""}. Nothing is created or emailed until you press the button below.
+              {plan.length} rows: {counts.new || 0} new accounts, {counts.exists || 0} already in the portal{counts.bad ? ", " + counts.bad + " with a problem (skipped)" : ""}. Nothing is created or emailed until you press the button below.
             </div>
             <div style={{ overflowX: "auto" }}>
               <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 760 }}>
@@ -118,12 +117,7 @@ export default function FacultyImport({ user, onBack }) {
                       <td style={td}>
                         {r.state === "bad" && <span style={{ color: P.red }}>{r.problem}</span>}
                         {r.state === "exists" && <span style={{ color: P.gray }}>Already in the portal ({r.existing})</span>}
-                        {(r.state === "new" || r.state === "match") && (
-                          <select value={r.state === "match" ? r.matchId : ""} onChange={e => setMatch(i, e.target.value)} style={sel}>
-                            <option value="">New account (a different person)</option>
-                            {(r.candidates || []).map(c => <option key={c.id} value={c.id}>{c.same ? "Same name" : "Similar name, check"} - attach to existing: {c.name}{c.detail ? " (" + c.detail + ")" : ""}{c.role !== "faculty" ? " [" + c.role + "]" : ""}</option>)}
-                          </select>
-                        )}
+                        {r.state === "new" && <span style={{ color: P.green, fontWeight: 600 }}>New account</span>}
                       </td>
                     </tr>
                   ))}

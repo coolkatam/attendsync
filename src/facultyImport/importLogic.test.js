@@ -25,7 +25,7 @@ test("a sheet with no headings is read as name then email", () => {
   expect(readFacultySheet(book([["nothing", "useful"]]))).toEqual([]);
 });
 
-test("each row is new, attached to an existing account, already there, or a problem", () => {
+test("each row is new, already there, or a problem", () => {
   const users = [
     { id: "9111111111", name: "Dr K Arun Kumar", role: "faculty", status: "approved" },
     { id: "9222222222", name: "Rama Rao", role: "faculty", status: "approved" },
@@ -44,20 +44,16 @@ test("each row is new, attached to an existing account, already there, or a prob
     { rowNo: 9, name: "Master", email: "master@raghuenggcollege.in" },     // the master account is never offered
   ];
   const p = planImport(rows, users);
-  expect(p[0]).toMatchObject({ state: "match", matchId: "9111111111" });
-  // a similar name is only a suggestion: K Arun Kumar and Karun Kumar are different people
-  const q = planImport([{ rowNo: 2, name: "K Arun Kumar", email: "a2@raghuenggcollege.in" }], [{ id: "9444444444", name: "Dr. Karun Kumar", role: "faculty", status: "approved" }]);
-  expect(q[0].state).toBe("new");
-  expect(q[0].matchId).toBe("");
-  expect(q[0].candidates[0].id).toBe("9444444444");
+  // nobody is ever attached to an existing account, however alike the names are
+  expect(p[0].state).toBe("new");
+  expect(p[0].matchId).toBeUndefined();
   expect(p[1].state).toBe("new");
-  expect(p[1].candidates.length).toBeGreaterThan(0);
   expect(p[2].state).toBe("new");
   expect(p[3].state).toBe("exists");
   expect(p[4]).toMatchObject({ state: "bad" });
   expect(p[5]).toMatchObject({ state: "bad" });
   expect(p[6]).toMatchObject({ state: "bad" });
-  expect(p[7].matchId || "").toBe("");
+  expect(p.every(x => x.matchId === undefined)).toBe(true);
 });
 
 test("contactOf shows the email, else the mobile number", () => {
