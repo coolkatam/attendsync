@@ -9,6 +9,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { P } from "./UI";
 import { IconStar, IconLogout } from "./Icons";
+import ChangePassword from "./ChangePassword";
 
 // Soft tint + solid accent pairs used for tile icon badges. Purely for
 // visual variety on a navigation grid — not semantic/status color.
@@ -98,11 +99,14 @@ export default function HomeHub({ user, onLogout, roleLabel, masterStar, greetin
             <div style={{ color: "rgba(255,255,255,0.68)", fontSize: 11.5 }}>{roleLabel}</div>
           </div>
         </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+        <ChangePassword user={user} />
         <button onClick={onLogout}
           style={{ display: "flex", alignItems: "center", gap: 7, background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.85)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 7, padding: "7px 14px", cursor: "pointer", fontSize: 12.5, fontWeight: 600, fontFamily: "inherit", flexShrink: 0 }}>
           <IconLogout size={14} />
           Logout
         </button>
+        </div>
       </div>
 
       {/* ── Tile hub ── */}

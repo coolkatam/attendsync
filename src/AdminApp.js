@@ -28,7 +28,7 @@ import FacultyWorkload from "./timetable/FacultyWorkload";
 import TimetableEntry from "./timetableUpload/TimetableEntry";
 import RosterCheck from "./roster/RosterCheck";
 import FacultyImport from "./facultyImport/FacultyImport";
-import { approveUser as approveUserShared, resetPin as resetPinShared, sendSetPasswordLink, restoreUser, removeUser } from "./userActions";
+import { approveUser as approveUserShared, resetPin as resetPinShared, restoreUser, removeUser } from "./userActions";
 import { IconAttendance, IconSections, IconMarks, IconMentor, IconSearch, IconUsers, IconTrash, IconUserCircle, IconIdCard, IconPhone, IconCalendar, IconWorkload, IconBuilding } from "./components/Icons";
 import { contactOf } from "./utils";
 import { today, calcPct, parseCSV, downloadTemplate, exportXLS, makeKey, parseKey, groupByDateBatched, rowColor, MASTER_ADMIN_PHONE, fmtDate, validateBatches, studentsInBatch, readStatus, batchSlotKey } from "./utils";
@@ -945,7 +945,6 @@ export function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReje
   const canManageRoster = isMaster || currentUser.role === "hod";
   const canApprove = isMaster || currentUser.role === "hod";          // new joiners are approved by the HoD or the master admin
   const [showImport, setShowImport] = useState(false);
-  const [linkMsg, setLinkMsg] = useState("");
 
   useEffect(() => {
     if (!canManageRoster) return;
@@ -1009,12 +1008,6 @@ export function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReje
     reader.readAsArrayBuffer(file);
   }
 
-  async function sendLink(u) {
-    setLinkMsg("");
-    try { await sendSetPasswordLink(u.id, u.email); setLinkMsg("A link to set a password was emailed to " + u.email + "."); }
-    catch (e) { setLinkMsg("Could not send the link (" + (e.message || e) + ")."); }
-  }
-
   if (showImport) return <FacultyImport user={currentUser} onBack={() => setShowImport(false)} />;
 
   const filtered = allUsers.filter(u => {
@@ -1054,11 +1047,12 @@ export function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReje
           ))}
         </div>
 
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 16 }}>
-          <Btn small onClick={() => setShowImport(true)}>Upload faculty list (name + college email)</Btn>
-          <span style={{ fontSize: 12.5, color: P.gray }}>Faculty sign in with their college email; each gets a link to set a password.</span>
-        </div>
-        {linkMsg && <div style={{ fontSize: 13, color: "#78350f", background: "#fef3c7", borderRadius: 8, padding: "8px 12px", marginBottom: 14 }}>{linkMsg}</div>}
+        {canApprove && (
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 16 }}>
+            <Btn small onClick={() => setShowImport(true)}>Add faculty (Employee ID + college email)</Btn>
+            <span style={{ fontSize: 12.5, color: P.gray }}>One at a time, or a whole list from Excel. Each person fills in their own details at first sign-in.</span>
+          </div>
+        )}
 
         {/* ── Employee roster management (HoD / master admin only) ── */}
         {canManageRoster && (
@@ -1139,14 +1133,14 @@ export function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReje
 
                 <div style={{ fontSize: 12, color: P.gray }}>{u.designation}{u.designation && u.branch ? " · " : ""}{u.branch}</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: P.gray, fontFamily: "'IBM Plex Mono', monospace" }}>
-                  {u.email ? <span style={{ wordBreak: "break-all" }}>✉ {u.email}</span> : <><IconPhone size={11} color={P.gray} /> {u.phone}</>}
+                  {u.email ? <span style={{ wordBreak: "break-all", textAlign: "center" }}>{u.employeeId || u.id}<br />✉ {u.email}</span> : <><IconPhone size={11} color={P.gray} /> {u.phone}</>}
                 </div>
                 {isPending && u.rosterCheck && <div style={{ fontSize: 11.5, marginTop: 4, color: /not on|differs/.test(u.rosterCheck) ? P.red : P.green }}>{u.employeeId}: {u.rosterCheck}</div>}
                 {u.subjects && <div style={{ fontSize: 12, color: P.gray, marginTop: 2 }}>{u.subjects}</div>}
                 {u.status === "approved" && (
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
                     {u.email
-                      ? <><span style={{ width: 7, height: 7, borderRadius: "50%", background: u.pwSet ? P.green : P.amber, flexShrink: 0 }} /><span style={{ fontSize: 11, color: P.gray }}>{u.pwSet ? "Password set" : "Password not set yet"}</span></>
+                      ? <><span style={{ width: 7, height: 7, borderRadius: "50%", background: u.pwSet ? P.green : P.amber, flexShrink: 0 }} /><span style={{ fontSize: 11, color: P.gray }}>{u.pwSet ? "Password set" : !u.detailsDone && u.detailsDone !== undefined ? "Not signed in yet" : "Password not set yet"}</span></>
                       : <><span style={{ width: 7, height: 7, borderRadius: "50%", background: (u.pinSet || u.pin) ? P.green : P.amber, flexShrink: 0 }} /><span style={{ fontSize: 11, color: P.gray }}>{(u.pinSet || u.pin) ? "PIN set" : "No PIN yet"}</span></>}
                   </div>
                 )}
@@ -1169,9 +1163,6 @@ export function UsersScreen({ allUsers, currentUser, isMaster, onApprove, onReje
                     )}
                     {isRejected && canApprove && (
                       <Btn small variant="outline" onClick={() => onApprove(u.id)}>Re-approve</Btn>
-                    )}
-                    {u.status === "approved" && u.email && canApprove && (
-                      <Btn small variant="outline" onClick={() => sendLink(u)}>Send password link</Btn>
                     )}
                     {isMaster && !isPending && !isRejected && (
                       isAdmin

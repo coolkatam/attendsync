@@ -52,16 +52,14 @@ service cloud.firestore {
       allow read: if isSignedIn();
 
       // a registration can only ask to be a plain faculty member, and never carries a PIN
-      allow create: if request.resource.data.status == 'pending'
-                    && !('pin' in request.resource.data)
-                    && !('pinSet' in request.resource.data)
-                    && (!('role' in request.resource.data) || request.resource.data.role == 'faculty');
+      // nobody registers themselves: people are listed by the HoD or Master Admin through the server
+      allow create: if false;
 
       // Nobody can change a PIN from a browser. A person can edit their own record but not their role,
       // approval, email or PIN; only the HoD or master admin change roles and approvals.
       allow update: if !touchesPin() && (
         (isSignedIn() && request.auth.uid == phone &&
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'status', 'email'])) ||
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'status', 'email', 'employeeId', 'pwSet'])) ||
         (isAdmin() &&
           (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'status']) || isHodOrMaster()))
       );

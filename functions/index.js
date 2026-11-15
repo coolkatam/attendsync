@@ -206,11 +206,12 @@ exports.syncFacultyStats = onCall(async (request) => {
   return result;
 });
 
-// College-email sign-in (see emailAuth.js)
-Object.assign(exports, require("./emailAuth")({ admin, onCall, HttpsError, compareNames }));
+// Sign-in with Employee ID and password (see employeeAuth.js)
+Object.assign(exports, require("./employeeAuth")({ admin, onCall, HttpsError }));
 
 // PINs in a locked collection of their own (see pins.js)
 const pinsApi = require("./pins")({ admin, onCall, HttpsError });
 exports.setPin = pinsApi.setPin;
 exports.resetPin = pinsApi.resetPin;
+
 
