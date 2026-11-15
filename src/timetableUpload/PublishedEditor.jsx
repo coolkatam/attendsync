@@ -2,7 +2,7 @@
 // Edit a published timetable on screen: click a class to move it, swap it, change its faculty or remove it; click an
 // empty period to add a class. Every edit is checked for overlaps (faculty, section, other years' published
 // timetables) before it is accepted, and nothing is saved until "Save changes". Saving updates the master
-// timetable, which faculty see in Timetable.
+// timetable, which faculty see in My Timetable.
 
 import React, { useState, useEffect, useRef } from "react";
 import { collection, doc, getDoc, getDocs, onSnapshot } from "firebase/firestore";
@@ -96,7 +96,7 @@ export default function PublishedEditor({ year, user, onBack }) {
     try {
       await publishMaster({ year, blocks, sections, user, edited: true, keepFrom: master });
       setMaster({ ...master, blocks }); setLog([]); setPick(null);
-      setMsg({ ok: true, text: "Saved. The Year " + year + " timetable is updated, and faculty see the change in Timetable." });
+      setMsg({ ok: true, text: "Saved. The Year " + year + " timetable is updated, and faculty see the change in My Timetable." });
     } catch (err) { setMsg({ ok: false, text: "Could not save (" + err.message + "). Nothing was changed." }); }
     setSaving(false);
   }

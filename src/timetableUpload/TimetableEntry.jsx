@@ -99,7 +99,7 @@ export default function TimetableEntry({ user }) {
                 <div style={{ marginTop: 12, background: P.redL, border: "1px solid " + P.red, borderRadius: 10, padding: "12px 14px" }}>
                   <div style={{ fontSize: 13.5, fontWeight: 700, color: P.red, marginBottom: 4 }}>Remove {ask.label}?</div>
                   <div style={{ fontSize: 13, marginBottom: 10, lineHeight: 1.55 }}>
-                    Faculty will no longer see these classes in Timetable, and the Faculty Workload figures drop with them. You can design or upload the timetable again afterwards. Attendance and marks are not affected.
+                    Faculty will no longer see these classes in My Timetable, and the Faculty Workload figures drop with them. You can design or upload the timetable again afterwards. Attendance and marks are not affected.
                   </div>
                   <div style={{ display: "flex", gap: 10 }}>
                     <Btn small variant="danger" onClick={doRemove} disabled={busy}>{busy ? "Removing…" : "Yes, remove"}</Btn>

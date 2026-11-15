@@ -52,17 +52,17 @@ export default function HoDApp({ user, onLogout }) {
           {
             label: "My own duties",
             tiles: [
-              { id: "timetable", title: "Timetable", desc: "Your weekly class schedule. Edit it any time and download it.", icon: IconCalendar, color: "amber" },
-              { id: "profile", title: "Profile", desc: "Your bio, qualifications, publications and downloadable resume.", icon: IconUserCircle, color: "blue" },
-              { id: "myAttendance", title: "Section Attendance", desc: "Mark and review attendance for the subjects you personally teach.", icon: IconAttendance, color: "teal" },
-              { id: "myMarks", title: "Subject Internal Marks", desc: "Enter marks for the subjects you teach, and any papers assigned to you for valuation.", icon: IconMarks, color: "indigo" },
+              { id: "timetable", title: "My Timetable", desc: "Your weekly class schedule. Edit it any time and download it.", icon: IconCalendar, color: "amber" },
+              { id: "profile", title: "My Profile", desc: "Your bio, qualifications, publications and downloadable resume.", icon: IconUserCircle, color: "blue" },
+              { id: "myAttendance", title: "My Section Attendance", desc: "Mark and review attendance for the subjects you personally teach.", icon: IconAttendance, color: "teal" },
+              { id: "myMarks", title: "My Subject Internal Marks", desc: "Enter marks for the subjects you teach, and any papers assigned to you for valuation.", icon: IconMarks, color: "indigo" },
             ],
           },
           {
             label: "Department oversight",
             tiles: [
               { id: "studentData", title: "Student Data", desc: "Look up any student's SGPA, CGPA, backlogs and attendance trend.", icon: IconSearch, color: "green" },
-              { id: "timetableUpload", title: "Timetable Management", desc: "Upload a timetable, or have the portal design one, then clear overlaps and publish.", icon: IconCalendar, color: "indigo" },
+              { id: "timetableUpload", title: "Timetable", desc: "Upload a timetable, or have the portal design one, then clear overlaps and publish.", icon: IconCalendar, color: "indigo" },
               { id: "workload", title: "Faculty Workload", desc: "Weekly periods for every faculty member, from their timetables.", icon: IconWorkload, color: "indigo" },
               { id: "allSectionsMarks", title: "All Sections Internal Marks", desc: "Monitor every original section's marks — see who's locked, drafted or not started.", icon: IconMarks, color: "amber" },
               { id: "profiles", title: "Faculty Profiles", desc: "Directory of every faculty member's bio, publications and research.", icon: IconUsers, color: "rose" },
@@ -79,14 +79,14 @@ export default function HoDApp({ user, onLogout }) {
   }
 
   const tabTitle = {
-    myAttendance: "Section Attendance",
-    myMarks: "Subject Internal Marks",
-    timetable: "Timetable",
+    myAttendance: "My Section Attendance",
+    myMarks: "My Subject Internal Marks",
+    timetable: "My Timetable",
     workload: "Faculty Workload",
     timetableUpload: "Timetable",
     profiles: "Faculty Profiles",
     users: "Users",
-    profile: "Profile",
+    profile: "My Profile",
   }[tab] || "";
 
   return (

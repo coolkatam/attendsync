@@ -211,7 +211,7 @@ export default function AdminApp({ user, onLogout }) {
   if (screen === "myProfile") {
     return (
       <div style={{ background: P.bg, minHeight: "100vh" }}>
-        <TopBar title="Profile" subtitle={user.name}
+        <TopBar title="My Profile" subtitle={user.name}
           right={<button onClick={() => setScreen("home")} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>← Back</button>} />
         <div style={{ padding: "16px 16px 80px" }}>
           <FacultyProfilePage user={user} />
@@ -273,7 +273,7 @@ export default function AdminApp({ user, onLogout }) {
     const isWorkload = screen === "workload";
     return (
       <div style={{ background: P.bg, minHeight: "100vh" }}>
-        <TopBar title={isWorkload ? "Faculty Workload" : "Timetable"} subtitle={user.name}
+        <TopBar title={isWorkload ? "Faculty Workload" : "My Timetable"} subtitle={user.name}
           right={<button onClick={() => setScreen("home")} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>← Back</button>} />
         {isWorkload ? <FacultyWorkload /> : <TimetablePage user={user} />}
       </div>
@@ -333,10 +333,10 @@ export default function AdminApp({ user, onLogout }) {
           {
             label: "My own duties",
             tiles: [
-              { id: "timetable", title: "Timetable", desc: "Your weekly class schedule. Edit it any time and download it.", icon: IconCalendar, color: "amber" },
-              { id: "myProfile", title: "Profile", desc: "Your bio, qualifications, publications and downloadable resume.", icon: IconUserCircle, color: "blue" },
-              { id: "myAttendance", title: "Section Attendance", desc: "Mark and review attendance for the subjects you personally teach.", icon: IconAttendance, color: "teal" },
-              { id: "myMarks", title: "Subject Internal Marks", desc: "Enter marks for the subjects you teach.", icon: IconMarks, color: "indigo" },
+              { id: "timetable", title: "My Timetable", desc: "Your weekly class schedule. Edit it any time and download it.", icon: IconCalendar, color: "amber" },
+              { id: "myProfile", title: "My Profile", desc: "Your bio, qualifications, publications and downloadable resume.", icon: IconUserCircle, color: "blue" },
+              { id: "myAttendance", title: "My Section Attendance", desc: "Mark and review attendance for the subjects you personally teach.", icon: IconAttendance, color: "teal" },
+              { id: "myMarks", title: "My Subject Internal Marks", desc: "Enter marks for the subjects you teach.", icon: IconMarks, color: "indigo" },
               { id: "myMentor", title: "Mentor", desc: "Track your mentee students' progress and add comments.", icon: IconMentor, color: "violet" },
             ],
           },
@@ -361,7 +361,7 @@ export default function AdminApp({ user, onLogout }) {
   }
 
   const homeTabTitle = {
-    myAttendance: "Section Attendance",
+    myAttendance: "My Section Attendance",
     allSections: "All Sections",
     profiles: "Faculty Profiles",
     trash: "Trash",
