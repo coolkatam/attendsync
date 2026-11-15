@@ -33459,7 +33459,7 @@ export default function AdminApp({ user, onLogout }) {
   if (screen === "myProfile") {
     return (
       <div style={{ background: P.bg, minHeight: "100vh" }}>
-        <TopBar title="My Profile" subtitle={user.name}
+        <TopBar title="Professional Profile" subtitle={user.name}
           right={<button onClick={() => setScreen("home")} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>← Back</button>} />
         <div style={{ padding: "16px 16px 80px" }}>
           <FacultyProfilePage user={user} />
@@ -33521,7 +33521,7 @@ export default function AdminApp({ user, onLogout }) {
     const isWorkload = screen === "workload";
     return (
       <div style={{ background: P.bg, minHeight: "100vh" }}>
-        <TopBar title={isWorkload ? "Faculty Workload" : "My Timetable"} subtitle={user.name}
+        <TopBar title={isWorkload ? "Faculty Workload" : "Teaching Schedule"} subtitle={user.name}
           right={<button onClick={() => setScreen("home")} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>← Back</button>} />
         {isWorkload ? <FacultyWorkload /> : <TimetablePage user={user} />}
       </div>
@@ -33581,10 +33581,10 @@ export default function AdminApp({ user, onLogout }) {
           {
             label: "My own duties",
             tiles: [
-              { id: "timetable", title: "My Timetable", desc: "Your weekly class schedule. Edit it any time and download it.", icon: IconCalendar, color: "amber" },
-              { id: "myProfile", title: "My Profile", desc: "Your bio, qualifications, publications and downloadable resume.", icon: IconUserCircle, color: "blue" },
-              { id: "myAttendance", title: "My Section Attendance", desc: "Mark and review attendance for the subjects you personally teach.", icon: IconAttendance, color: "teal" },
-              { id: "myMarks", title: "My Subject Internal Marks", desc: "Enter marks for the subjects you teach.", icon: IconMarks, color: "indigo" },
+              { id: "timetable", title: "Teaching Schedule", desc: "Your weekly class schedule. Edit it any time and download it.", icon: IconCalendar, color: "amber" },
+              { id: "myProfile", title: "Professional Profile", desc: "Your bio, qualifications, publications and downloadable resume.", icon: IconUserCircle, color: "blue" },
+              { id: "myAttendance", title: "Student Attendance", desc: "Mark and review attendance for the subjects you personally teach.", icon: IconAttendance, color: "teal" },
+              { id: "myMarks", title: "Internal Marks Entry", desc: "Enter marks for the subjects you teach.", icon: IconMarks, color: "indigo" },
               { id: "myMentor", title: "Mentor", desc: "Track your mentee students' progress and add comments.", icon: IconMentor, color: "violet" },
             ],
           },
@@ -33609,7 +33609,7 @@ export default function AdminApp({ user, onLogout }) {
   }
 
   const homeTabTitle = {
-    myAttendance: "My Section Attendance",
+    myAttendance: "Student Attendance",
     allSections: "All Sections",
     profiles: "Faculty Profiles",
     trash: "Trash",
@@ -35633,10 +35633,10 @@ export default function FacultyApp({ user, onLogout, hideShell = false, initialT
         groups={[{
           label: "My own duties",
           tiles: [
-            { id: "timetable", title: "My Timetable", desc: "Your weekly class schedule. Edit it any time and download it.", icon: IconCalendar, color: "amber" },
-            { id: "profile", title: "My Profile", desc: "Your bio, qualifications, publications and downloadable resume.", icon: IconUserCircle, color: "blue" },
-            { id: "attendance", title: "My Section Attendance", desc: "Mark and review attendance for the subjects you teach.", icon: IconAttendance, color: "teal" },
-            { id: "marks", title: "My Subject Internal Marks", desc: "Enter marks for the subjects you teach.", icon: IconMarks, color: "indigo" },
+            { id: "timetable", title: "Teaching Schedule", desc: "Your weekly class schedule. Edit it any time and download it.", icon: IconCalendar, color: "amber" },
+            { id: "profile", title: "Professional Profile", desc: "Your bio, qualifications, publications and downloadable resume.", icon: IconUserCircle, color: "blue" },
+            { id: "attendance", title: "Student Attendance", desc: "Mark and review attendance for the subjects you teach.", icon: IconAttendance, color: "teal" },
+            { id: "marks", title: "Internal Marks Entry", desc: "Enter marks for the subjects you teach.", icon: IconMarks, color: "indigo" },
             { id: "mentor", title: "Mentor", desc: "Track your mentee students' progress and add comments.", icon: IconMentor, color: "violet" },
           ],
         }]}
@@ -35645,11 +35645,11 @@ export default function FacultyApp({ user, onLogout, hideShell = false, initialT
   }
 
   const mainTabTitle = {
-    attendance: "My Section Attendance",
-    marks: "My Subject Internal Marks",
+    attendance: "Student Attendance",
+    marks: "Internal Marks Entry",
     mentor: "Mentor",
-    profile: "My Profile",
-    timetable: "My Timetable",
+    profile: "Professional Profile",
+    timetable: "Teaching Schedule",
   }[mainTab] || "";
 
   return (
@@ -37138,7 +37138,7 @@ export default function HomeShell({ user, onLogout, roleLabel, tabs, active, onS
       <div style={{ background: P.navy, padding: "0 24px", height: 60, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 30 }}>
         <div
           onClick={() => onSelect("profile")}
-          title="Go to My Profile"
+          title="Go to Professional Profile"
           style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0, cursor: "pointer" }}
         >
           <div style={{
@@ -37916,10 +37916,10 @@ export default function HoDApp({ user, onLogout }) {
           {
             label: "My own duties",
             tiles: [
-              { id: "timetable", title: "My Timetable", desc: "Your weekly class schedule. Edit it any time and download it.", icon: IconCalendar, color: "amber" },
-              { id: "profile", title: "My Profile", desc: "Your bio, qualifications, publications and downloadable resume.", icon: IconUserCircle, color: "blue" },
-              { id: "myAttendance", title: "My Section Attendance", desc: "Mark and review attendance for the subjects you personally teach.", icon: IconAttendance, color: "teal" },
-              { id: "myMarks", title: "My Subject Internal Marks", desc: "Enter marks for the subjects you teach, and any papers assigned to you for valuation.", icon: IconMarks, color: "indigo" },
+              { id: "timetable", title: "Teaching Schedule", desc: "Your weekly class schedule. Edit it any time and download it.", icon: IconCalendar, color: "amber" },
+              { id: "profile", title: "Professional Profile", desc: "Your bio, qualifications, publications and downloadable resume.", icon: IconUserCircle, color: "blue" },
+              { id: "myAttendance", title: "Student Attendance", desc: "Mark and review attendance for the subjects you personally teach.", icon: IconAttendance, color: "teal" },
+              { id: "myMarks", title: "Internal Marks Entry", desc: "Enter marks for the subjects you teach, and any papers assigned to you for valuation.", icon: IconMarks, color: "indigo" },
             ],
           },
           {
@@ -37943,14 +37943,14 @@ export default function HoDApp({ user, onLogout }) {
   }
 
   const tabTitle = {
-    myAttendance: "My Section Attendance",
-    myMarks: "My Subject Internal Marks",
-    timetable: "My Timetable",
+    myAttendance: "Student Attendance",
+    myMarks: "Internal Marks Entry",
+    timetable: "Teaching Schedule",
     workload: "Faculty Workload",
     timetableUpload: "Timetable",
     profiles: "Faculty Profiles",
     users: "Users",
-    profile: "My Profile",
+    profile: "Professional Profile",
   }[tab] || "";
 
   return (
@@ -41263,7 +41263,7 @@ function TabValuationSubjects({ section }) {
       <div style={{ fontSize: 13, color: P.gray, marginBottom: 14, lineHeight: 1.6 }}>
         Assign one faculty member per subject to value that subject's papers for this section.
         This is separate from who teaches the subject — a faculty member sees this under
-        "My Subject Internal Marks" alongside their own taught sections.
+        "Internal Marks Entry" alongside their own taught sections.
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <div style={{ fontWeight: 600, fontSize: 14 }}>{section.subjects?.length || 0} subjects</div>
@@ -45482,7 +45482,7 @@ export default function DesignScreen({ user, onBack }) {
     try {
       const merged = mergeSections(published.find(p => p.year === year), v.blocks, sectionsOf(specUsed));
       await publishMaster({ year, blocks: merged.blocks, sections: merged.sections, user, fileName: "Designed in the portal (version " + n + ")" });
-      setPubMsg({ ok: true, text: specUsed.sections.map(x => x.name).join(", ") + " published from Version " + n + " (" + v.blocks.length + " classes) in the Year " + year + " timetable. Faculty now see their classes in My Timetable." });
+      setPubMsg({ ok: true, text: specUsed.sections.map(x => x.name).join(", ") + " published from Version " + n + " (" + v.blocks.length + " classes) in the Year " + year + " timetable. Faculty now see their classes in Teaching Schedule." });
       setConfirmN(0);
     } catch (err) {
       setPubMsg({ ok: false, text: "Could not publish (" + err.message + "). Nothing was changed." });
@@ -48202,7 +48202,7 @@ export function autoFix(blocks, slotsBySection, publishedBlocks, maxRounds = 120
 // Edit a published timetable on screen: click a class to move it, swap it, change its faculty or remove it; click an
 // empty period to add a class. Every edit is checked for overlaps (faculty, section, other years' published
 // timetables) before it is accepted, and nothing is saved until "Save changes". Saving updates the master
-// timetable, which faculty see in My Timetable.
+// timetable, which faculty see in Teaching Schedule.
 
 import React, { useState, useEffect, useRef } from "react";
 import { collection, doc, getDoc, getDocs, onSnapshot } from "firebase/firestore";
@@ -48296,7 +48296,7 @@ export default function PublishedEditor({ year, user, onBack }) {
     try {
       await publishMaster({ year, blocks, sections, user, edited: true, keepFrom: master });
       setMaster({ ...master, blocks }); setLog([]); setPick(null);
-      setMsg({ ok: true, text: "Saved. The Year " + year + " timetable is updated, and faculty see the change in My Timetable." });
+      setMsg({ ok: true, text: "Saved. The Year " + year + " timetable is updated, and faculty see the change in Teaching Schedule." });
     } catch (err) { setMsg({ ok: false, text: "Could not save (" + err.message + "). Nothing was changed." }); }
     setSaving(false);
   }
@@ -49371,7 +49371,7 @@ export default function TimetableEntry({ user }) {
                 <div style={{ marginTop: 12, background: P.redL, border: "1px solid " + P.red, borderRadius: 10, padding: "12px 14px" }}>
                   <div style={{ fontSize: 13.5, fontWeight: 700, color: P.red, marginBottom: 4 }}>Remove {ask.label}?</div>
                   <div style={{ fontSize: 13, marginBottom: 10, lineHeight: 1.55 }}>
-                    Faculty will no longer see these classes in My Timetable, and the Faculty Workload figures drop with them. You can design or upload the timetable again afterwards. Attendance and marks are not affected.
+                    Faculty will no longer see these classes in Teaching Schedule, and the Faculty Workload figures drop with them. You can design or upload the timetable again afterwards. Attendance and marks are not affected.
                   </div>
                   <div style={{ display: "flex", gap: 10 }}>
                     <Btn small variant="danger" onClick={doRemove} disabled={busy}>{busy ? "Removing…" : "Yes, remove"}</Btn>

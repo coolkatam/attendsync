@@ -270,7 +270,7 @@ export default function DesignScreen({ user, onBack }) {
     try {
       const merged = mergeSections(published.find(p => p.year === year), v.blocks, sectionsOf(specUsed));
       await publishMaster({ year, blocks: merged.blocks, sections: merged.sections, user, fileName: "Designed in the portal (version " + n + ")" });
-      setPubMsg({ ok: true, text: specUsed.sections.map(x => x.name).join(", ") + " published from Version " + n + " (" + v.blocks.length + " classes) in the Year " + year + " timetable. Faculty now see their classes in My Timetable." });
+      setPubMsg({ ok: true, text: specUsed.sections.map(x => x.name).join(", ") + " published from Version " + n + " (" + v.blocks.length + " classes) in the Year " + year + " timetable. Faculty now see their classes in Teaching Schedule." });
       setConfirmN(0);
     } catch (err) {
       setPubMsg({ ok: false, text: "Could not publish (" + err.message + "). Nothing was changed." });

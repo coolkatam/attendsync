@@ -273,7 +273,7 @@ function TabValuationSubjects({ section }) {
       <div style={{ fontSize: 13, color: P.gray, marginBottom: 14, lineHeight: 1.6 }}>
         Assign one faculty member per subject to value that subject's papers for this section.
         This is separate from who teaches the subject — a faculty member sees this under
-        "My Subject Internal Marks" alongside their own taught sections.
+        "Internal Marks Entry" alongside their own taught sections.
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <div style={{ fontWeight: 600, fontSize: 14 }}>{section.subjects?.length || 0} subjects</div>
