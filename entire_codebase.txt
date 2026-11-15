@@ -33283,10 +33283,10 @@ import { today, calcPct, parseCSV, downloadTemplate, exportXLS, makeKey, parseKe
 
 // The tabs that live under the Coordinator Duties tile.
 const COORD_TILES = [
-  { id: "allSections", title: "All Sections", desc: "Rosters, subjects and attendance for every section you administer.", icon: IconSections, color: "teal" },
-  { id: "allSectionsMarks", title: "All Sections Internal Marks", desc: "Monitor every original section's marks — see who's locked, drafted or not started.", icon: IconMarks, color: "amber" },
-  { id: "timetableUpload", title: "Timetable", desc: "Upload a timetable, or have the portal design one, then clear overlaps and publish.", icon: IconCalendar, color: "indigo" },
-  { id: "users", title: "Users", desc: "Approve registrations, promote faculty, manage the employee ID roster.", icon: IconUsers, color: "slate" },
+  { id: "allSections", title: "Sections and Subjects", desc: "Rosters, subjects and attendance for every section you administer.", icon: IconSections, color: "teal" },
+  { id: "allSectionsMarks", title: "Internal Marks Monitoring", desc: "Monitor every original section's marks — see who's locked, drafted or not started.", icon: IconMarks, color: "amber" },
+  { id: "timetableUpload", title: "Timetable Management", desc: "Upload a timetable, or have the portal design one, then clear overlaps and publish.", icon: IconCalendar, color: "indigo" },
+  { id: "users", title: "User Management", desc: "See the faculty and users in the portal and the roles they hold.", icon: IconUsers, color: "slate" },
 ];
 
 // ── Invite link card — each admin's shareable link for their own faculty ──
@@ -33511,7 +33511,7 @@ export default function AdminApp({ user, onLogout }) {
   if (screen === "timetableUpload") {
     return (
       <div style={{ background: P.bg, minHeight: "100vh" }}>
-        <TopBar title="Timetable" subtitle={user.name}
+        <TopBar title="Timetable Management" subtitle={user.name}
           right={<button onClick={() => setScreen(inCoord ? "coordinator" : "home")} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>← Back</button>} />
         <TimetableEntry user={user} />
       </div>
@@ -33610,7 +33610,7 @@ export default function AdminApp({ user, onLogout }) {
 
   const homeTabTitle = {
     myAttendance: "Student Attendance",
-    allSections: "All Sections",
+    allSections: "Sections and Subjects",
     profiles: "Faculty Profiles",
     trash: "Trash",
   }[homeTab] || "";
@@ -37926,11 +37926,11 @@ export default function HoDApp({ user, onLogout }) {
             label: "Department oversight",
             tiles: [
               { id: "studentData", title: "Student Data", desc: "Look up any student's SGPA, CGPA, backlogs and attendance trend.", icon: IconSearch, color: "green" },
-              { id: "timetableUpload", title: "Timetable", desc: "Upload a timetable, or have the portal design one, then clear overlaps and publish.", icon: IconCalendar, color: "indigo" },
+              { id: "timetableUpload", title: "Timetable Management", desc: "Upload a timetable, or have the portal design one, then clear overlaps and publish.", icon: IconCalendar, color: "indigo" },
               { id: "workload", title: "Faculty Workload", desc: "Weekly periods for every faculty member, from their timetables.", icon: IconWorkload, color: "indigo" },
-              { id: "allSectionsMarks", title: "All Sections Internal Marks", desc: "Monitor every original section's marks — see who's locked, drafted or not started.", icon: IconMarks, color: "amber" },
+              { id: "allSectionsMarks", title: "Internal Marks Monitoring", desc: "Monitor every original section's marks — see who's locked, drafted or not started.", icon: IconMarks, color: "amber" },
               { id: "profiles", title: "Faculty Profiles", desc: "Directory of every faculty member's bio, publications and research.", icon: IconUsers, color: "rose" },
-              { id: "users", title: "Users", desc: "Approve registrations, promote faculty, manage the employee ID roster.", icon: IconUsers, color: "slate" },
+              { id: "users", title: "User Management", desc: "Add faculty, give roles and manage the Employee ID roster.", icon: IconUsers, color: "slate" },
             ],
           },
         ]}
@@ -37947,9 +37947,9 @@ export default function HoDApp({ user, onLogout }) {
     myMarks: "Internal Marks Entry",
     timetable: "Teaching Schedule",
     workload: "Faculty Workload",
-    timetableUpload: "Timetable",
+    timetableUpload: "Timetable Management",
     profiles: "Faculty Profiles",
-    users: "Users",
+    users: "User Management",
     profile: "Professional Profile",
   }[tab] || "";
 
@@ -41036,7 +41036,7 @@ export default function OriginalSectionsScreen({ user, onBack }) {
 
   return (
     <div style={{ background: P.bg, minHeight: "100vh" }}>
-      <TopBar title="All Sections Internal Marks" subtitle="Original (roll-number) exam sections" onBack={onBack} />
+      <TopBar title="Internal Marks Monitoring" subtitle="Original (roll-number) exam sections" onBack={onBack} />
       <div style={{ padding: 16, maxWidth: 1100, margin: "0 auto" }}>
         <div style={{ fontSize: 13, color: P.gray, marginBottom: 16, lineHeight: 1.6 }}>
           These are the sections used for paper valuation — III-A, III-B, III-C and so on,
@@ -41307,7 +41307,7 @@ function ValuationSubjectCard({ sub, section, editId, setEditId, fp, setFp, facu
   }, [sub.valuatorPhone]);
 
   // Monitor marks-entry progress for this subject — this is exactly the
-  // capability a coordinator needs "All Sections Internal Marks" for: seeing
+  // capability a coordinator needs "Internal Marks Monitoring" for: seeing
   // who's locked, drafted, or hasn't started, without opening every subject.
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "internalMarksOriginal", section.id, "subjects", sub.id), snap => {

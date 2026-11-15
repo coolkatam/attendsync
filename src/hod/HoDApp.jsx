@@ -62,11 +62,11 @@ export default function HoDApp({ user, onLogout }) {
             label: "Department oversight",
             tiles: [
               { id: "studentData", title: "Student Data", desc: "Look up any student's SGPA, CGPA, backlogs and attendance trend.", icon: IconSearch, color: "green" },
-              { id: "timetableUpload", title: "Timetable", desc: "Upload a timetable, or have the portal design one, then clear overlaps and publish.", icon: IconCalendar, color: "indigo" },
+              { id: "timetableUpload", title: "Timetable Management", desc: "Upload a timetable, or have the portal design one, then clear overlaps and publish.", icon: IconCalendar, color: "indigo" },
               { id: "workload", title: "Faculty Workload", desc: "Weekly periods for every faculty member, from their timetables.", icon: IconWorkload, color: "indigo" },
-              { id: "allSectionsMarks", title: "All Sections Internal Marks", desc: "Monitor every original section's marks — see who's locked, drafted or not started.", icon: IconMarks, color: "amber" },
+              { id: "allSectionsMarks", title: "Internal Marks Monitoring", desc: "Monitor every original section's marks — see who's locked, drafted or not started.", icon: IconMarks, color: "amber" },
               { id: "profiles", title: "Faculty Profiles", desc: "Directory of every faculty member's bio, publications and research.", icon: IconUsers, color: "rose" },
-              { id: "users", title: "Users", desc: "Approve registrations, promote faculty, manage the employee ID roster.", icon: IconUsers, color: "slate" },
+              { id: "users", title: "User Management", desc: "Add faculty, give roles and manage the Employee ID roster.", icon: IconUsers, color: "slate" },
             ],
           },
         ]}
@@ -83,9 +83,9 @@ export default function HoDApp({ user, onLogout }) {
     myMarks: "Internal Marks Entry",
     timetable: "Teaching Schedule",
     workload: "Faculty Workload",
-    timetableUpload: "Timetable",
+    timetableUpload: "Timetable Management",
     profiles: "Faculty Profiles",
-    users: "Users",
+    users: "User Management",
     profile: "Professional Profile",
   }[tab] || "";
 

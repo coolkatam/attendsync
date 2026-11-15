@@ -46,7 +46,7 @@ export default function OriginalSectionsScreen({ user, onBack }) {
 
   return (
     <div style={{ background: P.bg, minHeight: "100vh" }}>
-      <TopBar title="All Sections Internal Marks" subtitle="Original (roll-number) exam sections" onBack={onBack} />
+      <TopBar title="Internal Marks Monitoring" subtitle="Original (roll-number) exam sections" onBack={onBack} />
       <div style={{ padding: 16, maxWidth: 1100, margin: "0 auto" }}>
         <div style={{ fontSize: 13, color: P.gray, marginBottom: 16, lineHeight: 1.6 }}>
           These are the sections used for paper valuation — III-A, III-B, III-C and so on,
@@ -317,7 +317,7 @@ function ValuationSubjectCard({ sub, section, editId, setEditId, fp, setFp, facu
   }, [sub.valuatorPhone]);
 
   // Monitor marks-entry progress for this subject — this is exactly the
-  // capability a coordinator needs "All Sections Internal Marks" for: seeing
+  // capability a coordinator needs "Internal Marks Monitoring" for: seeing
   // who's locked, drafted, or hasn't started, without opening every subject.
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "internalMarksOriginal", section.id, "subjects", sub.id), snap => {

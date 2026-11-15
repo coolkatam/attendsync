@@ -35,10 +35,10 @@ import { today, calcPct, parseCSV, downloadTemplate, exportXLS, makeKey, parseKe
 
 // The tabs that live under the Coordinator Duties tile.
 const COORD_TILES = [
-  { id: "allSections", title: "All Sections", desc: "Rosters, subjects and attendance for every section you administer.", icon: IconSections, color: "teal" },
-  { id: "allSectionsMarks", title: "All Sections Internal Marks", desc: "Monitor every original section's marks — see who's locked, drafted or not started.", icon: IconMarks, color: "amber" },
-  { id: "timetableUpload", title: "Timetable", desc: "Upload a timetable, or have the portal design one, then clear overlaps and publish.", icon: IconCalendar, color: "indigo" },
-  { id: "users", title: "Users", desc: "Approve registrations, promote faculty, manage the employee ID roster.", icon: IconUsers, color: "slate" },
+  { id: "allSections", title: "Sections and Subjects", desc: "Rosters, subjects and attendance for every section you administer.", icon: IconSections, color: "teal" },
+  { id: "allSectionsMarks", title: "Internal Marks Monitoring", desc: "Monitor every original section's marks — see who's locked, drafted or not started.", icon: IconMarks, color: "amber" },
+  { id: "timetableUpload", title: "Timetable Management", desc: "Upload a timetable, or have the portal design one, then clear overlaps and publish.", icon: IconCalendar, color: "indigo" },
+  { id: "users", title: "User Management", desc: "See the faculty and users in the portal and the roles they hold.", icon: IconUsers, color: "slate" },
 ];
 
 // ── Invite link card — each admin's shareable link for their own faculty ──
@@ -263,7 +263,7 @@ export default function AdminApp({ user, onLogout }) {
   if (screen === "timetableUpload") {
     return (
       <div style={{ background: P.bg, minHeight: "100vh" }}>
-        <TopBar title="Timetable" subtitle={user.name}
+        <TopBar title="Timetable Management" subtitle={user.name}
           right={<button onClick={() => setScreen(inCoord ? "coordinator" : "home")} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13 }}>← Back</button>} />
         <TimetableEntry user={user} />
       </div>
@@ -362,7 +362,7 @@ export default function AdminApp({ user, onLogout }) {
 
   const homeTabTitle = {
     myAttendance: "Student Attendance",
-    allSections: "All Sections",
+    allSections: "Sections and Subjects",
     profiles: "Faculty Profiles",
     trash: "Trash",
   }[homeTab] || "";
