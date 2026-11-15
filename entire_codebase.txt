@@ -18911,7 +18911,8 @@ service firebase.storage {
       "Bash(curl -s -m 30 -o /dev/null -w \"%{http_code}\\\\n\" https://us-central1-attendsync-66e55.cloudfunctions.net/tempRemoveUsers)",
       "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_emp2.js\")",
       "Bash(cp \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/images/21.jpg\" public/landing.jpg && ls -la public/landing.jpg && mkdir -p src/login && grep -n \"version\\\\|CACHE\\\\|cache\" public/service-worker.js | head -8)",
-      "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_emp3.js\")"
+      "Bash(node \"C:/Users/aruni/AppData/Local/Temp/claude/e86fee27736f60df/2ec7c05b-9c97-4a02-8313-5f7ec08f34dd/scratchpad/patch_emp3.js\")",
+      "Bash(git revert *)"
     ]
   }
 }
