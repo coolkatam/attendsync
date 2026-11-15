@@ -42,7 +42,7 @@ export default function HomeShell({ user, onLogout, roleLabel, tabs, active, onS
       <div style={{ background: P.navy, padding: "0 24px", height: 60, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 30 }}>
         <div
           onClick={() => onSelect("profile")}
-          title="Go to My Profile"
+          title="Go to Profile"
           style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0, cursor: "pointer" }}
         >
           <div style={{
